@@ -1,0 +1,6 @@
+{
+  "name": "Quran",
+  "description": "A Quran reading, listening, memorization, and revision application",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

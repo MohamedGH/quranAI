@@ -1,2878 +1,63 @@
-import React,{ useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { isQalqala, getMaddType, isIzhar, isIdgham } from "./utils/tajweedRules.js";
 import { createPortal } from "react-dom";
-import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation, useParams } from "react-router-dom";
+const normalizeAr = (s) => (s ? s.replace(/[Ÿã-ŸüŸ∞]/g, "").replace(/ÿ¢|ÿ£|ÿ•|Ÿ±/g, "ÿß").replace(/Ÿâ/g, "Ÿä").trim() : "");
+import { masteryColor } from "./components/common/Mastery.jsx";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Provider, useSelector, useDispatch, shallowEqual } from "react-redux";
-import { store, sel, uiActions, quranActions, playerActions, learnActions, collectionsActions, voiceActions, goalsActions, setLDataThunk } from "./store";
-import { CapacitorAudioRecorder } from '@capgo/capacitor-audio-recorder';
-import { initializeApp } from "firebase/app";
+import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+
+import { store, sel, act, uiActions, quranActions, playerActions, learnActions, collectionsActions, voiceActions, goalsActions, revisionActions, setLDataThunk } from "./store.js";
+import { firebaseAuth } from "./firebase.js";
+import { StyleTag } from "./components/common/StyleTag.jsx";
+import { ArabicKeyboard, ArabicKeyboardContext, useArabicKeyboard } from "./components/common/ArabicKeyboard.jsx";
+import { AnimatedPage, AnimatedSubmenu } from "./components/common/AnimatedWrappers.jsx";
+import { ArabicHighlighted, PlayingArabicHighlighted } from "./components/common/ArabicHighlighted.jsx";
+import { MasteryBar, MasteryBadge, MasteryDebug, computeMastery } from "./components/common/Mastery.jsx";
+import { RappelWidget } from "./components/common/RappelWidget.jsx";
+import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
+
+import { LoginScreen } from "./components/sync/LoginScreen.jsx";
+import { SyncConsole } from "./components/sync/SyncConsole.jsx";
+import { OptionsModal } from "./components/sync/OptionsModal.jsx";
+import { CloudSyncManager } from "./components/sync/CloudSyncManager.jsx";
+import { ExportImport } from "./components/sync/ExportImport.jsx";
+
+import { CollectionModal } from "./components/collections/CollectionModal.jsx";
+import { CollectionsPage } from "./components/pages/CollectionsPage.jsx";
+import { DashboardPage } from "./components/pages/DashboardPage.jsx";
+import { RevisionPage } from "./components/pages/RevisionPage.jsx";
+import { LearningMapPage } from "./components/pages/LearningMapPage.jsx";
+import { QuestionsModePage } from "./components/pages/QuestionsModePage.jsx";
+import { ConcordancePage } from "./components/pages/ConcordancePage.jsx";
+import { QuranBookPage } from "./components/pages/QuranBookPage.jsx";
+import { QuranBook3DPage } from "./components/pages/QuranBook3DPage.jsx";
+import { PrononciationPage } from "./components/pages/PrononciationPage.jsx";
+
+import { Submenu } from "./components/modes/Submenu.jsx";
+import { DecouverteMode } from "./components/modes/DecouverteMode.jsx";
+import { LectureMode } from "./components/modes/LectureMode.jsx";
+import { ApprentissageMode } from "./components/modes/ApprentissageMode.jsx";
+import { MemoriseMode } from "./components/modes/MemoriseMode.jsx";
+import { RevisionEcritureMode } from "./components/modes/RevisionEcritureMode.jsx";
+import { TajweedExercice } from "./components/modes/TajweedExercice.jsx";
+import { RecitationChecker } from "./components/modes/RecitationChecker.jsx";
+import { InfoMode } from "./components/modes/InfoMode.jsx";
+import { AideMemoireMode } from "./components/modes/AideMemoireMode.jsx";
+
+import { parseVoiceCommand, SURAH_NAMES } from "./utils/voiceCommand.js";
+import { normalizeArabic, diffRecitation } from "./utils/recitationDiff.js";
+import { splitArabicWords, splitArabicChars, splitArabicClusters, stripDiacritics, wordTranslit, calcDifficulty, calcPhase, arabicRoot, ARABIC_ROOTS } from "./utils/arabicUtils.js";
 import {
-  getAuth,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  GoogleAuthProvider,
-  signOut,
-  updateProfile,
-} from "firebase/auth";
-import {
-  getFirestore,
-  doc,
-  setDoc,
-  onSnapshot,
-} from "firebase/firestore";
+  API, AUDIO_CDN_ROOT, RECITATORS, TRANS_EDITIONS, TRANS_LABELS,
+  fetchSurahs, fetchSurahTranslation, fetchAyats, fetchSurahSimple, fetchSurahDefault,
+  fetchSurahMeta, fetchAyahMeta, fetchQuranPage, fetchPageMeta,
+  loadTimestampsForSurah, fixChars, getAudioBase, getReciterBitrate, getGlobalRecitator, setGlobalRecitator,
+  fetchOfficialBitrates, markBitrateBad, setReciterBitrate, bitrateOrderFor, quranMemCache, parseTimestampsFile
+} from "./utils/reciterAudio.js";
+import { DATA_KEYS, getDeviceId, mergeLearnData, mergeActivity, mergeCollections } from "./utils/syncUtils.js";
+import { useToRevise } from "./utils/toRevise.js";
 
-// ‚îÄ‚îÄ‚îÄ Firebase config ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Replace with your actual Firebase project config
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDummyKeyForMockOnly",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "quran-app-demo.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "quran-app-demo",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "quran-app-demo.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1234567890",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:1234567890:web:demo",
-};
-const firebaseApp  = initializeApp(firebaseConfig);
-const firebaseAuth = getAuth(firebaseApp);
-const firebaseDb   = getFirestore(firebaseApp);
-const googleProvider = new GoogleAuthProvider();
-
-// ‚îÄ‚îÄ‚îÄ Android / Capacitor detection ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-const IS_ANDROID = typeof window !== 'undefined' &&
-  (typeof window.Capacitor !== 'undefined' && /Android/i.test(navigator.userAgent));
-
-// ‚îÄ‚îÄ‚îÄ Unified audio recorder abstraction ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Android APK  ‚Üí CapacitorAudioRecorder
-// Web / iOS    ‚Üí MediaRecorder
-// API: { start(), stop() ‚Üí Promise<blobUrl|null>, release() }
-function createAudioRecorder() {
-  if (IS_ANDROID) {
-    let _started = false;
-    return {
-      async start() {
-        const perm = await CapacitorAudioRecorder.requestPermission().catch(() => null);
-        if (perm?.granted === false) throw new Error("Permission microphone refus√©e");
-        await CapacitorAudioRecorder.startRecording();
-        _started = true;
-      },
-      async stop() {
-        if (!_started) return null;
-        _started = false;
-        const result = await CapacitorAudioRecorder.stopRecording();
-        // Priorit√© √† result.uri + Capacitor.convertFileSrc (chemin natif ‚Üí URL lisible par WebView)
-        if (result?.uri) {
-          return window.Capacitor?.convertFileSrc(result.uri) ?? result.uri;
-        }
-        // Fallback base64
-        const raw = result?.value ?? result?.recordDataBase64 ?? result?.blob ?? null;
-        if (!raw) return null;
-       // const bin = atob(raw); const buf = new Uint8Array(bin.length);
-       // for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-        return URL.createObjectURL(raw);
-      },
-      release() { if (_started) { CapacitorAudioRecorder.stopRecording().catch(()=>{}); _started = false; } },
-    };
-  }
-  // Web MediaRecorder with gain boost
-  let _stream, _mr, _chunks = [], _mime = "", _actx = null;
-  return {
-    async start(gainValue = 4.0) {
-      _stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      });
-
-      // Boost volume via WebAudio GainNode ‚Üí record the boosted stream
-      let recordStream = _stream;
-      try {
-        _actx = new (window.AudioContext || window.webkitAudioContext)();
-        const src  = _actx.createMediaStreamSource(_stream);
-        const gain = _actx.createGain();
-        gain.gain.value = gainValue;
-        const dst  = _actx.createMediaStreamDestination();
-        src.connect(gain);
-        gain.connect(dst);
-        recordStream = dst.stream;
-      } catch (e) {
-        console.warn("[Recorder] GainNode unavailable, recording raw:", e);
-        recordStream = _stream;
-      }
-
-      _mime = ["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/mp4"]
-        .find(m => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } }) || "";
-      _mr = new MediaRecorder(recordStream, _mime ? { mimeType: _mime } : undefined);
-      _chunks = [];
-      _mr.ondataavailable = e => { if (e.data?.size > 0) _chunks.push(e.data); };
-      _mr.start(200);
-    },
-    stop() {
-      return new Promise(resolve => {
-        if (!_mr || _mr.state === "inactive") { resolve(null); return; }
-        _mr.onstop = () => {
-          _stream?.getTracks().forEach(t => t.stop());
-          try { _actx?.close(); } catch {}
-          _actx = null;
-          resolve(_chunks.length ? URL.createObjectURL(new Blob(_chunks, { type: _mime || "audio/webm" })) : null);
-        };
-        _mr.stop();
-      });
-    },
-    release() {
-      try { if (_mr?.state !== "inactive") _mr?.stop(); } catch {}
-      _stream?.getTracks().forEach(t => t.stop());
-      try { _actx?.close(); } catch {}
-      _actx = null;
-    },
-  };
-}
-
-
-// ‚îÄ‚îÄ‚îÄ SURAH NAME MAP (French + Arabic + English for voice recognition) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-const SURAH_NAMES = {
-  "fatiha":1,"al-fatiha":1,"fatihah":1,"ouverture":1,
-  "baqara":2,"al-baqara":2,"vache":2,"bakara":2,
-  "imran":3,"al-imran":3,"famille d'imran":3,
-  "nisa":4,"an-nisa":4,"femmes":4,
-  "maida":5,"al-maida":5,"table":5,
-  "anam":6,"al-anam":6,"troupeaux":6,
-  "araf":7,"al-araf":7,"murailles":7,
-  "anfal":8,"al-anfal":8,"d√©pouilles":8,
-  "tawba":9,"at-tawba":9,"repentir":9,
-  "yunus":10,"younes":10,"jonas":10,
-  "hud":11,"houd":11,
-  "yusuf":12,"youssef":12,"joseph":12,
-  "rad":13,"ar-rad":13,"tonnerre":13,
-  "ibrahim":14,"abraham":14,
-  "hijr":15,"al-hijr":15,
-  "nahl":16,"an-nahl":16,"abeilles":16,
-  "isra":17,"al-isra":17,"voyage nocturne":17,
-  "kahf":18,"al-kahf":18,"caverne":18,
-  "maryam":19,"marie":19,
-  "taha":20,"ta-ha":20,
-  "anbiya":21,"al-anbiya":21,"proph√®tes":21,
-  "hajj":22,"p√®lerinage":22,
-  "muminun":23,"croyants":23,
-  "nur":24,"an-nur":24,"lumi√®re":24,
-  "furqan":25,"al-furqan":25,"crit√®re":25,
-  "shuara":26,"po√®tes":26,
-  "naml":27,"an-naml":27,"fourmis":27,
-  "qasas":28,"al-qasas":28,"r√©cits":28,
-  "ankabut":29,"araign√©e":29,
-  "rum":30,"ar-rum":30,"romains":30,
-  "luqman":31,"lokman":31,
-  "sajda":32,"as-sajda":32,"prosternation":32,
-  "ahzab":33,"al-ahzab":33,"coalis√©s":33,
-  "saba":34,"saba'":34,
-  "fatir":35,"cr√©ateur":35,
-  "yasin":36,"ya-sin":36,
-  "saffat":37,"as-saffat":37,"rang√©s":37,
-  "sad":38,
-  "zumar":39,"az-zumar":39,"groupes":39,
-  "ghafir":40,"al-ghafir":40,"pardonneur":40,
-  "fussilat":41,"explicitement":41,
-  "shura":42,"ash-shura":42,"concertation":42,
-  "zukhruf":43,"az-zukhruf":43,"ornements":43,
-  "dukhan":44,"ad-dukhan":44,"fum√©e":44,
-  "jathiya":45,"al-jathiya":45,"agenouill√©e":45,
-  "ahqaf":46,"al-ahqaf":46,
-  "muhammad":47,"combat":47,
-  "fath":48,"al-fath":48,"victoire":48,
-  "hujurat":49,"al-hujurat":49,"appartements":49,
-  "qaf":50,
-  "dhariyat":51,"adh-dhariyat":51,"vents":51,
-  "tur":52,"at-tur":52,"mont":52,
-  "najm":53,"an-najm":53,"√©toile":53,
-  "qamar":54,"al-qamar":54,"lune":54,
-  "rahman":55,"ar-rahman":55,"mis√©ricordieux":55,
-  "waqia":56,"al-waqia":56,"√©v√©nement":56,
-  "hadid":57,"al-hadid":57,"fer":57,
-  "mujadila":58,"al-mujadila":58,"discussion":58,
-  "hashr":59,"al-hashr":59,"rassemblement":59,
-  "mumtahana":60,"al-mumtahana":60,"√©prouv√©e":60,
-  "saff":61,"as-saff":61,"rang":61,
-  "juma":62,"al-juma":62,"vendredi":62,
-  "munafiqun":63,"hypocrites":63,
-  "taghabun":64,"at-taghabun":64,"tromperie":64,
-  "talaq":65,"at-talaq":65,"divorce":65,
-  "tahrim":66,"at-tahrim":66,"interdiction":66,
-  "mulk":67,"al-mulk":67,"royaut√©":67,
-  "qalam":68,"al-qalam":68,"plume":68,
-  "haqqa":69,"al-haqqa":69,"in√©vitable":69,
-  "maarij":70,"al-maarij":70,"degr√©s":70,
-  "nuh":71,"no√©":71,
-  "jinn":72,"al-jinn":72,"djinns":72,
-  "muzzammil":73,"al-muzzammil":73,"envelopp√©":73,
-  "muddaththir":74,"al-muddaththir":74,"rev√™tu":74,
-  "qiyama":75,"al-qiyama":75,"r√©surrection":75,
-  "insan":76,"al-insan":76,"homme":76,
-  "mursalat":77,"al-mursalat":77,"envoy√©s":77,
-  "naba":78,"an-naba":78,"nouvelle":78,
-  "naziat":79,"an-naziat":79,"arracheurs":79,
-  "abasa":80,"froncement":80,
-  "takwir":81,"at-takwir":81,"obscurcissement":81,
-  "infitar":82,"al-infitar":82,"fissure":82,
-  "mutaffifin":83,"fraudeurs":83,
-  "inshiqaq":84,"al-inshiqaq":84,"d√©chirement":84,
-  "buruj":85,"al-buruj":85,"constellations":85,
-  "tariq":86,"at-tariq":86,"nocturne":86,
-  "ala":87,"al-ala":87,"tr√®s-haut":87,
-  "ghashiya":88,"al-ghashiya":88,"enveloppante":88,
-  "fajr":89,"al-fajr":89,"aube":89,
-  "balad":90,"al-balad":90,"cit√©":90,
-  "shams":91,"ash-shams":91,"soleil":91,
-  "layl":92,"al-layl":92,"nuit":92,
-  "duha":93,"ad-duha":93,"matin√©e":93,
-  "sharh":94,"inshirah":94,"ouverture de c≈ìur":94,
-  "tin":95,"at-tin":95,"figuier":95,
-  "alaq":96,"al-alaq":96,"adh√©rence":96,
-  "qadr":97,"al-qadr":97,"destin":97,
-  "bayyina":98,"al-bayyina":98,"preuve":98,
-  "zalzala":99,"az-zalzala":99,"s√©isme":99,
-  "adiyat":100,"al-adiyat":100,"coursiers":100,
-  "qaria":101,"al-qaria":101,"fracas":101,
-  "takathur":102,"at-takathur":102,"accumulation":102,
-  "asr":103,"al-asr":103,"apr√®s-midi":103,
-  "humaza":104,"al-humaza":104,"calomniateur":104,
-  "fil":105,"al-fil":105,"√©l√©phant":105,
-  "quraysh":106,"cor√©ishites":106,
-  "maun":107,"al-maun":107,"ustensiles":107,
-  "kawthar":108,"al-kawthar":108,"abondance":108,
-  "kafirun":109,"al-kafirun":109,"infid√®les":109,
-  "nasr":110,"an-nasr":110,"secours":110,
-  "masad":111,"al-masad":111,"fibre":111,
-  "ikhlas":112,"al-ikhlas":112,"sinc√©rit√©":112,
-  "falaq":113,"al-falaq":113,"aube naissante":113,
-  "nas":114,"an-nas":114,"humanit√©":114,
-};
-
-// ‚îÄ‚îÄ‚îÄ STYLES ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Amiri:wght@400;700&family=Cinzel:wght@400;600;700&display=swap');
-
-  /* ‚îÄ‚îÄ TOKENS ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  :root {
-    --bg:#0c0e14; --surface:#13161f; --surface2:#1a1e2a; --surface3:#222736;
-    --border:#2a2f40; --border2:#363c52;
-    --gold:#c9a84c; --gold2:#e8c96e; --gold3:#f5e0a0;
-    --teal:#3eb8a0; --teal2:#56d4bc; --red:#e05a5a; --green:#4caf81; --green2:#6fcf9a;
-    --text:#e8e4d8; --text2:#a89f8c; --text3:#6e6659;
-    --learned-bg:#1a2e20; --learned-border:#2d5a38; --highlight:rgba(201,168,76,.18);
-    --sidebar-w:280px; --player-h:64px; --player-loop-h:50px;
-    --header-h:calc(54px + env(safe-area-inset-top, 0px));
-    --radius:8px; --radius-sm:5px;
-    --transition:.18s ease;
-  }
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-  html{font-size:16px;}
-  body{background:var(--bg);color:var(--text);font-family:'Cinzel',serif;min-height:100dvh;overflow-x:hidden;-webkit-tap-highlight-color:transparent;}
-  ::-webkit-scrollbar{width:4px;}
-  ::-webkit-scrollbar-track{background:var(--surface);}
-  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
-  .app{display:flex;flex-direction:column;height:100dvh;overflow:hidden;}
-
-  /* ‚îÄ‚îÄ HEADER ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .header{
-    background:linear-gradient(180deg,rgba(16,19,30,0.95) 0%,rgba(10,12,20,0.98) 100%);
-    backdrop-filter:blur(20px) saturate(160%);
-    -webkit-backdrop-filter:blur(20px) saturate(160%);
-    border-bottom:1px solid rgba(201,168,76,.18);
-    padding:max(env(safe-area-inset-top, 0px), 0px) 14px 0 14px;
-    height:var(--header-h);
-    display:flex; align-items:center; justify-content:space-between; gap:8px;
-    flex-shrink:0; position:relative; z-index:200;
-    box-shadow:0 4px 24px rgba(0,0,0,.45);
-    user-select:none;
-  }
-  .header::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 0%,rgba(201,168,76,.5) 50%,transparent 100%);}
-  .header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent 0%,rgba(201,168,76,.25) 50%,transparent 100%);}
-  
-  .header-left{display:flex;align-items:center;gap:10px;flex-shrink:0;}
-  .header-menu-btn{display:flex;width:38px;height:38px;border-radius:10px;border:1px solid rgba(201,168,76,.22);background:rgba(201,168,76,.06);color:var(--text2);cursor:pointer;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;transition:all .2s cubic-bezier(0.4, 0, 0.2, 1);-webkit-tap-highlight-color:transparent;}
-  .header-menu-btn:hover{border-color:rgba(201,168,76,.6);color:var(--gold2);background:rgba(201,168,76,.14);box-shadow:0 0 12px rgba(201,168,76,.2);}
-  .header-menu-btn:active{transform:scale(0.94);}
-  
-  .header-logo{display:flex;flex-direction:column;align-items:flex-start;line-height:1.1;font-size:15px;font-weight:700;letter-spacing:2.5px;color:var(--gold2);flex-shrink:0;text-shadow:0 0 20px rgba(201,168,76,.35);cursor:pointer;}
-  .header-logo span.logo-highlight{color:var(--teal);text-shadow:0 0 16px rgba(62,184,160,.45);}
-  .header-logo .header-subtitle{font-size:6.5px;letter-spacing:3px;color:var(--text3);font-family:'Cinzel',serif;opacity:.8;}
-  .header-bismillah{font-family:'Amiri Quran',serif;font-size:20px;color:var(--gold);opacity:.7;margin-left:auto;direction:rtl;}
-
-  /* ‚îÄ‚îÄ HEADER PAGE NAV ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .header-nav{display:flex;align-items:center;gap:3px;flex:1;max-width:540px;min-width:0;background:rgba(255,255,255,.035);border-radius:12px;padding:3px;border:1px solid rgba(255,255,255,.07);box-shadow:inset 0 1px 3px rgba(0,0,0,.3);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
-  .header-nav::-webkit-scrollbar{display:none;}
-  
-  .header-nav-btn{font-family:'Cinzel',serif;font-size:9px;font-weight:600;letter-spacing:.8px;padding:6px 10px;border:1px solid transparent;background:transparent;color:var(--text3);cursor:pointer;border-radius:8px;transition:all .2s cubic-bezier(0.4, 0, 0.2, 1);white-space:nowrap;flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:5px;-webkit-tap-highlight-color:transparent;}
-  .header-nav-btn:hover{color:var(--text2);background:rgba(255,255,255,.06);}
-  .header-nav-btn:active{transform:scale(0.96);}
-  .header-nav-btn .nav-icon{font-size:14px;line-height:1;display:inline-flex;align-items:center;justify-content:center;}
-  .header-nav-btn.active-quran{background:linear-gradient(135deg,rgba(201,168,76,.22),rgba(201,168,76,.1));color:var(--gold2);border-color:rgba(201,168,76,.3);box-shadow:0 2px 10px rgba(201,168,76,.18),inset 0 1px 0 rgba(201,168,76,.2);}
-  .header-nav-btn.active-prononciation{background:linear-gradient(135deg,rgba(62,184,160,.22),rgba(62,184,160,.1));color:var(--teal2);border-color:rgba(62,184,160,.3);box-shadow:0 2px 10px rgba(62,184,160,.18),inset 0 1px 0 rgba(62,184,160,.2);}
-  .header-nav-btn.active-dashboard{background:linear-gradient(135deg,rgba(111,207,154,.22),rgba(111,207,154,.1));color:var(--green2);border-color:rgba(111,207,154,.3);box-shadow:0 2px 10px rgba(111,207,154,.18),inset 0 1px 0 rgba(111,207,154,.2);}
-  .header-nav-btn.active-concordance{background:linear-gradient(135deg,rgba(201,168,76,.22),rgba(201,168,76,.1));color:var(--gold2);border-color:rgba(201,168,76,.3);box-shadow:0 2px 10px rgba(201,168,76,.18),inset 0 1px 0 rgba(201,168,76,.2);}
-  .header-nav-btn.active-collections{background:linear-gradient(135deg,rgba(200,120,255,.22),rgba(200,120,255,.1));color:#c878ff;border-color:rgba(200,120,255,.3);box-shadow:0 2px 10px rgba(200,120,255,.18),inset 0 1px 0 rgba(200,120,255,.2);}
-  .header-nav-btn.active-revision{background:linear-gradient(135deg,rgba(86,212,188,.22),rgba(86,212,188,.1));color:var(--teal2);border-color:rgba(86,212,188,.3);box-shadow:0 2px 10px rgba(86,212,188,.18),inset 0 1px 0 rgba(86,212,188,.2);}
-
-  /* ‚îÄ‚îÄ RIGHT ACTION BUTTONS & USER MENU ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .header-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;position:relative;}
-  .voice-btn{width:38px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.035);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s cubic-bezier(0.4, 0, 0.2, 1);flex-shrink:0;-webkit-tap-highlight-color:transparent;}
-  .voice-btn:hover{border-color:rgba(201,168,76,.4);color:var(--gold2);background:rgba(201,168,76,.1);}
-  .voice-btn:active{transform:scale(0.94);}
-  .voice-btn.listening{border-color:var(--red);color:var(--red);animation:pulse 1.2s ease-in-out infinite;background:rgba(224,90,90,.14);}
-  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(224,90,90,.45);}50%{box-shadow:0 0 0 8px rgba(224,90,90,0);}}
-
-  .header-user-btn{display:flex;align-items:center;justify-content:center;padding:2px;border-radius:50%;border:1.5px solid rgba(201,168,76,.35);background:transparent;cursor:pointer;transition:all .2s cubic-bezier(0.4, 0, 0.2, 1);flex-shrink:0;-webkit-tap-highlight-color:transparent;}
-  .header-user-btn:hover,.header-user-btn.active{border-color:var(--gold2);box-shadow:0 0 12px rgba(201,168,76,.35);transform:scale(1.05);}
-  .header-avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;}
-  .header-avatar-placeholder{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#c9a84c,#e8c96e);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#0c0e14;font-family:'Cinzel',serif;}
-
-  /* Dropdown User Menu */
-  .header-user-menu{position:absolute;top:calc(100% + 8px);right:0;width:250px;background:rgba(19,22,31,.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(201,168,76,.25);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.05);padding:8px;z-index:300;display:flex;flex-direction:column;gap:4px;animation:menuFadeIn .2s cubic-bezier(0.16, 1, 0.3, 1);}
-  @keyframes menuFadeIn{from{opacity:0;transform:translateY(-8px) scale(0.96);}to{opacity:1;transform:translateY(0) scale(1);}}
-  .user-menu-header{padding:8px 10px 10px 10px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:4px;}
-  .user-menu-name{font-family:'Cinzel',serif;font-size:11px;font-weight:600;color:var(--gold2);letter-spacing:.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .user-menu-email{font-size:9.5px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .user-menu-item{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;border:none;background:transparent;color:var(--text);cursor:pointer;font-family:'Cinzel',serif;font-size:10px;letter-spacing:.5px;transition:all .15s ease;text-align:left;width:100%;}
-  .user-menu-item:hover{background:rgba(201,168,76,.1);color:var(--gold2);}
-  .user-menu-item .menu-left{display:flex;align-items:center;gap:8px;}
-  .user-menu-badge{font-size:8px;padding:2px 6px;border-radius:6px;letter-spacing:.5px;}
-  .user-menu-badge.on{background:rgba(62,184,160,.2);color:var(--teal2);border:1px solid rgba(62,184,160,.4);}
-  .user-menu-badge.off{background:rgba(255,255,255,.05);color:var(--text3);}
-  .user-menu-item.logout{color:var(--red);border-top:1px solid rgba(255,255,255,.06);margin-top:4px;padding-top:10px;}
-  .user-menu-item.logout:hover{background:rgba(224,90,90,.1);color:#ff7b7b;}
-
-  /* ‚îÄ‚îÄ TOAST ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .voice-toast{position:fixed;top:calc(var(--header-h) + 10px);left:50%;transform:translateX(-50%);background:var(--surface3);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 18px;font-size:11px;letter-spacing:1px;color:var(--text2);z-index:500;display:flex;align-items:center;gap:10px;max-width:min(420px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.4);}
-  .voice-toast.success{border-color:var(--teal);color:var(--teal);}
-  .voice-toast.error{border-color:var(--red);color:var(--red);}
-  .voice-toast .transcript{color:var(--gold2);font-style:italic;}
-  .voice-dot{width:8px;height:8px;border-radius:50%;background:var(--red);animation:pulse-dot 1s infinite;flex-shrink:0;}
-  @keyframes pulse-dot{0%,100%{opacity:1;}50%{opacity:.3;}}
-
-  /* ‚îÄ‚îÄ VOICE HELP ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .voice-help{position:fixed;top:calc(var(--header-h) + 10px);right:12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;z-index:400;max-width:260px;box-shadow:0 8px 32px rgba(0,0,0,.4);}
-  .voice-help-title{font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:10px;}
-  .voice-help-cmd{font-size:10px;letter-spacing:.5px;color:var(--text3);padding:3px 0;display:flex;gap:8px;align-items:baseline;}
-  .voice-help-ex{color:var(--text2);font-size:10px;}
-
-  /* ‚îÄ‚îÄ BODY / SIDEBAR ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .body{display:flex;flex:1;overflow:hidden;position:relative;}
-
-  .sidebar{
-    width:var(--sidebar-w); background:var(--surface);
-    border-right:1px solid var(--border);
-    display:flex; flex-direction:column;
-    flex-shrink:0; overflow:hidden;
-    transition:transform var(--transition), width var(--transition);
-  }
-  /* On non-quran pages sidebar floats as a full-height drawer */
-  .sidebar.sidebar-floating{
-    position:absolute;left:0;top:0;bottom:0;z-index:300;
-    transform:translateX(-100%);box-shadow:4px 0 24px rgba(0,0,0,.4);
-  }
-  .sidebar.sidebar-floating.open{transform:translateX(0);}
-  /* On quran page desktop (non-floating): toggle width on open/close */
-  @media (min-width:641px){
-    .sidebar:not(.sidebar-floating):not(.open){
-      width:0 !important;
-      min-width:0 !important;
-      border-right:none !important;
-      overflow:hidden !important;
-    }
-    .sidebar:not(.sidebar-floating).open{
-      width:var(--sidebar-w) !important;
-    }
-  }
-  .sidebar-overlay{display:none;position:absolute;inset:0;z-index:299;background:rgba(0,0,0,.4);}
-  .sidebar-overlay.open{display:block;}
-  @media (min-width:641px){.sidebar-overlay.open{pointer-events:none;background:transparent;}}
-  .sidebar-search{padding:12px;border-bottom:1px solid var(--border);}
-  .sidebar-search input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;outline:none;transition:border-color var(--transition);}
-  .sidebar-search input:focus{border-color:var(--gold);}
-  .sidebar-search input::placeholder{color:var(--text3);}
-  .sidebar-list{overflow-y:auto;flex:1;}
-  .surah-item{display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer;border-bottom:1px solid rgba(42,47,64,.5);transition:background var(--transition);position:relative;}
-  .surah-item:hover{background:var(--surface2);}
-  .surah-item.active{background:var(--surface3);}
-  .surah-item.fully-learned{background:rgba(26,46,32,.45);border-right:2px solid var(--green);}
-  .surah-item.fully-learned .surah-name-en{color:var(--green2);}
-  .surah-item.fully-learned .surah-num{color:var(--green);border-color:var(--green);}
-  .surah-item.fully-learned .surah-meta::before{content:'‚úì ';color:var(--green);}
-  .surah-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(to bottom,var(--gold),var(--teal));border-radius:0 2px 2px 0;}
-  .surah-num{width:30px;height:30px;background:var(--surface2);border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--gold);font-weight:600;flex-shrink:0;}
-  .surah-active .surah-num{background:var(--gold);color:var(--bg);border-color:var(--gold);}
-  .surah-info{flex:1;min-width:0;}
-  .surah-name-en{font-size:11px;letter-spacing:1px;color:var(--text);font-weight:600;}
-  .surah-meta{font-size:9px;color:var(--text3);letter-spacing:.5px;margin-top:2px;}
-  .surah-name-ar{font-family:'Amiri',serif;font-size:16px;color:var(--gold);direction:rtl;}
-
-  /* ‚îÄ‚îÄ MAIN AREA ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
-  .surah-header{background:linear-gradient(180deg,var(--surface),var(--bg));border-bottom:1px solid var(--border);padding:10px 16px;flex-shrink:0;text-align:center;}
-  .surah-header-ornament{font-family:'Amiri Quran',serif;font-size:26px;color:var(--gold2);direction:rtl;line-height:1.3;}
-  .surah-header-title{font-size:9px;letter-spacing:2px;color:var(--gold);margin-top:3px;opacity:.8;}
-  .surah-header-sub{font-size:9px;color:var(--text3);letter-spacing:2px;margin-top:2px;}
-  .bismillah-line{font-family:'Amiri Quran',serif;font-size:26px;color:var(--gold);direction:rtl;text-align:center;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;opacity:.85;}
-
-  /* ‚îÄ‚îÄ TS BAR ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .ts-global-bar{background:var(--surface2);border-bottom:1px solid var(--border);padding:6px 20px;display:flex;align-items:center;gap:8px;flex-shrink:0;position:relative;z-index:20;}
-  .panel-row{position:relative;}
-  .panel-expand{position:absolute;top:calc(100% + 4px);left:0;z-index:30;min-width:0;max-width:calc(100vw - 24px);}
-  .tajweed-panel{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid rgba(255,255,255,.12);flex-wrap:wrap;box-shadow:0 4px 16px rgba(0,0,0,.4);}
-  @keyframes tajweedPanelIn{from{opacity:0;transform:scaleX(.9);transform-origin:left}to{opacity:1;transform:scaleX(1)}}
-  .tajweed-panel{animation:tajweedPanelIn .18s cubic-bezier(.4,0,.2,1) forwards;}
-  .ts-global-label{font-size:10px;letter-spacing:1px;color:var(--text3);}
-  .ts-global-count{font-size:10px;letter-spacing:1px;color:var(--gold2);}
-  .ts-drop-zone{border:1px dashed var(--border2);border-radius:var(--radius-sm);padding:5px 12px;cursor:pointer;transition:border-color var(--transition);display:flex;align-items:center;gap:8px;}
-  .ts-drop-zone:hover{border-color:var(--gold);}
-  .ts-drop-zone input{display:none;}
-  .ts-drop-label{font-size:10px;letter-spacing:1px;color:var(--text3);}
-  .ts-progress-bar{flex:1;min-width:80px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
-  .ts-progress-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--teal));border-radius:2px;transition:width .3s;}
-  .ts-status{display:inline-flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1px;padding:2px 8px;border-radius:10px;border:1px solid var(--border2);color:var(--text3);flex-shrink:0;align-self:flex-start;margin-top:6px;}
-  .ts-status.loaded{border-color:var(--teal);color:var(--teal);}
-
-  /* ‚îÄ‚îÄ AYAT LIST ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .ayat-scroll{flex:1;overflow-y:auto;padding:6px 0 calc(var(--player-h) + var(--player-loop-h) + 20px);will-change:transform;}
-  .ayat-row{border-bottom:1px solid rgba(42,47,64,.4);transition:background var(--transition);content-visibility:auto;contain-intrinsic-size:0 80px;}
-  .ayat-row.playing{background:var(--highlight);}
-  .ayat-row.playing .ayat-main{background:var(--highlight);}
-  .ayat-row.current .ayat-number-badge{border-color:var(--gold);color:var(--gold);}
-  .ayat-row.learned{background:var(--learned-bg);}
-  .ayat-row.selecting{background:rgba(201,168,76,.03);}
-  .ayat-row.learned .ayat-number-badge{border-color:var(--green);color:var(--green);}
-  .ayat-row.page-start{position:relative;margin-top:22px;}
-  .ayat-row.page-start::before{content:'';position:absolute;top:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(200,120,255,.15),#c878ff,rgba(200,120,255,.15),transparent);}
-  .ayat-row.page-end{position:relative;margin-bottom:22px;}
-  .ayat-row.page-end::after{content:'';position:absolute;bottom:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(200,120,255,.15),#c878ff,rgba(200,120,255,.15),transparent);}
-  .page-edge-pill{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,#d896ff,#9a4fd1);color:#fff;font-size:7px;letter-spacing:2px;padding:4px 12px;border-radius:20px;font-family:'Cinzel',serif;box-shadow:0 3px 14px rgba(178,90,255,.45),0 0 0 3px var(--surface1,#12141c);white-space:nowrap;z-index:2;}
-  .page-edge-pill.start{top:-11px;transform:translate(-50%,-50%);}
-  .page-edge-pill.end{bottom:-11px;transform:translate(-50%,50%);}
-  .page-edge-pill svg{width:8px;height:8px;}
-  .ayat-main{display:flex;align-items:flex-start;gap:14px;padding:14px 22px;cursor:pointer;}
-  .ayat-main:hover{background:rgba(255,255,255,.02);}
-  .ayat-number-badge{width:32px;height:32px;border:1px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text3);flex-shrink:0;margin-top:4px;transition:all var(--transition);font-weight:600;}
-  .ayat-playing .ayat-number-badge{border-color:var(--gold);color:var(--gold);box-shadow:0 0 12px rgba(201,168,76,.3);}
-  .ayat-arabic{font-family:'Amiri Quran',serif;font-size:26px;line-height:2;direction:rtl;text-align:right;flex:1;min-width:0;overflow-wrap:break-word;word-break:break-word;color:var(--text);}
-  .char-span{display:inline;transition:color .04s;color:var(--text);}
-  .char-span.char-done{color:var(--teal);}
-  .char-span.char-active{color:var(--gold2);text-shadow:0 0 14px rgba(232,201,110,.65);}
-  .ayat-learned-badge{font-size:9px;letter-spacing:1px;color:var(--green);padding:2px 8px;border:1px solid var(--green);border-radius:10px;margin-top:6px;flex-shrink:0;align-self:flex-start;}
-
-  /* ‚îÄ‚îÄ SUBMENU ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  @keyframes pageIn{from{opacity:0}to{opacity:1}}
-  .page-anim{animation:pageIn .12s ease forwards;flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;width:100%;}
-  @keyframes submenuIn{0%{opacity:0;transform:translateY(-4px)}100%{opacity:1;transform:translateY(0)}}
-  @keyframes submenuOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-4px)}}
-  .submenu{background:var(--surface2);border-top:1px solid var(--border);padding:14px 22px 18px;}
-  .submenu-anim-wrap{animation:submenuIn .32s cubic-bezier(.4,0,.2,1) forwards;}
-  .submenu-anim-wrap.closing{animation:submenuOut .24s cubic-bezier(.4,0,.2,1) forwards;}
-  .submenu-header{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:14px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;}
-  .submenu-header::-webkit-scrollbar{display:none;}
-  .mode-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1.5px;padding:8px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text3);cursor:pointer;transition:all var(--transition);white-space:nowrap;flex-shrink:0;}
-  .mode-btn:hover{color:var(--text2);}
-  .mode-btn.active{color:var(--gold);border-bottom-color:var(--gold);}
-  .submenu-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:14px;overflow-x:auto;}
-  .submenu-tab{font-size:9px;letter-spacing:1.5px;color:var(--text3);padding:8px 14px;background:transparent;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:all var(--transition);white-space:nowrap;flex-shrink:0;}
-  .submenu-tab:hover{color:var(--text2);}
-  .submenu-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
-
-  /* ‚îÄ‚îÄ BUTTONS ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .btn-primary{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1.5px;padding:8px 16px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer;border-radius:var(--radius-sm);transition:all var(--transition);}
-  .btn-primary:hover{background:rgba(201,168,76,.12);}
-  .btn-primary.active{background:var(--gold);color:var(--bg);}
-  .btn-primary:disabled{opacity:.35;cursor:not-allowed;}
-  .btn-small{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;border-radius:var(--radius-sm);transition:all var(--transition);}
-  .btn-small:hover{border-color:var(--text2);color:var(--text2);}
-  .btn-small.done{border-color:var(--green);color:var(--green);}
-
-  /* ‚îÄ‚îÄ LEARN SECTION ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .learn-section{display:flex;flex-direction:column;gap:14px;}
-  .learn-status-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-  .learn-stat{font-size:10px;letter-spacing:1px;color:var(--text3);display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface3);border-radius:var(--radius-sm);border:1px solid var(--border);}
-  .learn-stat .val{color:var(--gold2);}
-  .learn-stat.learned-stat{border-color:var(--green);color:var(--green);}
-  .learn-stat.learned-stat .val{color:var(--green2);}
-  .parts-title{font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:8px;}
-  .create-mode-hint{font-size:9px;letter-spacing:1px;color:var(--teal);margin-bottom:6px;padding:6px 10px;background:rgba(62,184,160,.06);border-radius:var(--radius-sm);}
-  .words-area{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;direction:rtl;justify-content:flex-end;}
-  .word-btn{font-family:'Amiri Quran',serif;font-size:18px;padding:4px 8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;border-radius:var(--radius-sm);transition:all var(--transition);}
-  .word-btn:hover{border-color:var(--gold);color:var(--gold);}
-  .word-btn.word-learned{border-color:var(--green);color:var(--green2);background:rgba(76,175,129,.06);}
-  .parts-divider{height:1px;background:var(--border);margin:8px 0;}
-  .part-item{border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden;}
-  .part-item.part-learned{border-color:var(--learned-border);background:rgba(26,46,32,.3);}
-  .part-header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface3);}
-  .part-label{font-size:10px;letter-spacing:1px;color:var(--text3);flex:1;}
-  .part-arabic{font-family:'Amiri Quran',serif;font-size:18px;direction:rtl;text-align:right;padding:8px 12px 10px;color:var(--text2);line-height:1.8;}
-  .part-learned .part-arabic{color:var(--green2);}
-
-  /* ‚îÄ‚îÄ RECITATION ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .recit-section{display:flex;flex-direction:column;gap:0;margin-top:0;padding-top:16px;border-top:1px solid var(--border);}
-  .recit-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;}
-  .recit-title{font-size:9px;letter-spacing:3px;color:var(--text3);display:flex;align-items:center;gap:8px;font-family:'Cinzel',serif;}
-  .recit-title-icon{width:26px;height:26px;border-radius:50%;background:rgba(62,184,160,.12);border:1px solid var(--teal);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
-  .recit-tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:14px;}
-  .recit-tab{flex:1;padding:8px 4px;font-family:'Cinzel',serif;font-size:9px;letter-spacing:1.5px;background:transparent;color:var(--text3);border:none;cursor:pointer;transition:all var(--transition);text-align:center;}
-  .recit-tab:hover{background:rgba(255,255,255,.04);color:var(--text2);}
-  .recit-tab.active{background:rgba(62,184,160,.1);color:var(--teal);border-bottom:2px solid var(--teal);}
-  .recit-mic-zone{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 16px;background:var(--surface3);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;transition:border-color .3s;}
-  .recit-mic-zone.active{border-color:var(--red);background:rgba(224,90,90,.04);}
-  .recit-mic-circle{width:64px;height:64px;border-radius:50%;border:2px solid var(--teal);background:rgba(62,184,160,.08);display:flex;align-items:center;justify-content:center;font-size:26px;cursor:pointer;transition:all .25s;position:relative;touch-action:manipulation;}
-  .recit-mic-circle:hover,.recit-mic-circle:active{transform:scale(1.06);background:rgba(62,184,160,.16);}
-  .recit-mic-circle.recording{border-color:var(--red);background:rgba(224,90,90,.12);animation:micPulse 1s ease-in-out infinite;}
-  @keyframes micPulse{0%,100%{box-shadow:0 0 0 0 rgba(224,90,90,.4)}50%{box-shadow:0 0 0 12px rgba(224,90,90,0)}}
-  .recit-mic-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:var(--text3);}
-  .recit-mic-label.recording{color:var(--red);}
-  .recit-live-box{width:100%;min-height:40px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 14px;font-family:'Amiri Quran',serif;font-size:18px;direction:rtl;text-align:right;color:var(--text2);line-height:1.8;transition:border-color .2s;}
-  .recit-live-box.has-text{border-color:var(--teal);}
-  .recit-live-placeholder{color:var(--text3);font-family:'Cinzel',serif;font-size:9px;direction:ltr;text-align:center;letter-spacing:1px;padding:4px 0;}
-  .recit-textarea{width:100%;background:var(--surface3);border:1px solid var(--border2);border-radius:var(--radius);padding:12px 16px;color:var(--text);font-family:'Amiri Quran',serif;font-size:22px;direction:rtl;text-align:right;resize:none;outline:none;line-height:1.8;transition:border-color var(--transition);margin-bottom:8px;}
-  .recit-textarea:focus{border-color:var(--gold);}
-  .recit-textarea::placeholder{color:var(--text3);font-family:'Cinzel',serif;font-size:11px;direction:ltr;text-align:left;}
-  .recit-actions{display:flex;gap:8px;flex-wrap:wrap;}
-  .recit-score-ring{display:flex;flex-direction:column;align-items:center;gap:4px;padding:16px;background:var(--surface3);border-radius:12px;border:1px solid var(--border);margin-bottom:14px;}
-  .recit-score-arc{position:relative;width:80px;height:80px;}
-  .recit-score-arc svg{transform:rotate(-90deg);}
-  .recit-score-arc-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:20px;font-weight:700;letter-spacing:-1px;}
-  .recit-score-arc-num.perfect{color:var(--green2);}
-  .recit-score-arc-num.good{color:var(--gold2);}
-  .recit-score-arc-num.bad{color:var(--red);}
-  .recit-score-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;}
-  .recit-score-label.perfect{color:var(--green2);}
-  .recit-score-label.good{color:var(--gold2);}
-  .recit-score-label.bad{color:var(--red);}
-  .recit-compare{font-family:'Amiri Quran',serif;font-size:26px;direction:rtl;text-align:right;line-height:2.4;padding:12px 16px;background:var(--surface3);border-radius:var(--radius);border:1px solid var(--border);}
-  .recit-char-ok{color:var(--green2);}
-  .recit-char-near{color:#e8a020;text-decoration:underline wavy #e8a020;}
-  .recit-char-err{color:var(--red);text-decoration:underline wavy var(--red);}
-  .recit-char-miss{color:var(--border2);text-decoration:underline dotted var(--text3);}
-  .recit-char-silent{color:var(--gold);opacity:0.65;font-style:italic;}
-  .recit-wasl-fatha{color:var(--gold2);}
-  .recit-wasl-damma{color:var(--teal);}
-  .recit-wasl-kasra{color:var(--text2);}
-  .recit-word-wrap{display:inline;margin:0 3px;}
-  .recit-word-wrap.word-ok{border-bottom:2px solid rgba(76,175,129,.35);}
-  .recit-word-wrap.word-err{border-bottom:2px solid rgba(224,90,90,.4);}
-  .recit-word-wrap.word-del{color:var(--red);opacity:.5;text-decoration:line-through;}
-  .recit-word-wrap.word-silent{}
-  .recit-legend{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px;}
-  .recit-legend-pill{display:inline-flex;align-items:center;gap:4px;font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;padding:3px 8px;border-radius:20px;opacity:.85;}
-  .recit-replay{font-family:'Amiri Quran',serif;font-size:17px;direction:rtl;text-align:right;color:var(--text3);padding:8px 12px;background:var(--surface3);border-radius:var(--radius-sm);border:1px solid var(--border);margin-top:8px;line-height:1.8;}
-  .recit-debug-toggle{margin-top:12px;width:100%;text-align:center;}
-  .recit-debug-table{width:100%;border-collapse:collapse;font-size:11px;font-family:monospace;direction:ltr;}
-  .recit-debug-table th{padding:4px 8px;border-bottom:1px solid var(--border);color:var(--text3);font-size:9px;letter-spacing:1px;white-space:nowrap;background:var(--surface3);}
-  .recit-debug-table td{padding:4px 8px;border-bottom:1px solid var(--border);vertical-align:top;}
-
-  /* ‚îÄ‚îÄ REVISION PAGE ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .rev-page{flex:1;overflow-y:auto;padding:24px 28px 80px;display:flex;flex-direction:column;gap:20px;}
-  .rev-header-block{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;}
-  .rev-title{font-size:18px;letter-spacing:3px;color:var(--gold2);font-weight:700;}
-  .rev-subtitle{font-size:9px;letter-spacing:2px;color:var(--text3);margin-top:4px;}
-  .rev-stats-row{display:flex;gap:10px;flex-wrap:wrap;}
-  .rev-stat-pill{display:flex;flex-direction:column;align-items:center;padding:8px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);}
-  .rev-stat-num{font-size:20px;color:var(--gold2);font-weight:700;}
-  .rev-stat-label{font-size:8px;letter-spacing:1.5px;color:var(--text3);margin-top:2px;}
-  .rev-filter-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
-  .rev-filter-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 12px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;border-radius:var(--radius-sm);transition:all .2s;}
-  .rev-filter-btn:hover{border-color:var(--text2);color:var(--text2);}
-  .rev-filter-btn.active{border-color:var(--teal);color:var(--teal);background:rgba(62,184,160,.08);}
-  .rev-surah-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);}
-  .rev-surah-header{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;user-select:none;}
-  .rev-surah-header:hover{background:rgba(255,255,255,.02);}
-  .rev-surah-num{width:32px;height:32px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text3);flex-shrink:0;}
-  .rev-surah-name{flex:1;}
-  .rev-surah-name-ar{font-family:'Amiri Quran',serif;font-size:18px;color:var(--text2);direction:rtl;}
-  .rev-surah-name-en{font-size:10px;letter-spacing:1.5px;color:var(--text3);margin-top:2px;}
-  .rev-surah-badge{font-size:9px;letter-spacing:1px;padding:3px 10px;border-radius:10px;border:1px solid var(--green);color:var(--green);white-space:nowrap;}
-  .rev-ayat-grid{padding:0 16px 14px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--border);}
-  .rev-ayat-card{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;}
-  .rev-ayat-card.rev-ayat-active{border-color:var(--teal);}
-  .rev-ayat-card-header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface2);cursor:pointer;}
-  .rev-ayat-card-header:hover{background:var(--surface3);}
-  .rev-ayat-num{width:28px;height:28px;border-radius:50%;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text3);flex-shrink:0;}
-  .rev-ayat-text-preview{font-family:'Amiri Quran',serif;font-size:15px;direction:rtl;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;}
-  .rev-ayat-score-badge{font-size:9px;letter-spacing:1px;padding:2px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0;}
-  .rev-ayat-score-badge.perfect{border:1px solid var(--green);color:var(--green);}
-  .rev-ayat-score-badge.good{border:1px solid var(--gold);color:var(--gold);}
-  .rev-ayat-score-badge.bad{border:1px solid var(--red);color:var(--red);}
-  .rev-ayat-score-badge.none{border:1px solid var(--border2);color:var(--text3);}
-  .rev-ayat-body{padding:14px 14px 10px;display:flex;flex-direction:column;gap:12px;}
-  .rev-ayat-arabic{font-family:'Amiri Quran',serif;font-size:24px;direction:rtl;text-align:right;color:var(--text);line-height:1.9;padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);}
-  .rev-empty{text-align:center;padding:60px 20px;color:var(--text3);font-size:11px;letter-spacing:2px;}
-  .rev-progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:4px;}
-  .rev-progress-fill{height:100%;border-radius:2px;transition:width .4s ease;}
-  .main-player{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(0deg,var(--surface),rgba(19,22,31,.98));border-top:1px solid var(--border);z-index:200;backdrop-filter:blur(10px);}
-  .main-player::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);}
-  .player-row{display:flex;align-items:center;gap:14px;padding:8px 20px;height:var(--player-h);}
-  .player-info{min-width:120px;max-width:180px;}
-  .player-surah{font-size:9px;letter-spacing:1.5px;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .player-ayah{font-size:8px;letter-spacing:1px;color:var(--text3);margin-top:2px;}
-  .player-controls{display:flex;align-items:center;gap:6px;}
-  .ctrl-btn{width:32px;height:32px;border-radius:50%;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all var(--transition);flex-shrink:0;touch-action:manipulation;}
-  .ctrl-btn:hover{border-color:var(--gold);color:var(--gold);}
-  .ctrl-btn.play-btn{width:38px;height:38px;background:var(--gold);border-color:var(--gold);color:var(--bg);font-size:14px;}
-  .ctrl-btn.play-btn:hover{background:var(--gold2);}
-  .ctrl-btn.loop-on{border-color:var(--teal);color:var(--teal);background:rgba(62,184,160,.1);}
-  .reciter-trigger{gap:5px;padding:0 10px;width:auto;min-width:44px;font-family:'Cinzel',serif;font-size:10px;}
-  .reciter-trigger-label{max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .reciter-sheet-backdrop{position:fixed;inset:0;z-index:350;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);}
-  .reciter-sheet{position:fixed;z-index:351;right:16px;bottom:76px;width:min(420px,calc(100vw - 32px));max-height:min(640px,calc(100dvh - 100px));display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border2);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.55);overflow:hidden;}
-  .reciter-sheet-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px;border-bottom:1px solid var(--border);}
-  .reciter-sheet-title{font-family:'Cinzel',serif;font-size:12px;letter-spacing:2px;color:var(--gold2);}
-  .reciter-sheet-current{font-size:10px;color:var(--text3);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .reciter-sheet-close{width:40px;height:40px;border-radius:50%;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:20px;cursor:pointer;flex-shrink:0;}
-  .reciter-search{margin:12px 16px 8px;width:calc(100% - 32px);box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:11px 12px;color:var(--text);font-size:16px;outline:none;}
-  .reciter-search:focus{border-color:var(--gold);}
-  .reciter-list{overflow-y:auto;padding:4px 12px 12px;overscroll-behavior:contain;}
-  .reciter-option{width:100%;min-height:52px;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:9px;background:transparent;border:1px solid transparent;color:var(--text2);font-size:14px;text-align:left;cursor:pointer;}
-  .reciter-option.selected{background:rgba(201,168,76,.12);border-color:var(--gold);color:var(--gold2);}
-  .reciter-option-flag{font-size:20px;line-height:1;}
-  .reciter-option-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .reciter-option-check{font-size:16px;color:var(--gold2);}
-  .reciter-empty{padding:24px 12px;text-align:center;color:var(--text3);font-size:13px;}
-  .reciter-sheet-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid var(--border);color:var(--text3);font-size:11px;}
-  .reciter-reset{min-height:36px;padding:0 10px;border:1px solid var(--border2);border-radius:6px;background:transparent;color:var(--text2);font-size:11px;cursor:pointer;}
-  .player-progress{flex:1;display:flex;align-items:center;gap:8px;min-width:0;}
-  .progress-bar-wrap{flex:1;height:3px;background:var(--border);border-radius:2px;position:relative;}
-  .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--teal));border-radius:2px;transition:width .3s;}
-  .progress-range{position:absolute;top:0;height:100%;background:rgba(62,184,160,.3);border-radius:2px;pointer-events:none;}
-  .progress-text{font-size:8px;color:var(--text3);letter-spacing:1px;white-space:nowrap;}
-  .loop-bar{display:flex;align-items:center;gap:8px;padding:6px 20px 8px;border-top:1px solid rgba(42,47,64,.5);flex-wrap:wrap;}
-  .loop-label{font-size:9px;letter-spacing:1.5px;color:var(--teal);flex-shrink:0;}
-  .loop-inputs{display:flex;align-items:center;gap:6px;flex-shrink:0;}
-  .loop-input{background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:3px 6px;color:var(--text2);font-family:'Cinzel',serif;font-size:10px;width:52px;outline:none;text-align:center;}
-  .loop-input:focus{border-color:var(--teal);}
-  .loop-sep{font-size:10px;color:var(--text3);}
-  .loop-rep-wrap{display:flex;align-items:center;gap:5px;margin-left:6px;}
-  .loop-rep-label{font-size:9px;letter-spacing:1px;color:var(--text3);}
-  .loop-rep-btns{display:flex;gap:3px;}
-  .loop-rep-btn{font-family:'Cinzel',serif;font-size:9px;padding:3px 7px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;border-radius:3px;transition:all .15s;}
-  .loop-rep-btn:hover{border-color:var(--teal);color:var(--teal);}
-  .loop-rep-btn.sel{border-color:var(--teal);color:var(--teal);background:rgba(62,184,160,.1);}
-  .loop-count-badge{font-size:9px;letter-spacing:1px;color:var(--text3);margin-left:auto;}
-  .loop-count-badge span{color:var(--teal);}
-
-  /* ‚îÄ‚îÄ DASHBOARD PAGE ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .dash-page{flex:1;overflow-y:auto;padding:24px 28px 60px;display:flex;flex-direction:column;gap:24px;}
-  .dash-kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;}
-  .dash-kpi{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px 16px;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden;transition:border-color .2s;}
-  .dash-kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--kpi-color,var(--gold));}
-  .dash-kpi-val{font-family:'Cinzel',serif;font-size:28px;font-weight:700;color:var(--kpi-color,var(--gold));letter-spacing:-1px;line-height:1;}
-  .dash-kpi-label{font-size:9px;letter-spacing:2px;color:var(--text3);}
-  .dash-kpi-sub{font-size:9px;color:var(--text2);}
-  .dash-section-title{font-size:9px;letter-spacing:3px;color:var(--gold);margin-bottom:12px;display:flex;align-items:center;gap:10px;}
-  .dash-section-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent);}
-  .dash-two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
-  .dash-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
-  .dash-surah-bar{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(42,47,64,.4);cursor:pointer;transition:background .15s;}
-  .dash-surah-bar:last-child{border-bottom:none;}
-  .dash-surah-bar:hover{background:rgba(255,255,255,.02);}
-  .dash-surah-num{width:22px;font-size:9px;color:var(--text3);flex-shrink:0;text-align:right;}
-  .dash-surah-name{font-size:10px;letter-spacing:.5px;color:var(--text2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .dash-surah-ar{font-family:'Amiri',serif;font-size:14px;color:var(--gold);direction:rtl;flex-shrink:0;}
-  .dash-bar-track{flex:1;max-width:90px;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
-  .dash-bar-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--teal),var(--green));}
-  .dash-bar-pct{font-size:9px;color:var(--text3);width:28px;text-align:right;flex-shrink:0;}
-  .dash-heatmap{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
-  .dash-heatmap-cell{aspect-ratio:1;border-radius:3px;background:var(--surface3);border:1px solid var(--border);transition:transform .15s;cursor:default;}
-  .dash-heatmap-cell:hover{transform:scale(1.15);}
-  .dash-streak-badge{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;border:1px solid var(--gold);background:rgba(201,168,76,.06);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1.5px;color:var(--gold2);}
-  .dash-activity-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(42,47,64,.4);}
-  .dash-activity-row:last-child{border-bottom:none;}
-  .dash-activity-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-  .dash-activity-text{font-size:10px;color:var(--text2);flex:1;}
-  .dash-activity-time{font-size:9px;color:var(--text3);}
-  .dash-donut-wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
-  .dash-legend-item{display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:.5px;color:var(--text2);}
-  .dash-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-  .dash-ring-label{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;color:var(--text3);text-align:center;margin-top:4px;}
-  .dash-empty-hint{font-size:10px;color:var(--text3);letter-spacing:1px;text-align:center;padding:20px 0;}
-  @media(max-width:700px){
-    .dash-two-col{grid-template-columns:1fr;}
-    .dash-page{padding:12px 8px 60px;}
-    .dash-kpi-row{grid-template-columns:repeat(2,1fr);}
-    .dash-card{min-width:0;max-width:100%;overflow-x:hidden;}
-    /* Force all dashboard grid cells to full width */
-    .dash-widget-cell{grid-column:1 / -1 !important;max-width:100%;min-width:0;}
-  }
-  @media(max-width:480px){
-    .dash-kpi-row{grid-template-columns:repeat(2,1fr);}
-    .dash-kpi{padding:10px 8px;min-width:0;}
-    .dash-kpi-val{font-size:20px;}
-  }
-
-  /* ‚îÄ‚îÄ PRONONCIATION PAGE ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .pronon-page{flex:1;overflow-y:auto;padding:24px 28px 80px;display:flex;flex-direction:column;gap:28px;}
-  .pronon-section-title{font-size:9px;letter-spacing:3px;color:var(--gold);margin-bottom:14px;display:flex;align-items:center;gap:10px;}
-  .pronon-section-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent);}
-  .pronon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:10px;}
-  .pronon-card{
-    background:var(--surface2);border:1px solid var(--border);border-radius:10px;
-    padding:14px 8px 10px;cursor:pointer;transition:all .2s;
-    display:flex;flex-direction:column;align-items:center;gap:6px;
-    position:relative;overflow:hidden;
-  }
-  .pronon-card:hover{border-color:var(--gold);background:var(--surface3);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.3);}
-  .pronon-card.selected{border-color:var(--teal);background:rgba(62,184,160,.07);box-shadow:0 0 0 2px rgba(62,184,160,.25);}
-  .pronon-card.playing{border-color:var(--gold2);background:rgba(201,168,76,.08);}
-  .pronon-letter{font-family:'Amiri Quran',serif;font-size:36px;color:var(--text);line-height:1.2;direction:rtl;}
-  .pronon-letter-name{font-size:8px;letter-spacing:1px;color:var(--text3);text-align:center;font-family:'Cinzel',serif;}
-  .pronon-letter-trans{font-size:9px;color:var(--teal2);letter-spacing:.5px;}
-  .pronon-harakat-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
-  .pronon-harakat-btn{
-    background:var(--surface3);border:1px solid var(--border2);border-radius:8px;
-    padding:10px 14px;cursor:pointer;transition:all .2s;
-    display:flex;flex-direction:column;align-items:center;gap:4px;min-width:72px;
-  }
-  .pronon-harakat-btn:hover{border-color:var(--gold);background:rgba(201,168,76,.06);}
-  .pronon-harakat-btn.playing{border-color:var(--teal);background:rgba(62,184,160,.08);}
-  .pronon-harakat-arabic{font-family:'Amiri Quran',serif;font-size:28px;color:var(--gold2);direction:rtl;}
-  .pronon-harakat-name{font-size:8px;letter-spacing:1px;color:var(--text3);font-family:'Cinzel',serif;text-align:center;}
-  .pronon-harakat-desc{font-size:8px;color:var(--teal2);text-align:center;}
-  .pronon-detail-panel{
-    background:var(--surface2);border:1px solid var(--border2);border-radius:12px;
-    padding:20px;display:flex;flex-direction:column;gap:16px;
-    position:sticky;top:0;
-  }
-  .pronon-detail-letter{font-family:'Amiri Quran',serif;font-size:72px;color:var(--gold2);direction:rtl;text-align:center;line-height:1;}
-  .pronon-detail-name{font-size:11px;letter-spacing:3px;color:var(--gold);text-align:center;}
-  .pronon-detail-forms{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:4px;}
-  .pronon-form-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 10px;background:var(--surface3);border-radius:6px;border:1px solid var(--border);}
-  .pronon-form-arabic{font-family:'Amiri Quran',serif;font-size:22px;color:var(--text);direction:rtl;}
-  .pronon-form-label{font-size:7px;letter-spacing:1px;color:var(--text3);font-family:'Cinzel',serif;}
-  .pronon-detail-harakats{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
-  .pronon-detail-hbtn{
-    display:flex;flex-direction:column;align-items:center;gap:3px;
-    padding:10px 16px;background:var(--surface3);border:1px solid var(--border2);
-    border-radius:8px;cursor:pointer;transition:all .2s;min-width:80px;
-  }
-  .pronon-detail-hbtn:hover{border-color:var(--teal);transform:scale(1.04);}
-  .pronon-detail-hbtn.playing{border-color:var(--gold);background:rgba(201,168,76,.08);animation:softGlow .6s ease-in-out infinite alternate;}
-  @keyframes softGlow{from{box-shadow:0 0 0 0 rgba(201,168,76,0);}to{box-shadow:0 0 12px 2px rgba(201,168,76,.2);}}
-  .pronon-detail-hbtn-arabic{font-family:'Amiri Quran',serif;font-size:26px;color:var(--gold2);direction:rtl;}
-  .pronon-detail-hbtn-name{font-size:8px;letter-spacing:1px;color:var(--text3);font-family:'Cinzel',serif;}
-  .pronon-detail-hbtn-desc{font-size:8px;color:var(--teal);text-align:center;}
-  .pronon-play-btn{
-    display:flex;align-items:center;justify-content:center;gap:8px;
-    padding:10px 20px;border:1px solid var(--teal);background:rgba(62,184,160,.08);
-    border-radius:8px;cursor:pointer;font-family:'Cinzel',serif;font-size:9px;
-    letter-spacing:2px;color:var(--teal);transition:all .2s;
-  }
-  .pronon-play-btn:hover{background:rgba(62,184,160,.16);}
-  .pronon-play-btn.playing{border-color:var(--red);color:var(--red);background:rgba(224,90,90,.08);}
-  .pronon-tip-box{padding:10px 14px;background:rgba(201,168,76,.05);border:1px solid rgba(201,168,76,.2);border-radius:8px;font-size:10px;color:var(--text2);line-height:1.6;}
-  .pronon-makhraj-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:10px;background:rgba(62,184,160,.1);border:1px solid rgba(62,184,160,.3);font-size:8px;letter-spacing:1px;color:var(--teal2);}
-  .pronon-nav-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px;overflow-x:auto;flex-shrink:0;}
-  .pronon-nav-tab{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1.5px;color:var(--text3);padding:10px 16px;background:transparent;border:none;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;flex-shrink:0;}
-  .pronon-nav-tab:hover{color:var(--text2);}
-  .pronon-nav-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
-  .pronon-two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
-  @media (max-width:700px){.pronon-two-col{grid-template-columns:1fr;} .pronon-page{padding:16px 14px 80px;}}
-
-  /* ‚îÄ‚îÄ MISC ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:12px;color:var(--text3);font-size:11px;letter-spacing:2px;}
-  .loading-ring{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
-  @keyframes spin{to{transform:rotate(360deg);}}
-  @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
-  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-  .empty-state{display:flex;align-items:center;justify-content:center;height:300px;color:var(--text3);font-size:11px;letter-spacing:2px;flex-direction:column;gap:12px;}
-  /* ‚îÄ‚îÄ Quran Book (CSS 3D Transforms ‚Äî inspired by Codrops AnimatedBooks) ‚îÄ‚îÄ */
-  .qbook-wrapper{
-    display:flex;flex-direction:column;height:100%;
-    background:radial-gradient(ellipse at 50% 30%,#18090200 0%,#060200 100%);
-    align-items:center;justify-content:space-between;overflow:hidden;position:relative;
-    background-color:#0c0501;
-  }
-  /* ‚îÄ‚îÄ Scene / perspective ‚îÄ‚îÄ */
-  .qbook-scene{
-    perspective:2000px;perspective-origin:50% 40%;
-    display:flex;align-items:center;justify-content:center;
-    flex:1;width:100%;position:relative;
-  }
-  /* ‚îÄ‚îÄ Book root ‚îÄ‚îÄ */
-  .qbook{
-    position:relative;transform-style:preserve-3d;
-    transition:transform .5s ease;
-    transform:rotateX(4deg) rotateY(-1deg);
-  }
-  /* ‚îÄ‚îÄ Hardcover front ‚îÄ‚îÄ */
-  .qbook-hc-front{
-    position:absolute;top:0;left:0;width:100%;height:100%;
-    transform-style:preserve-3d;transform-origin:left center;
-    transition:transform .8s cubic-bezier(.645,.045,.355,1.000);
-    z-index:100;
-  }
-  .qbook-hc-front > li:first-child{
-    /* front face */
-    position:absolute;top:0;left:0;width:100%;height:100%;
-    border-radius:0 3px 3px 0;overflow:hidden;
-    background:linear-gradient(135deg,#2d0e02 0%,#5c1e06 35%,#8b3410 55%,#5c1e06 75%,#2d0e02 100%);
-    box-shadow:inset -6px 0 20px rgba(0,0,0,.5),inset 0 0 40px rgba(0,0,0,.3);
-    backface-visibility:hidden;
-    display:flex;align-items:center;justify-content:center;
-  }
-  .qbook-hc-front > li:last-child{
-    /* back face of front cover (inside) */
-    position:absolute;top:0;left:0;width:100%;height:100%;
-    border-radius:0 3px 3px 0;overflow:hidden;
-    background:linear-gradient(to right,#1a0500,#3d1208);
-    transform:rotateY(180deg);backface-visibility:hidden;
-  }
-  /* front cover open state */
-  .qbook-open .qbook-hc-front{
-    transform:rotateY(-160deg);
-  }
-  /* Cover decorative design */
-  .qbook-cover-design{
-    position:absolute;inset:0;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:4px;
-    padding:16px;
-  }
-  .qbook-cover-title{
-    font-family:'Amiri Quran',serif;font-size:clamp(16px,4vw,32px);
-    color:#c9a84c;direction:rtl;text-align:center;line-height:1.4;
-    text-shadow:0 0 20px rgba(201,168,76,.4),0 2px 4px rgba(0,0,0,.6);
-  }
-  .qbook-cover-sub{
-    font-family:'Cinzel',serif;font-size:clamp(6px,1.2vw,9px);
-    letter-spacing:3px;color:rgba(201,168,76,.55);text-align:center;
-    margin-top:4px;
-  }
-  /* Gold border on cover */
-  .qbook-cover-design::before{
-    content:'';position:absolute;inset:8%;
-    border:1px solid rgba(201,168,76,.30);pointer-events:none;
-  }
-  .qbook-cover-design::after{
-    content:'';position:absolute;inset:11%;
-    border:1px solid rgba(201,168,76,.15);pointer-events:none;
-  }
-  /* Medallion ornament */
-  .qbook-medallion{
-    width:clamp(40px,8vw,70px);height:clamp(40px,8vw,70px);
-    border-radius:50%;
-    background:radial-gradient(circle,rgba(201,168,76,.25) 0%,rgba(201,168,76,.05) 60%,transparent 100%);
-    border:1px solid rgba(201,168,76,.35);
-    display:flex;align-items:center;justify-content:center;
-    font-size:clamp(18px,3.5vw,28px);
-    margin-bottom:4px;
-  }
-  /* ‚îÄ‚îÄ Hardcover back ‚îÄ‚îÄ */
-  .qbook-hc-back{
-    position:absolute;top:0;left:0;width:100%;height:100%;
-    z-index:0;
-  }
-  .qbook-hc-back > li:first-child{
-    position:absolute;top:0;left:0;width:100%;height:100%;
-    border-radius:3px 0 0 3px;overflow:hidden;
-    background:linear-gradient(135deg,#2d0e02,#4a1608,#2d0e02);
-    box-shadow:-3px 0 10px rgba(0,0,0,.4),inset 3px 0 10px rgba(0,0,0,.3);
-  }
-  .qbook-hc-back > li:last-child{
-    position:absolute;top:0;right:-8px;width:8px;height:100%;
-    background:linear-gradient(to right,#1a0500,#0a0200);
-    border-radius:0 2px 2px 0;
-  }
-  /* ‚îÄ‚îÄ Spine ‚îÄ‚îÄ */
-  .qbook-spine-el{
-    position:absolute;top:0;left:0;
-    width:100%;height:100%;
-    transform:translateX(-100%) rotateY(-90deg);
-    transform-origin:right center;
-    background:linear-gradient(to bottom,#0e0300,#3a1204,#7c3010,#c07828,#e8a840,#c07828,#7c3010,#3a1204,#0e0300);
-    display:flex;align-items:center;justify-content:center;
-    overflow:hidden;
-  }
-  .qbook-spine-el::before{
-    content:'';position:absolute;inset:0;
-    background:repeating-linear-gradient(to bottom,transparent 0,transparent 18px,rgba(255,195,70,.10) 18px,rgba(255,195,70,.10) 19px);
-  }
-  .qbook-spine-text{
-    writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);
-    font-family:'Amiri Quran',serif;font-size:clamp(8px,1.5vw,12px);
-    color:rgba(201,168,76,.55);letter-spacing:3px;white-space:nowrap;
-    text-shadow:0 0 8px rgba(201,168,76,.2);
-  }
-  /* ‚îÄ‚îÄ Pages stack ‚îÄ‚îÄ */
-  .qbook-pages{
-    position:absolute;top:3px;left:3px;right:3px;bottom:3px;
-    transform-style:preserve-3d;
-  }
-  .qbook-pages > li{
-    position:absolute;top:0;left:0;width:100%;height:100%;
-    border-radius:0 2px 2px 0;overflow:hidden;
-    background:linear-gradient(to right,#f5ead0,#fdf8ea,#f5ead0);
-  }
-  .qbook-pages > li:nth-child(1){ transform:translateX(0px);background:#f0e4c0; }
-  .qbook-pages > li:nth-child(2){ transform:translateX(-1px);background:#f3e8c8; }
-  .qbook-pages > li:nth-child(3){ transform:translateX(-2px);background:#f6ecce; }
-  .qbook-pages > li:nth-child(4){ transform:translateX(-3px);background:#f9f0d4; }
-  .qbook-pages > li:nth-child(5){ transform:translateX(-4px);background:#fcf4da; }
-  /* ‚îÄ‚îÄ Individual flipping page ‚îÄ‚îÄ */
-  .qbook-page{
-    position:absolute;top:0;height:100%;width:100%;
-    transform-style:preserve-3d;transform-origin:left center;
-    z-index:200;
-  }
-  .qbook-page-face{
-    position:absolute;top:0;left:0;width:100%;height:100%;
-    backface-visibility:hidden;overflow:hidden;
-    border-radius:0 2px 2px 0;
-    background:linear-gradient(160deg,#fef9ee 0%,#fdf3d8 40%,#faecc0 100%);
-  }
-  .qbook-page-face-back{
-    transform:rotateY(180deg);
-    background:linear-gradient(160deg,#fdf8e8 0%,#fcefd2 50%,#f8e4b8 100%);
-  }
-  /* Paper grain on pages */
-  .qbook-page-face::after{
-    content:'';position:absolute;inset:0;pointer-events:none;mix-blend-mode:multiply;opacity:.5;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
-  }
-  /* Flip animations */
-  .qbook-flip-fwd{animation:qFlipFwd .72s cubic-bezier(.455,.030,.515,.955) forwards;}
-  .qbook-flip-bwd{animation:qFlipBwd .72s cubic-bezier(.455,.030,.515,.955) forwards;}
-  @keyframes qFlipFwd{
-    0%  {transform:rotateY(0deg);z-index:200;}
-    100%{transform:rotateY(-180deg);z-index:200;}
-  }
-  @keyframes qFlipBwd{
-    0%  {transform:rotateY(-180deg);z-index:200;}
-    100%{transform:rotateY(0deg);z-index:200;}
-  }
-  /* Shadow during page turn */
-  .qbook-flip-fwd .qbook-page-face::before,
-  .qbook-flip-bwd .qbook-page-face::before{
-    content:'';position:absolute;inset:0;z-index:10;pointer-events:none;
-    animation:qShadowFwd .72s cubic-bezier(.455,.030,.515,.955) forwards;
-  }
-  .qbook-flip-bwd .qbook-page-face::before{
-    animation:qShadowBwd .72s cubic-bezier(.455,.030,.515,.955) forwards;
-  }
-  @keyframes qShadowFwd{
-    0%  {background:linear-gradient(to right,rgba(0,0,0,.0),rgba(0,0,0,.0));}
-    20% {background:linear-gradient(to right,rgba(0,0,0,.22),rgba(0,0,0,.0));}
-    50% {background:linear-gradient(to left,rgba(0,0,0,.28),rgba(0,0,0,.05) 40%,transparent);}
-    100%{background:linear-gradient(to right,rgba(0,0,0,.0),rgba(0,0,0,.0));}
-  }
-  @keyframes qShadowBwd{
-    0%  {background:linear-gradient(to right,rgba(0,0,0,.0),rgba(0,0,0,.0));}
-    20% {background:linear-gradient(to left,rgba(0,0,0,.22),rgba(0,0,0,.0));}
-    50% {background:linear-gradient(to right,rgba(0,0,0,.28),rgba(0,0,0,.05) 40%,transparent);}
-    100%{background:linear-gradient(to right,rgba(0,0,0,.0),rgba(0,0,0,.0));}
-  }
-  /* Click zones */
-  .qbook-click{position:absolute;top:0;height:100%;width:44%;cursor:pointer;z-index:300;transition:background .2s;}
-  .qbook-click-left{left:0;}.qbook-click-right{right:0;}
-  .qbook-click:hover{background:rgba(255,240,180,.03);}
-  /* Page content */
-  .qbook-page-content{
-    padding:clamp(8px,2%,20px) clamp(7px,2%,16px) clamp(6px,1.5%,12px);
-    direction:rtl;font-family:'Amiri Quran',serif;color:#1a0a03;
-    overflow:hidden;height:100%;display:flex;flex-direction:column;
-    box-sizing:border-box;position:relative;
-  }
-  /* Inset border */
-  .qbook-page-content::before{
-    content:'';position:absolute;
-    inset:clamp(4px,1.2%,8px);
-    border:1px solid rgba(139,90,20,.14);pointer-events:none;border-radius:1px;
-  }
-  /* Spine shadow on page */
-  .qbook-page-content::after{
-    content:'';position:absolute;top:0;bottom:0;left:0;width:20%;
-    background:linear-gradient(to right,rgba(0,0,0,.08),transparent);
-    pointer-events:none;
-  }
-  .qbook-page-content-right::after{
-    left:auto;right:0;
-    background:linear-gradient(to left,rgba(0,0,0,.08),transparent);
-  }
-  .qbook-ayah-text{line-height:2.1;text-align:justify;word-break:break-word;flex:1;overflow:hidden;}
-  .qbook-surah-header{
-    text-align:center;font-family:'Cinzel',serif;font-size:clamp(7px,1.3vw,9px);letter-spacing:1.5px;
-    color:#7a4010;
-    border-top:1px solid rgba(139,90,20,.28);border-bottom:1px solid rgba(139,90,20,.28);
-    padding:4px 0;margin:6px 0 4px;
-    background:linear-gradient(to right,transparent,rgba(201,168,76,.09),transparent);
-  }
-  .qbook-basmala{
-    text-align:center;font-family:'Amiri Quran',serif;color:#3d1a05;
-    margin:3px 0 5px;direction:rtl;text-shadow:0 1px 2px rgba(255,255,255,.6);
-  }
-  .qbook-page-num{
-    text-align:center;font-family:'Cinzel',serif;font-size:clamp(6px,1.1vw,7.5px);
-    letter-spacing:2.5px;color:rgba(120,76,20,.48);
-    padding-top:5px;border-top:1px solid rgba(139,90,20,.12);
-    margin-top:auto;
-  }
-  .qbook-page-num::before,.qbook-page-num::after{content:'‚ùß';font-size:8px;color:rgba(139,90,20,.22);margin:0 4px;}
-  .qbook-ayah-num{font-size:.68em;color:#9b6020;padding:0 2px;vertical-align:middle;font-family:'Amiri Quran',serif;}
-  .qbook-loading-page{display:flex;align-items:center;justify-content:center;height:100%;
-    font-family:'Amiri Quran',serif;font-size:clamp(24px,5vw,40px);color:rgba(139,92,26,.14);direction:rtl;}
-  /* Topbar */
-  .qbook-topbar{
-    display:flex;align-items:center;gap:10px;width:100%;padding:10px 20px;
-    box-sizing:border-box;flex-shrink:0;flex-wrap:wrap;
-    background:linear-gradient(to bottom,rgba(0,0,0,.38),transparent);
-  }
-  /* Bottom nav */
-  .qbook-botnav{display:flex;align-items:center;gap:14px;padding:10px 0 16px;flex-shrink:0;flex-wrap:wrap;justify-content:center;}
-  .qbook-navbtn{
-    font-size:9px;letter-spacing:1.5px;padding:6px 18px;font-family:'Cinzel',serif;
-    background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.30);
-    color:var(--gold2);border-radius:8px;cursor:pointer;transition:all .2s;
-  }
-  .qbook-navbtn:hover:not(:disabled){background:rgba(201,168,76,.18);border-color:rgba(201,168,76,.55);}
-  .qbook-navbtn:disabled{opacity:.3;cursor:default;}
-  .qbook-navlabel{font-size:9px;letter-spacing:1.5px;color:rgba(201,168,76,.4);font-family:'Cinzel',serif;min-width:70px;text-align:center;}
-  /* Progress bar */
-  .qbook-progress{width:88px;height:2px;background:rgba(201,168,76,.10);border-radius:2px;overflow:hidden;margin-top:4px;}
-  .qbook-progress-bar{height:100%;border-radius:2px;background:linear-gradient(to right,#7a3c0a,#c9a84c);transition:width .5s;}
-  /* Open/close book button */
-  .qbook-open-btn{
-    font-size:clamp(7px,1.5vw,9px);letter-spacing:clamp(2px,0.5vw,3px);
-    padding:clamp(4px,1vh,6px) clamp(12px,2.5vw,20px);
-    font-family:'Cinzel',serif;border-radius:20px;cursor:pointer;
-    background:rgba(0,0,0,.38);border:1px solid rgba(201,168,76,.25);
-    color:rgba(201,168,76,.72);text-shadow:0 0 12px rgba(201,168,76,.35);
-    animation:qbpulse 2.4s ease-in-out infinite;
-  }
-  @keyframes qbpulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
-  /* Surah picker */
-  .qbook-surah-select{
-    background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.25);
-    color:var(--gold2);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;
-    border-radius:6px;padding:4px 8px;outline:none;cursor:pointer;
-  }
-  .qbook-surah-select option{background:#1a0a03;color:#c9a84c;}
-  /* Responsive */
-  @media(max-width:600px){
-    .qbook-page-content{padding:8px 7px 6px;}
-  }
-
-  .empty-arabic{font-family:'Amiri Quran',serif;font-size:32px;color:var(--gold);opacity:.3;direction:rtl;}
-
-  /* ‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê
-     RESPONSIVE ‚Äî TABLET  (‚â§ 900px)
-  ‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê */
-  @media (max-width:900px) {
-    :root{ --sidebar-w:240px; }
-    .header-bismillah{ display:none; }
-    .ayat-arabic{ font-size:22px; }
-    .recit-compare{ font-size:22px; line-height:2.2; }
-    .surah-header{ padding:12px 20px; }
-    .surah-header-ornament{ font-size:28px; }
-    .bismillah-line{ font-size:22px; padding:12px 18px; }
-    .player-info{ display:none; }
-  }
-
-  /* ‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê
-     RESPONSIVE ‚Äî MOBILE  (‚â§ 640px)
-  ‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê */
-  @media (max-width:640px) {
-    :root{ --sidebar-w:100vw; --header-h:calc(52px + env(safe-area-inset-top, 0px)); --player-h:56px; }
-
-    /* Header: Single compact fluid bar */
-    .header{ padding:max(env(safe-area-inset-top, 0px), 0px) 8px 0 8px; height:var(--header-h); gap:6px; }
-    .header-left{ gap:6px; }
-    .header-menu-btn{ width:36px; height:36px; font-size:15px; border-radius:8px; }
-    .header-logo{ font-size:13px; letter-spacing:1.5px; }
-    .header-logo .header-subtitle{ font-size:5.5px; letter-spacing:2px; }
-    
-    .header-nav{ padding:2px; gap:2px; border-radius:10px; flex:1; min-width:0; justify-content:space-around; }
-    .header-nav-btn{ padding:5px 6px; font-size:8px; letter-spacing:0; border-radius:7px; flex:1; min-width:0; }
-    .header-nav-btn .nav-label{ display:none; }
-    .header-nav-btn .nav-icon{ font-size:16px; margin:0; }
-
-    .header-actions{ gap:5px; }
-    .voice-btn{ width:36px; height:36px; font-size:14px; border-radius:8px; }
-    .desktop-only-action{ display:none !important; }
-    
-    .header-user-btn{ width:36px; height:36px; }
-    .header-avatar,.header-avatar-placeholder{ width:30px; height:30px; font-size:12px; }
-
-    /* Sidebar becomes a full-screen drawer aligned below header */
-    .sidebar{
-      position:fixed; top:var(--header-h); left:0; bottom:0; z-index:300;
-      width:var(--sidebar-w); transform:translateX(-100%);
-      transition:transform .25s ease;
-      box-shadow:4px 0 32px rgba(0,0,0,.5);
-    }
-    .sidebar.open{ transform:translateX(0); }
-
-    /* Overlay when sidebar open */
-    .sidebar-overlay{
-      display:none; position:fixed; inset:0; z-index:299;
-      background:rgba(0,0,0,.5); backdrop-filter:blur(2px);
-    }
-    .sidebar-overlay.open{ display:block; }
-
-    /* Main takes full width */
-    .main{ width:100%; }
-
-    /* Ayat list */
-    .ayat-main{ padding:12px 14px; gap:10px; }
-    .ayat-arabic{ font-size:20px; line-height:1.9; }
-    .ayat-number-badge{ width:28px; height:28px; font-size:9px; }
-    .submenu{ padding:12px 14px 16px; }
-
-    /* Surah header compact */
-    .surah-header{ padding:7px 10px; }
-    .surah-header-ornament{ font-size:20px; }
-    .surah-header-bismillah{ font-size:14px !important; }
-    .surah-header-title{ font-size:8px; letter-spacing:1px; }
-    .bismillah-line{ font-size:20px; padding:10px 14px; }
-
-    /* TS bar compact */
-    .ts-global-bar{ padding:6px 14px; gap:8px; }
-
-    /* Player compact */
-    .player-row{ padding:6px 14px; gap:10px; }
-    .ctrl-btn{ width:30px; height:30px; font-size:11px; }
-    .ctrl-btn.play-btn{ width:36px; height:36px; font-size:13px; }
-    .reciter-trigger{position:fixed;right:12px;bottom:68px;z-index:201;min-height:44px;padding:0 14px;border-radius:22px;background:var(--surface2);box-shadow:0 6px 20px rgba(0,0,0,.35);}
-    .reciter-trigger-label{display:inline;max-width:120px;}
-    .reciter-sheet{right:0;bottom:0;width:100%;max-height:min(82dvh,680px);border-radius:18px 18px 0 0;}
-    .reciter-sheet-header{padding:18px 16px 14px;}
-    .reciter-list{padding-bottom:16px;}
-    .reciter-option{min-height:56px;font-size:16px;}
-    .progress-text{ display:none; }
-    .loop-bar{ padding:4px 14px 6px; gap:6px; }
-    .loop-rep-wrap{ display:none; }
-
-    /* Recitation */
-    .recit-compare{ font-size:18px; line-height:2; padding:10px 10px; }
-    .recit-score-arc{ width:68px; height:68px; }
-    .recit-score-arc-num{ font-size:17px; }
-    .recit-mic-circle{ width:56px; height:56px; font-size:22px; }
-    .recit-mic-zone{ padding:14px 10px; }
-    .recit-debug-table{ font-size:9px; }
-    .recit-debug-table td,.recit-debug-table th{ padding:3px 4px; }
-
-    /* Voice help full-width on mobile */
-    .voice-help{ right:8px; left:8px; max-width:none; top:calc(var(--header-h) + 6px); }
-  }
-
-  /* ‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê
-     RESPONSIVE ‚Äî SMALL MOBILE  (‚â§ 400px)
-  ‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê‚ïê */
-  @media (max-width:400px) {
-    .header{ padding:max(env(safe-area-inset-top, 0px), 0px) 4px 0 4px; gap:3px; }
-    .header-menu-btn{ width:34px; height:34px; font-size:14px; }
-    .header-logo{ display:none; }
-    .header-nav-btn{ padding:4px 3px; }
-    .header-nav-btn .nav-icon{ font-size:15px; }
-    .voice-btn{ width:34px; height:34px; font-size:13px; }
-    .header-user-btn{ width:34px; height:34px; }
-    .header-avatar,.header-avatar-placeholder{ width:28px; height:28px; font-size:11px; }
-    .ayat-arabic{ font-size:18px; }
-    .recit-compare{ font-size:16px; }
-    .surah-header-ornament{ font-size:18px; }
-    .surah-header-bismillah{ font-size:14px !important; }
-    .bismillah-line{ font-size:18px; }
-  }
-
-  /* ‚îÄ‚îÄ COLLECTIONS PAGE ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .collections-page{flex:1;overflow-y:auto;padding:24px 28px 80px;display:flex;flex-direction:column;gap:20px;}
-  .coll-top-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-  .coll-create-form{display:flex;gap:8px;align-items:center;flex:1;min-width:200px;}
-  .coll-input{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:9px 14px;color:var(--text);font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;outline:none;transition:border-color var(--transition);}
-  .coll-input:focus{border-color:var(--gold);}
-  .coll-input::placeholder{color:var(--text3);}
-  .coll-list{display:flex;flex-direction:column;gap:14px;}
-  .coll-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color var(--transition);}
-  .coll-card:hover{border-color:var(--border2);}
-  .coll-card-header{display:flex;align-items:center;gap:12px;padding:13px 18px;cursor:pointer;background:linear-gradient(135deg,var(--surface),var(--surface2));}
-  .coll-card-header:hover{background:var(--surface2);}
-  .coll-card-icon{width:34px;height:34px;border-radius:8px;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.3);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
-  .coll-card-name{font-size:11px;letter-spacing:2px;color:var(--gold2);font-weight:600;flex:1;}
-  .coll-card-count{font-size:9px;letter-spacing:1px;color:var(--text3);padding:2px 8px;border:1px solid var(--border2);border-radius:10px;flex-shrink:0;}
-  .coll-card-chevron{font-size:10px;color:var(--text3);transition:transform .2s;flex-shrink:0;}
-  .coll-card-chevron.open{transform:rotate(90deg);}
-  .coll-card-actions{display:flex;gap:6px;align-items:center;flex-shrink:0;}
-  .coll-ayat-list{border-top:1px solid var(--border);display:flex;flex-direction:column;}
-  .coll-ayat-row{display:flex;align-items:flex-start;gap:12px;padding:12px 18px;border-bottom:1px solid rgba(42,47,64,.4);transition:background var(--transition);}
-  .coll-ayat-row:last-child{border-bottom:none;}
-  .coll-ayat-row:hover{background:rgba(255,255,255,.02);}
-  .coll-ayat-ref{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;width:46px;}
-  .coll-ayat-surah{font-size:8px;letter-spacing:1px;color:var(--text3);}
-  .coll-ayat-num{width:28px;height:28px;border:1px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--gold);font-weight:600;}
-  .coll-ayat-text{font-family:'Amiri Quran',serif;font-size:20px;line-height:1.9;direction:rtl;text-align:right;flex:1;color:var(--text);}
-  .coll-ayat-btns{display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-self:center;}
-  .coll-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:14px;color:var(--text3);}
-  .coll-empty-arabic{font-family:'Amiri Quran',serif;font-size:36px;color:var(--gold);opacity:.3;direction:rtl;}
-  .coll-empty-msg{font-size:10px;letter-spacing:2px;text-align:center;line-height:1.8;}
-  /* Modal overlay for "add to collection" */
-  .coll-modal-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;}
-  .coll-modal{background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:24px;width:100%;max-width:400px;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 64px rgba(0,0,0,.5);}
-  .coll-modal-title{font-size:11px;letter-spacing:3px;color:var(--gold2);}
-  .coll-modal-subtitle{font-family:'Amiri Quran',serif;font-size:17px;direction:rtl;text-align:right;color:var(--text2);line-height:1.7;padding:8px 12px;background:var(--surface3);border-radius:6px;border:1px solid var(--border);}
-  .coll-modal-list{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;}
-  .coll-modal-item{display:flex;align-items:center;gap:10px;padding:9px 14px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s;}
-  .coll-modal-item:hover{border-color:var(--gold);background:rgba(201,168,76,.07);}
-  .coll-modal-item.selected{border-color:var(--teal);background:rgba(62,184,160,.08);}
-  .coll-modal-check{width:18px;height:18px;border-radius:4px;border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all .15s;}
-  .coll-modal-item.selected .coll-modal-check{background:var(--teal);border-color:var(--teal);color:var(--bg);}
-  .coll-modal-item-name{font-size:10px;letter-spacing:1.5px;color:var(--text2);flex:1;}
-  .coll-modal-item-count{font-size:9px;color:var(--text3);}
-  .coll-modal-actions{display:flex;gap:8px;justify-content:flex-end;}
-  .coll-modal-new{display:flex;gap:8px;padding-top:8px;border-top:1px solid var(--border);}
-  @media(max-width:640px){.collections-page{padding:16px 14px 80px;}.coll-top-bar{flex-direction:column;align-items:stretch;}.coll-ayat-text{font-size:17px;}}
-  .coll-search-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border2);flex-shrink:0;}
-  .coll-search-input{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:7px 12px;color:var(--text);font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;outline:none;flex:1;min-width:140px;transition:border-color .2s;}
-  .coll-search-input:focus{border-color:#c878ff;}
-  .coll-search-chip{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 12px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;transition:all .2s;white-space:nowrap;}
-  .coll-search-chip.active{border-color:#c878ff;color:#c878ff;background:rgba(200,120,255,.08);}
-  .coll-search-results{flex:1;overflow-y:auto;padding:8px 0;}
-  .coll-search-result-item{display:flex;align-items:flex-start;gap:10px;padding:10px 20px;border-bottom:1px solid rgba(42,47,64,.4);cursor:pointer;transition:background .15s;}
-  .coll-search-result-item:hover{background:var(--surface2);}
-  .coll-search-meta{font-size:9px;letter-spacing:1.5px;color:#c878ff;margin-bottom:4px;}
-  .coll-search-arabic{font-family:'Amiri Quran',serif;font-size:18px;direction:rtl;text-align:right;line-height:1.8;color:var(--text);flex:1;}
-
-  /* ‚îÄ‚îÄ CALENDAR & GOALS ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
-  .cal-day-name{font-size:8px;letter-spacing:1px;color:var(--text3);text-align:center;padding-bottom:4px;font-family:'Cinzel',serif;}
-  .cal-cell{aspect-ratio:1;border-radius:6px;border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:default;transition:all .15s;position:relative;font-size:9px;color:var(--text3);}
-  .cal-cell.today{border-color:var(--gold);color:var(--gold2);font-weight:700;}
-  .cal-cell.has-activity{border-color:rgba(62,184,160,.4);}
-  .cal-cell.goal-reached{background:rgba(62,184,160,.12);border-color:var(--teal);}
-  .cal-cell.goal-partial{background:rgba(201,168,76,.08);border-color:rgba(201,168,76,.4);}
-  .cal-cell.other-month{opacity:.3;}
-  .cal-cell-num{font-family:'Cinzel',serif;font-size:9px;line-height:1;}
-  .cal-cell-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0;}
-  .cal-month-nav{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
-  .cal-month-title{flex:1;text-align:center;font-family:'Cinzel',serif;font-size:11px;letter-spacing:2px;color:var(--text2);}
-  .cal-nav-btn{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;color:var(--text3);cursor:pointer;font-size:12px;transition:all .15s;}
-  .cal-nav-btn:hover{border-color:var(--gold);color:var(--gold);}
-  .cal-legend{display:flex;gap:12px;margin-top:10px;flex-wrap:wrap;}
-  .cal-legend-item{display:flex;align-items:center;gap:5px;font-size:8px;letter-spacing:1px;color:var(--text3);}
-  .cal-legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
-  /* Goals */
-  .goals-grid{display:flex;flex-direction:column;gap:12px;}
-  .goal-row{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;transition:border-color .15s;}
-  .goal-row:hover{border-color:var(--border2);}
-  .goal-icon{font-size:20px;flex-shrink:0;width:36px;text-align:center;}
-  .goal-info{flex:1;min-width:0;}
-  .goal-label{font-size:9px;letter-spacing:2px;color:var(--text3);margin-bottom:3px;}
-  .goal-value{font-family:'Cinzel',serif;font-size:13px;color:var(--text2);}
-  .goal-track{flex:1;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden;}
-  .goal-fill{height:100%;border-radius:3px;transition:width .5s ease;}
-  .goal-pct{font-family:'Cinzel',serif;font-size:10px;color:var(--text3);min-width:34px;text-align:right;}
-  .goal-edit-btn{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;color:var(--text3);cursor:pointer;font-size:9px;letter-spacing:1px;font-family:'Cinzel',serif;transition:all .15s;flex-shrink:0;}
-  .goal-edit-btn:hover{border-color:var(--gold);color:var(--gold2);}
-  .goal-input{background:var(--surface2);border:1px solid var(--gold);border-radius:6px;padding:4px 8px;color:var(--text);font-family:'Cinzel',serif;font-size:11px;width:60px;outline:none;text-align:center;}
-  .goal-today-box{background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.2);border-radius:10px;padding:14px 18px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;}
-  .goal-today-stat{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:70px;}
-  .goal-today-val{font-family:'Cinzel',serif;font-size:20px;color:var(--gold2);}
-  .goal-today-label{font-size:8px;letter-spacing:1.5px;color:var(--text3);text-align:center;}
-  .goal-streak{display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(224,90,90,.06);border:1px solid rgba(224,90,90,.2);border-radius:8px;}
-  .goal-streak-fire{font-size:18px;}
-  .goal-streak-num{font-family:'Cinzel',serif;font-size:16px;color:#e05a5a;}
-  .goal-streak-label{font-size:8px;letter-spacing:1px;color:var(--text3);}
-  @media(max-width:640px){.cal-cell{font-size:8px;}.cal-cell-num{font-size:8px;}}
-
-  /* ‚îÄ‚îÄ RECORDING ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .rec-wrap{display:flex;flex-direction:column;gap:14px;}
-  .rec-btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 20px;border-radius:50px;border:2px solid;cursor:pointer;font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;transition:all .2s;width:100%;}
-  .rec-btn.idle{background:rgba(201,168,76,.08);border-color:var(--gold);color:var(--gold2);}
-  .rec-btn.idle:hover{background:rgba(201,168,76,.16);}
-  .rec-btn.recording{background:rgba(224,90,90,.15);border-color:var(--red);color:#e05a5a;animation:recPulse 1s ease-in-out infinite;}
-  @keyframes recPulse{0%,100%{box-shadow:0 0 0 0 rgba(224,90,90,.4)}50%{box-shadow:0 0 0 8px rgba(224,90,90,0)}}
-  .rec-dot{width:10px;height:10px;border-radius:50%;background:currentColor;flex-shrink:0;}
-  .rec-timer{font-variant-numeric:tabular-nums;font-size:13px;font-family:'Cinzel',serif;color:var(--red);}
-  .rec-list{display:flex;flex-direction:column;gap:8px;}
-  .rec-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .15s;}
-  .rec-item:hover{border-color:var(--border2);}
-  .rec-item-header{display:flex;align-items:center;gap:10px;padding:10px 14px;}
-  .rec-item-icon{width:30px;height:30px;border-radius:50%;background:rgba(62,184,160,.1);border:1px solid rgba(62,184,160,.3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
-  .rec-item-info{flex:1;min-width:0;}
-  .rec-item-date{font-size:9px;letter-spacing:1px;color:var(--text3);}
-  .rec-item-dur{font-family:'Cinzel',serif;font-size:11px;color:var(--teal2);}
-  .rec-item-actions{display:flex;gap:6px;align-items:center;}
-  .rec-audio{width:100%;padding:0 14px 10px;display:block;}
-  .rec-compare{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 12px;}
-  .rec-compare-label{font-size:8px;letter-spacing:1.5px;color:var(--text3);padding-bottom:4px;}
-
-  /* ‚îÄ‚îÄ INLINE PART PLAYER (floating under clicked part) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .part-player-inline{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;margin:4px 0 2px;flex-wrap:wrap;}
-  .part-player-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;background:transparent;flex-shrink:0;transition:all .15s;}
-  .part-player-btn.play{border-color:var(--teal);color:var(--teal);}
-  .part-player-btn.play:hover{background:rgba(62,184,160,.15);}
-  .part-player-btn.stop{border-color:var(--red);color:var(--red);}
-  .part-player-btn.stop:hover{background:rgba(224,90,90,.15);}
-  .part-player-btn.loop-on{border-color:var(--gold);color:var(--gold2);background:rgba(201,168,76,.12);}
-  .part-player-btn.loop-off{border-color:var(--border2);color:var(--text3);}
-  .part-player-chars{font-family:'Amiri Quran',serif;font-size:20px;direction:rtl;flex:1;text-align:right;line-height:1.8;min-width:0;}
-  .part-player-dur{font-family:'Cinzel',serif;font-size:9px;color:var(--text3);letter-spacing:1px;flex-shrink:0;}
-  .part-player-progress{height:3px;background:var(--border2);border-radius:2px;overflow:hidden;width:100%;}
-  .part-player-progress-fill{height:100%;background:var(--teal);border-radius:2px;transition:width .1s linear;}
-  /* ‚îÄ‚îÄ CREATE PART FROM AUDIO ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .cpa-wrap{display:flex;flex-direction:column;gap:10px;padding:12px;background:rgba(201,168,76,.04);border:1px solid rgba(201,168,76,.2);border-radius:10px;margin-top:8px;}
-  .cpa-title{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:var(--gold2);}
-  .cpa-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-  .cpa-marker{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:80px;}
-  .cpa-marker-label{font-size:8px;letter-spacing:1.5px;color:var(--text3);}
-  .cpa-marker-time{font-family:'Cinzel',serif;font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums;}
-  .cpa-marker-time.set{color:var(--gold2);}
-  .cpa-btn-capture{padding:6px 14px;border:1.5px solid var(--gold);background:rgba(201,168,76,.1);color:var(--gold2);border-radius:6px;cursor:pointer;font-family:'Cinzel',serif;font-size:9px;letter-spacing:1.5px;transition:all .15s;white-space:nowrap;}
-  .cpa-btn-capture:hover{background:rgba(201,168,76,.2);}
-  .cpa-btn-capture:active{transform:scale(.96);}
-  .cpa-preview{font-family:'Amiri Quran',serif;font-size:20px;direction:rtl;text-align:right;padding:8px 12px;background:var(--surface3);border-radius:6px;border:1px solid var(--border);color:var(--text);line-height:1.9;}
-  .cpa-preview-word{display:inline;transition:all .12s;}
-  .cpa-preview-word.in-range{background:rgba(62,184,160,.2);outline:1px solid var(--teal);border-radius:3px;padding:0 2px;}
-  .cpa-create-btn{padding:9px 18px;border:1.5px solid var(--teal);background:rgba(62,184,160,.1);color:var(--teal2);border-radius:8px;cursor:pointer;font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;transition:all .15s;align-self:flex-start;}
-  .cpa-create-btn:hover{background:rgba(62,184,160,.2);}
-  .cpa-create-btn:disabled{opacity:.4;cursor:default;}
-
-  /* ‚îÄ‚îÄ CONCORDANCE PAGE ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
-  .concord-page{flex:1;overflow-y:auto;padding:24px 28px 80px;display:flex;flex-direction:column;gap:20px;}
-  .concord-search-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;}
-  .concord-search-bar input{flex:1;min-width:200px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);font-family:'Amiri Quran',serif;font-size:20px;direction:rtl;text-align:right;outline:none;transition:border-color var(--transition);}
-  .concord-search-bar input:focus{border-color:var(--gold);}
-  .concord-search-bar input::placeholder{font-family:'Cinzel',serif;font-size:11px;direction:ltr;color:var(--text3);}
-  .concord-filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-  .concord-filter-label{font-size:9px;letter-spacing:2px;color:var(--text3);flex-shrink:0;}
-  .concord-surah-select{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:5px 10px;color:var(--text2);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;outline:none;cursor:pointer;max-width:200px;}
-  .concord-surah-select:focus{border-color:var(--gold);}
-  .concord-mode-tabs{display:flex;border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden;}
-  .concord-mode-tab{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 12px;background:transparent;color:var(--text3);border:none;cursor:pointer;border-right:1px solid var(--border2);transition:all .2s;white-space:nowrap;}
-  .concord-mode-tab:last-child{border-right:none;}
-  .concord-mode-tab.active{background:rgba(201,168,76,.12);color:var(--gold2);}
-  .concord-results-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
-  .concord-results-count{font-size:10px;letter-spacing:1.5px;color:var(--text3);}
-  .concord-results-count span{color:var(--gold2);}
-  .concord-group{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:0;}
-  .concord-group-header{display:flex;align-items:center;gap:12px;padding:12px 18px;background:linear-gradient(90deg,var(--surface2),var(--surface));border-bottom:1px solid var(--border);cursor:pointer;transition:background .2s;user-select:none;}
-  .concord-group-header:hover{background:var(--surface2);}
-  .concord-group-num{width:28px;height:28px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--gold);font-weight:600;flex-shrink:0;}
-  .concord-group-name{flex:1;font-size:11px;letter-spacing:1px;color:var(--text);}
-  .concord-group-ar{font-family:'Amiri',serif;font-size:15px;color:var(--gold);direction:rtl;}
-  .concord-group-badge{font-size:9px;letter-spacing:1px;padding:3px 8px;border-radius:10px;background:rgba(62,184,160,.1);border:1px solid rgba(62,184,160,.3);color:var(--teal2);flex-shrink:0;}
-  .concord-group-chevron{font-size:10px;color:var(--text3);transition:transform .2s;flex-shrink:0;}
-  .concord-group-chevron.open{transform:rotate(90deg);}
-  .concord-ayat-item{display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-bottom:1px solid rgba(42,47,64,.3);transition:background .15s;cursor:pointer;}
-  .concord-ayat-item:last-child{border-bottom:none;}
-  .concord-ayat-item:hover{background:rgba(255,255,255,.02);}
-  .concord-ayat-num{width:30px;height:30px;border:1px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text3);flex-shrink:0;margin-top:4px;}
-  .concord-ayat-text{font-family:'Amiri Quran',serif;font-size:22px;direction:rtl;text-align:right;flex:1;line-height:2;color:var(--text);}
-  .concord-highlight{background:rgba(201,168,76,.25);color:var(--gold2);border-radius:3px;padding:0 2px;}
-  .concord-ayat-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:flex-end;}
-  .concord-go-btn{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;padding:5px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;border-radius:var(--radius-sm);transition:all .2s;white-space:nowrap;}
-  .concord-go-btn:hover{border-color:var(--gold);color:var(--gold);}
-  .concord-link-btn{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;padding:5px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;border-radius:var(--radius-sm);transition:all .2s;}
-  .concord-link-btn:hover{border-color:var(--teal);color:var(--teal);}
-  .concord-link-btn.linked{border-color:var(--teal);color:var(--teal);background:rgba(62,184,160,.08);}
-  .concord-links-panel{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;}
-  .concord-links-title{font-size:9px;letter-spacing:3px;color:var(--gold);margin-bottom:14px;display:flex;align-items:center;gap:10px;}
-  .concord-links-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent);}
-  .concord-link-card{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid rgba(42,47,64,.3);cursor:pointer;transition:background .15s;}
-  .concord-link-card:last-child{border-bottom:none;}
-  .concord-link-card:hover{background:rgba(255,255,255,.02);}
-  .concord-link-ref{font-size:9px;letter-spacing:1px;color:var(--gold2);flex-shrink:0;padding-top:4px;}
-  .concord-link-text{font-family:'Amiri Quran',serif;font-size:19px;direction:rtl;text-align:right;flex:1;line-height:1.9;color:var(--text2);}
-  .concord-link-remove{width:22px;height:22px;border-radius:50%;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;}
-  .concord-link-remove:hover{border-color:var(--red);color:var(--red);}
-  .concord-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:60px 20px;color:var(--text3);}
-  .concord-empty-arabic{font-family:'Amiri Quran',serif;font-size:40px;color:var(--gold);opacity:.25;direction:rtl;}
-  .concord-empty-msg{font-size:11px;letter-spacing:2px;text-align:center;line-height:1.8;}
-  .concord-loading{display:flex;align-items:center;gap:12px;padding:24px;justify-content:center;color:var(--text3);font-size:10px;letter-spacing:2px;}
-  .concord-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:9px;letter-spacing:1px;color:var(--text2);cursor:pointer;transition:all .2s;}
-  .concord-tag:hover{border-color:var(--gold);color:var(--gold);}
-  .concord-tags-row{display:flex;flex-wrap:wrap;gap:6px;}
-  @media(max-width:700px){.concord-page{padding:16px 14px 80px;}.concord-ayat-text{font-size:18px;}.concord-search-bar input{font-size:16px;}}
-
-`;
-
-const StyleTag = () => <style dangerouslySetInnerHTML={{ __html: CSS }} />;
-
-const API = "https://api.alquran.cloud/v1";
-const AUDIO_CDN_ROOT = 'https://cdn.islamic.network/quran/audio'; // bitrate is appended dynamically, see getAudioBase()
-// Bitrate list: see BITRATE_FALLBACK_ORDER below (auto-detected per reciter).
-
-const RECITATORS = [
-  { id: 'ar.alafasy',            label: 'Mishary Al-Afasy',            flag: 'üá∞üáº' },
-  { id: 'ar.abdulbasitmurattal', label: 'Abdul Basit (Murattal)',      flag: 'üá™üá¨' },
-  { id: 'ar.abdullahbasfar',     label: 'Abdullah Basfar',             flag: 'üá∏üá¶' },
-  { id: 'ar.abdurrahmaansudais', label: 'Abdul Rahman Al-Sudais',      flag: 'üá∏üá¶' },
-  { id: 'ar.shaatree',           label: 'Abu Bakr Ash-Shaatree',       flag: 'üá∏üá¶' },
-  { id: 'ar.ahmedajamy',         label: 'Ahmed Al-Ajamy',              flag: 'üá∏üá¶' },
-  { id: 'ar.hanirifai',          label: 'Hani Ar-Rifai',               flag: 'üá∏üá¶' },
-  { id: 'ar.husary',             label: 'Mahmoud Khalil Al-Husary',    flag: 'üá™üá¨' },
-  { id: 'ar.husarymujawwad',     label: 'Al-Husary (Mujawwad)',        flag: 'üá™üá¨' },
-  { id: 'ar.hudhaify',           label: 'Ali Al-Hudhaify',             flag: 'üá∏üá¶' },
-  { id: 'ar.ibrahimakhbar',      label: 'Ibrahim Al-Akhdar',           flag: 'üá∏üá¶' },
-  { id: 'ar.mahermuaiqly',       label: 'Maher Al-Muaiqly',            flag: 'üá∏üá¶' },
-  { id: 'ar.minshawi',           label: 'Mohamed Siddiq Al-Minshawi',  flag: 'üá™üá¨' },
-  { id: 'ar.minshawimujawwad',   label: 'Al-Minshawi (Mujawwad)',      flag: 'üá™üá¨' },
-  { id: 'ar.muhammadayyoub',     label: 'Muhammad Ayyoub',             flag: 'üá∏üá¶' },
-  { id: 'ar.muhammadjibreel',    label: 'Muhammad Jibreel',            flag: 'üá™üá¨' },
-  { id: 'ar.saoodshuraym',       label: 'Saud Al-Shuraim',             flag: 'üá∏üá¶' },
-  { id: 'ar.parhizgar',          label: 'Shahriar Parhizgar',          flag: 'üáÆüá∑' },
-  { id: 'ar.aymanswoaid',        label: 'Ayman Sowaid',                flag: 'üá∏üáæ' },
-];
-
-let _recitatorId = (() => { try { return localStorage.getItem('quran_recitator') || 'ar.alafasy'; } catch { return 'ar.alafasy'; } })();
-
-// Bitrate is automatic and per-reciter ‚Äî not every reciter's audio is hosted at every bitrate.
-// The official per-ayah API response (`audio` + `audioSecondary` fields) reports exactly which
-// bitrate URLs actually exist for a given reciter ‚Äî this is the same source data that backs
-// cdn.islamic.network's info.json, fetched live via the API instead of parsing a static dump.
-const BITRATE_FALLBACK_ORDER = [128, 64, 192, 48, 40, 32]; // generic guess, used only until the official list arrives
-let _officialBitrates = (() => { try { return JSON.parse(localStorage.getItem('quran_official_bitrates')) || {}; } catch { return {}; } })();
-let _bitrateByReciter  = (() => { try { return JSON.parse(localStorage.getItem('quran_bitrate_by_reciter')) || {}; } catch { return {}; } })();
-
-const bitrateOrderFor  = (id) => (_officialBitrates[id]?.length ? _officialBitrates[id] : BITRATE_FALLBACK_ORDER);
-const getReciterBitrate = (id) => _bitrateByReciter[id] ?? bitrateOrderFor(id)[0];
-const setReciterBitrate = (id, kbps) => {
-  _bitrateByReciter = { ..._bitrateByReciter, [id]: kbps };
-  try { localStorage.setItem('quran_bitrate_by_reciter', JSON.stringify(_bitrateByReciter)); } catch {}
-};
-// Called when the current bitrate 404s for a reciter ‚Äî advances to the next candidate in its
-// (ideally official) list and remembers it, so this reciter "just works" from then on. Returns
-// the new bitrate, or null if every candidate has already been exhausted.
-const markBitrateBad = (id) => {
-  const order = bitrateOrderFor(id);
-  const cur   = getReciterBitrate(id);
-  const next  = order[order.indexOf(cur) + 1];
-  if (next == null) return null;
-  setReciterBitrate(id, next);
-  return next;
-};
-// Queries the official API for the bitrates actually available for a reciter and caches the
-// result. `data.audio` is the primary URL, `data.audioSecondary` lists the rest ‚Äî together they
-// enumerate every working `{bitrate}` for that edition, straight from the source.
-async function fetchOfficialBitrates(id) {
-  if (_officialBitrates[id]) return _officialBitrates[id];
-  try {
-    const r = await fetch(`${API}/ayah/1/${id}`);
-    const j = await r.json();
-    const urls = [j?.data?.audio, ...(j?.data?.audioSecondary || [])].filter(Boolean);
-    const kbps = [...new Set(urls
-      .map(u => parseInt((u.match(/\/audio\/(\d+)\//) || [])[1], 10))
-      .filter(n => !isNaN(n)))];
-    if (!kbps.length) return null;
-    kbps.sort((a, b) => (a === 128 ? -1 : b === 128 ? 1 : a - b)); // prefer 128 when it's an option
-    _officialBitrates = { ..._officialBitrates, [id]: kbps };
-    try { localStorage.setItem('quran_official_bitrates', JSON.stringify(_officialBitrates)); } catch {}
-    // if what we had remembered for this reciter turns out not to be real, snap to the true default
-    if (!kbps.includes(getReciterBitrate(id))) setReciterBitrate(id, kbps[0]);
-    return kbps;
-  } catch { return null; }
-}
-const getAudioBase = () => `${AUDIO_CDN_ROOT}/${getReciterBitrate(_recitatorId)}/${_recitatorId}`;
-const setGlobalRecitator = (id) => { _recitatorId = id; try { localStorage.setItem('quran_recitator', id); } catch {} };
-const getGlobalRecitator = () => _recitatorId;
-
-// AUDIO_BASE removed ‚Äî use getAudioBase() (dynamic, follows the selected reciter, bitrate is automatic)
-
-
-
-async function fetchSurahs() {
-  const idbKey = 'surahs';
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah`);
-  const data = (await r.json()).data;
-  idbSetQuran(idbKey, data).catch(() => {});
-  return data;
-}
-
-// Translation editions keyed by lang code
-const TRANS_EDITIONS = {
-  fr: 'fr.hamidullah',
-  en: 'en.sahih',
-  tr: 'tr.diyanet',
-  ur: 'ur.jalandhry',
-  de: 'de.aburida',
-  es: 'es.asad',
-  id: 'id.indonesian',
-  ru: 'ru.kuliev',
-};
-const TRANS_LABELS = { fr:'üá´üá∑ FR', en:'üá¨üáß EN', tr:'üáπüá∑ TR', ur:'üáµüá∞ UR', de:'üá©üá™ DE', es:'üá™üá∏ ES', id:'üáÆüá© ID', ru:'üá∑üá∫ RU' };
-
-// fetchSurahTranslation(sn, lang) ‚Üí [{numberInSurah, text}] cached in IDB
-async function fetchSurahTranslation(sn, lang) {
-  const edition = TRANS_EDITIONS[lang];
-  if (!edition) return [];
-  const idbKey = `trans:${lang}:${sn}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah/${sn}/${edition}`);
-  const ayahs = (await r.json()).data?.ayahs || [];
-  const result = ayahs.map(a => ({ numberInSurah: a.numberInSurah, text: a.text }));
-  idbSetQuran(idbKey, result).catch(() => {});
-  return result;
-}
-async function fetchAyats(n) {
-  const idbKey = `alafasy:${n}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah/${n}/ar.alafasy`);
-  const data = (await r.json()).data;
-  idbSetQuran(idbKey, data).catch(() => {});
-  return data;
-}
-// /surah/${n}/quran-simple  ‚Üí  [{num, text}, ‚Ä¶]
-async function fetchSurahSimple(n) {
-  const idbKey = `text:${n}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah/${n}/quran-simple`);
-  const data = (await r.json()).data?.ayahs || [];
-  const ayats = data.map(a => ({ num: a.numberInSurah, text: a.text }));
-  idbSetQuran(idbKey, ayats).catch(() => {});
-  return ayats;
-}
-// /surah/${n}  (default edition ‚Äî used for ayat texts in MemoriseMode etc.)
-// Returns raw ayahs array from API data.ayahs
-async function fetchSurahDefault(n) {
-  const idbKey = `simple:${n}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah/${n}`);
-  const ayahs = (await r.json()).data?.ayahs || [];
-  idbSetQuran(idbKey, ayahs).catch(() => {});
-  return ayahs;
-}
-// Static surah metadata cache: hizb, juz, page (from ayat 1) + total word count
-async function fetchSurahMeta(n) {
-  const idbKey = `smeta:${n}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const ayahs = await fetchSurahDefault(n);
-  const a1 = ayahs[0] || {};
-  const wordCount = ayahs.reduce((s, a) => s + splitArabicWords(a.text || '').length, 0);
-  const meta = {
-    hizb:      a1.hizbQuarter != null ? Math.ceil(a1.hizbQuarter / 4) : null,
-    juz:       a1.juz  ?? null,
-    page:      a1.page ?? null,
-    wordCount,
-  };
-  idbSetQuran(idbKey, meta).catch(() => {});
-  return meta;
-}
-// Single-ayah meta (page, juz, hizb, manzil, ruku, sajda) ‚Äî cached per-surah
-async function fetchAyahMeta(sn, an) {
-  const ayahs = await fetchSurahDefault(sn);
-  return ayahs.find(a => a.numberInSurah === an) || null;
-}
-async function fetchQuranPage(pageNum) {
-  const key = `mushaf_page:${pageNum}`;
-  try { const c = await idbGetQuran(key); if (c) return c; } catch {}
-  const r = await fetch(`${API}/page/${pageNum}/quran-uthmani`);
-  const ayahs = (await r.json()).data?.ayahs || [];
-  idbSetQuran(key, ayahs).catch(() => {});
-  return ayahs;
-}
-// Static page-level metadata: hizb, juz, word count ‚Äî cached in IDB as pmeta:N
-async function fetchPageMeta(pageNum) {
-  const idbKey = `pmeta:${pageNum}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const ayahs = await fetchQuranPage(pageNum);
-  const a1 = ayahs[0] || {};
-  const wordCount = ayahs.reduce((s, a) => s + splitArabicWords(a.text || '').length, 0);
-  const meta = {
-    hizb:      a1.hizbQuarter != null ? Math.ceil(a1.hizbQuarter / 4) : null,
-    juz:       a1.juz  ?? null,
-    ayatCount: ayahs.length,
-    wordCount,
-  };
-  idbSetQuran(idbKey, meta).catch(() => {});
-  return meta;
-}
-
-function _stripBasmalaWords(words, sn) {
-  // Strip first 4 words (basmala) from ayat 1 timestamps for non-Fatiha/Tawba surahs
-  if (!words || words.length <= 4 || sn === 1 || sn === 9) return words;
-  const stripD = s => s.replace(/[ÿê-Ÿãÿö-Ÿ∞Ÿü€ñ-€≠]/g, '');
-  const firstWord = words[0]?.chars?.map(c => c.char).join('') || '';
-  if (stripD(firstWord).startsWith('ÿ®ÿ≥ŸÖ')) return words.slice(4);
-  return words;
-}
-
-function parseTimestampsFile(data, surahNum, keyPrefix) {
-  const result = {};
-  const pfx = keyPrefix ? `${keyPrefix}:` : '';
-  const addEntry = (sn, ayatNum, words) => {
-    const processedWords = ayatNum === 1 ? _stripBasmalaWords(words, sn) : words;
-    result[`${pfx}${sn}:${ayatNum}`] = { words: processedWords };
-  };
-  if (Array.isArray(data)) {
-    data.forEach(item => { if (item.ayat && item.words) addEntry(item.surah || surahNum, item.ayat, item.words); });
-  } else if (data.ayat && data.words) {
-    addEntry(data.surah || surahNum, data.ayat, data.words);
-  }
-  return result;
-}
-
-// ‚îÄ‚îÄ‚îÄ PlayingArabicHighlighted ‚Äî zero-rerender highlight via DOM refs ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Renders chars once, then updates active/done classes via RAF + DOM refs only.
-const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlighted({
-  text, timestamps, mode, playingPart, ld, showQalqala, showMadd, showIzhar, showIdgham
-}) {
-  const mainCurrentMs = useSelector(sel.mainCurrentMs);
-  const partCurrentMs = useSelector(sel.partCurrentMs);
-  const localPlaying  = useSelector(sel.localPlaying);
-  const containerRef  = useRef(null);
-  const charDataRef   = useRef(null); // flat array of {start,end,el}
-  const prevActiveRef = useRef(-1);
-
-  // Build flat char metadata once per timestamps change
-  const charData = useMemo(() => {
-    if (!timestamps?.words) return null;
-    const flat = [];
-    timestamps.words.forEach(word => {
-      const chars = fixChars(word.chars || []);
-      chars.forEach(c => flat.push({ start: c.start, end: c.end }));
-    });
-    return flat;
-  }, [timestamps]);
-
-  charDataRef.current = charData;
-
-  // Update active/done spans via direct DOM after every currentMs change
-  useEffect(() => {
-    const flat = charDataRef.current;
-    if (!flat || !containerRef.current) return;
-    let curMs;
-    let rangeStartMs = null;
-    if (mode === 'main') {
-      curMs = mainCurrentMs;
-    } else if (mode === 'part') {
-      const activePart = (ld?.parts || []).find(p => p.id === playingPart?.partId);
-      const firstWordIdx = activePart?.wordIndices?.[0];
-      rangeStartMs = firstWordIdx != null ? timestamps?.words?.[firstWordIdx]?.chars?.[0]?.start : null;
-      curMs = partCurrentMs;
-    } else {
-      curMs = localPlaying?.currentMs ?? -1;
-    }
-    const spans = containerRef.current.querySelectorAll('.char-span');
-    if (spans.length !== flat.length) return;
-    flat.forEach(({ start, end }, i) => {
-      const active = curMs >= start && curMs <= end;
-      const done   = curMs > end && curMs > 0 && (rangeStartMs == null || end > rangeStartMs);
-      const el = spans[i];
-      if (active) {
-        if (!el.classList.contains('char-active')) { el.classList.add('char-active'); el.classList.remove('char-done'); }
-      } else if (done) {
-        if (!el.classList.contains('char-done')) { el.classList.add('char-done'); el.classList.remove('char-active'); }
-      } else {
-        if (el.classList.contains('char-active') || el.classList.contains('char-done')) {
-          el.classList.remove('char-active','char-done');
-        }
-      }
-    });
-  }, [mainCurrentMs, partCurrentMs, localPlaying, mode]);
-
-  // Render static chars (no active/done ‚Äî DOM handles it)
-  return <ArabicHighlighted ref={containerRef} text={text} timestamps={timestamps}
-    currentMs={-1} showQalqala={showQalqala} showMadd={showMadd}
-    showIzhar={showIzhar} showIdgham={showIdgham} />;
-}, (prev, next) =>
-  prev.text === next.text &&
-  prev.timestamps === next.timestamps &&
-  prev.mode === next.mode &&
-  prev.showQalqala === next.showQalqala &&
-  prev.showMadd === next.showMadd &&
-  prev.showIzhar === next.showIzhar &&
-  prev.showIdgham === next.showIdgham
-);
-
-// ‚îÄ‚îÄ‚îÄ Arabic Virtual Keyboard ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-const ArabicKeyboardContext = React.createContext({ show: false, setShow: () => {}, activeInput: { current: null } });
-function useArabicKeyboard() { return React.useContext(ArabicKeyboardContext); }
-
-const AR_ROWS = [
-  ['ÿ∂','ÿµ','ÿ´','ŸÇ','ŸÅ','ÿ∫','ÿπ','Ÿá','ÿÆ','ÿ≠','ÿ¨','ÿØ','ÿ∞'],
-  ['ÿ¥','ÿ≥','Ÿä','ÿ®','ŸÑ','ÿß','ÿ™','ŸÜ','ŸÖ','ŸÉ','ÿ∑','ÿ∏'],
-  ['ÿ¶','ÿ°','ÿ§','ÿ±','ŸÑÿß','Ÿâ','ÿ©','Ÿà','ÿ≤','ÿ≥Ÿë'],
-];
-const AR_DIACRITICS = [
-  { label:'Ÿé', title:'Fatha' },
-  { label:'Ÿè', title:'Damma' },
-  { label:'Ÿê', title:'Kasra' },
-  { label:'Ÿã', title:'Tanwin fath' },
-  { label:'Ÿå', title:'Tanwin damm' },
-  { label:'Ÿç', title:'Tanwin kasr' },
-  { label:'Ÿë', title:'Shadda' },
-  { label:'Ÿí', title:'Sukun' },
-  { label:'Ÿ∞', title:'Dagger alif' },
-];
-
-function ArabicKeyboard({ show, onClose }) {
-  const { activeInput } = useArabicKeyboard();
-  const [capsHamza, setCapsHamza] = React.useState(false);
-
-  const insert = (char) => {
-    const el = activeInput.current;
-    if (!el) return;
-    const start = el.selectionStart ?? el.value.length;
-    const end   = el.selectionEnd   ?? el.value.length;
-    const before = el.value.slice(0, start);
-    const after  = el.value.slice(end);
-    const newVal = before + char + after;
-    // Use native input setter to trigger React's onChange
-    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')
-                      || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-    nativeSetter?.set?.call(el, newVal);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    const newPos = start + char.length;
-    el.setSelectionRange(newPos, newPos);
-    el.focus();
-  };
-
-  const backspace = () => {
-    const el = activeInput.current;
-    if (!el) return;
-    const start = el.selectionStart ?? el.value.length;
-    const end   = el.selectionEnd   ?? el.value.length;
-    if (start !== end) {
-      insert('');
-    } else if (start > 0) {
-      const before = el.value.slice(0, start - 1);
-      const after  = el.value.slice(start);
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')
-                        || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-      nativeSetter?.set?.call(el, before + after);
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.setSelectionRange(start - 1, start - 1);
-      el.focus();
-    }
-  };
-
-  const HAMZA_MAP = {
-    'ÿß': 'ÿ£', 'Ÿà': 'ÿ§', 'Ÿä': 'ÿ¶', 'Ÿá': 'Ÿá',
-  };
-
-  if (!show) return null;
-  return (
-    <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:9999,
-      background:'var(--surface2)', borderTop:'1px solid var(--border)',
-      padding:'8px 6px 12px', boxShadow:'0 -4px 24px rgba(0,0,0,.4)',
-      userSelect:'none' }}>
-      {/* Header row */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-        <div style={{ fontSize:8, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>CLAVIER ARABE</div>
-        <div style={{ display:'flex', gap:6 }}>
-          <button onClick={() => setCapsHamza(v => !v)}
-            style={{ fontSize:9, padding:'3px 10px', borderRadius:6,
-              background: capsHamza ? 'rgba(201,168,76,.18)' : 'transparent',
-              border:'1px solid ' + (capsHamza ? 'var(--gold)' : 'var(--border2)'),
-              color: capsHamza ? 'var(--gold2)' : 'var(--text3)', cursor:'pointer' }}>
-            ÿ° HAMZA
-          </button>
-          <button onClick={onClose}
-            style={{ fontSize:11, padding:'3px 10px', borderRadius:6,
-              background:'transparent', border:'1px solid var(--border2)',
-              color:'var(--text3)', cursor:'pointer' }}>‚úï</button>
-        </div>
-      </div>
-
-      {/* Letter rows */}
-      {AR_ROWS.map((row, ri) => (
-        <div key={ri} style={{ display:'flex', justifyContent:'center', gap:3, marginBottom:3 }}>
-          {row.map((ch) => {
-            const display = capsHamza && HAMZA_MAP[ch] ? HAMZA_MAP[ch] : ch;
-            return (
-              <button key={ch} onClick={() => insert(display)}
-                style={{ minWidth:32, height:38, fontSize:18, borderRadius:6,
-                  fontFamily:"'Amiri Quran',serif", border:'1px solid var(--border2)',
-                  background:'var(--surface3)', color:'var(--text)',
-                  cursor:'pointer', direction:'rtl', padding:'0 4px',
-                  transition:'background .1s', flexShrink:0 }}>
-                {display}
-              </button>
-            );
-          })}
-          {ri === 2 && (
-            <button onClick={backspace}
-              style={{ minWidth:44, height:38, fontSize:14, borderRadius:6,
-                border:'1px solid var(--border2)', background:'rgba(224,90,90,.12)',
-                color:'var(--red)', cursor:'pointer', flexShrink:0 }}>
-              ‚å´
-            </button>
-          )}
-        </div>
-      ))}
-
-      {/* Diacritics row */}
-      <div style={{ display:'flex', justifyContent:'center', gap:3, marginTop:4 }}>
-        {AR_DIACRITICS.map(({ label, title }) => (
-          <button key={label} onClick={() => insert(label)} title={title}
-            style={{ minWidth:32, height:32, fontSize:14, borderRadius:6,
-              fontFamily:"'Amiri Quran',serif", border:'1px solid var(--border2)',
-              background:'rgba(201,168,76,.08)', color:'var(--gold2)',
-              cursor:'pointer', padding:'0 4px', flexShrink:0 }}>
-            ÿØ{label}
-          </button>
-        ))}
-        <button onClick={() => insert(' ')}
-          style={{ minWidth:80, height:32, fontSize:9, borderRadius:6,
-            border:'1px solid var(--border2)', background:'var(--surface3)',
-            color:'var(--text3)', cursor:'pointer', letterSpacing:2, fontFamily:"'Cinzel',serif" }}>
-          ESPACE
-        </button>
-      </div>
-    </div>
-  );
-}
-
-
-// ‚îÄ‚îÄ‚îÄ IndexedDB timestamps cache ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-const IDB_NAME        = 'quran-ts-cache';
-const IDB_STORE       = 'timestamps';
-const IDB_QURAN_STORE = 'quran';
-const tsMemCache    = {};
-const quranMemCache = {};
-let _tsDbPromise = null;
-function openTsDb() {
-  if (!_tsDbPromise) {
-    _tsDbPromise = new Promise((res, rej) => {
-      const req = indexedDB.open(IDB_NAME, 3);
-      req.onupgradeneeded = e => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains(IDB_STORE))       db.createObjectStore(IDB_STORE);
-        if (!db.objectStoreNames.contains(IDB_QURAN_STORE)) db.createObjectStore(IDB_QURAN_STORE);
-        if (!db.objectStoreNames.contains('audio'))         db.createObjectStore('audio');
-      };
-      req.onsuccess = e => res(e.target.result);
-      req.onerror = e => { _tsDbPromise = null; rej(e.target.error); };
-    });
-  }
-  return _tsDbPromise;
-}
-async function idbGetQuran(key) {
-  if (quranMemCache[key] !== undefined) return quranMemCache[key];
-  const db = await openTsDb();
-  return new Promise((res, rej) => {
-    const tx  = db.transaction(IDB_QURAN_STORE, 'readonly');
-    const req = tx.objectStore(IDB_QURAN_STORE).get(key);
-    req.onsuccess = () => { quranMemCache[key] = req.result ?? null; res(req.result ?? null); };
-    req.onerror   = e => rej(e.target.error);
-  });
-}
-async function idbSetQuran(key, val) {
-  quranMemCache[key] = val;
-  const db = await openTsDb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_QURAN_STORE, 'readwrite');
-    tx.objectStore(IDB_QURAN_STORE).put(val, key);
-    tx.oncomplete = () => res();
-    tx.onerror    = e => rej(e.target.error);
-  });
-}
-async function idbGet(key) {
-  const db = await openTsDb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_STORE, 'readonly');
-    const req = tx.objectStore(IDB_STORE).get(key);
-    req.onsuccess = () => res(req.result);
-    req.onerror = e => rej(e.target.error);
-  });
-}
-async function idbSet(key, val) {
-  const db = await openTsDb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(val, key);
-    tx.oncomplete = res;
-    tx.onerror = e => rej(e.target.error);
-  });
-}
-
-// ‚îÄ‚îÄ‚îÄ Auto-load timestamps for a surah (per reciter) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Path scheme ‚Äî one subfolder per reciter id, same file-naming pattern as before:
-//   Android (bundled assets): public/assets/timestamps/{recitatorId}/surah_XXX.json
-//   Web (server):              http://localhost:3000/sourate/{recitatorId}/surah_XXX.json
-// e.g. for sourate 1 / ar.husary ‚Üí public/assets/timestamps/ar.husary/surah_001.json
-const TS_SERVER_BASE   = 'http://localhost:3000/sourate';
-const TS_ANDROID_BASE  = 'public/assets/timestamps';
-async function loadTimestampsForSurah(surahNum, recitatorId = 'ar.alafasy') {
-  const memKey = `${recitatorId}:${surahNum}`;
-  if (tsMemCache[memKey]) return tsMemCache[memKey];
-  const cacheKey = `ts:${recitatorId}:${surahNum}`;
-  const file     = `surah_${String(surahNum).padStart(3,'0')}.json`;
-
-  if (IS_ANDROID) {
-    // Capacitor: load directly from bundled assets, no IDB needed
-    const url = `${TS_ANDROID_BASE}/${recitatorId}/${file}`;
-    try {
-      const r = await fetch(url);
-      if (!r.ok) return null;
-      const data = await r.json();
-      const parsed = parseTimestampsFile(data, surahNum, recitatorId);
-      if (parsed) tsMemCache[memKey] = parsed;
-      return parsed;
-    } catch { return null; }
-  }
-
-  // Web: try IDB cache first, then fetch from server and cache
-  try {
-    const cached = await idbGet(cacheKey);
-    if (cached) { tsMemCache[memKey] = cached; return cached; }
-  } catch {}
-
-  try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 5000); // 5s timeout ‚Äî don't stall UI
-    const r = await fetch(`${TS_SERVER_BASE}/${recitatorId}/${file}`, { signal: ctrl.signal });
-    clearTimeout(tid);
-    if (!r.ok) return null;
-    const data   = await r.json();
-    const parsed = parseTimestampsFile(data, surahNum, recitatorId);
-    if (Object.keys(parsed).length > 0) {
-      tsMemCache[memKey] = parsed;
-      idbSet(cacheKey, parsed).catch(() => {});
-    }
-    return parsed;
-  } catch { return null; }
-}
-
-
-// Fix degenerate timestamp chars where start===end by extending to next real boundary
-function fixChars(chars) {
-  if (!chars?.length) return [];
-  const wordEnd = chars[chars.length - 1].end;
-  return chars.map((c, ci) => {
-    if (c.start === c.end) {
-      const nextReal = chars.slice(ci + 1).find(x => x.end > c.start);
-      return { ...c, end: nextReal ? nextReal.start : wordEnd };
-    }
-    return c;
-  });
-}
-
-const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHighlighted({ text, timestamps, currentMs, rangeStartMs, showQalqala, showMadd, showIzhar, showIdgham }, ref) {
-  if (!timestamps?.words) return <div className="ayat-arabic">{text}</div>;
-
-  // Pre-compute tajweed styles and fixed chars once per timestamps+tajweed change
-  const wordData = useMemo(() => timestamps.words.map(word => {
-    const wordArr = word.chars ? word.chars.map(x => x.char) : [];
-    const fixed = fixChars(word.chars || []);
-    return fixed.map((c, ci) => {
-      const isQalqalaOn = showQalqala && isQalqala(wordArr, ci);
-      const maddType    = showMadd ? getMaddType(wordArr, ci) : null;
-      const izharOn     = showIzhar && isIzhar(wordArr, ci);
-      const idghamOn    = showIdgham && isIdgham(wordArr, ci);
-      const tajStyle    = isQalqalaOn ? {color:'#5bc8f5',textShadow:'0 0 6px rgba(91,200,245,.5)'}
-                        : maddType === 'muttasil' ? {color:'#ff7eb3',textShadow:'0 0 8px rgba(255,126,179,.6)',fontWeight:600}
-                        : maddType === 'normal'   ? {color:'#f09de0',textShadow:'0 0 6px rgba(240,157,224,.5)'}
-                        : izharOn                 ? {color:'#4caf81',textShadow:'0 0 6px rgba(76,175,129,.5)'}
-                        : idghamOn                ? {color:'#ffd166',textShadow:'0 0 6px rgba(255,209,102,.5)'}
-                        : undefined;
-      return { char: c.char, start: c.start, end: c.end, tajStyle };
-    });
-  }), [timestamps, showQalqala, showMadd, showIzhar, showIdgham]);
-
-  // Static render ‚Äî no active/done classes here (DOM updates them for playing mode)
-  return (
-    <div className="ayat-arabic" ref={ref}>
-      {wordData.map((chars, wi) => (
-        <span key={wi}>
-          {chars.map((c, ci) => (
-            <span key={ci} className="char-span" style={c.tajStyle}>{c.char}</span>
-          ))}
-          {wi < wordData.length - 1 ? ' ' : ''}
-        </span>
-      ))}
-    </div>
-  );
-}), (prev, next) =>
-  prev.text === next.text &&
-  prev.timestamps === next.timestamps &&
-  prev.currentMs === next.currentMs &&
-  prev.showQalqala === next.showQalqala &&
-  prev.showMadd === next.showMadd &&
-  prev.showIzhar === next.showIzhar &&
-  prev.showIdgham === next.showIdgham
-);
-
-// ‚îÄ‚îÄ‚îÄ Qalqala letters (ŸÇ ÿ∑ ÿ® ÿ¨ ÿØ)
-const QALQALA_LETTERS = new Set(['ŸÇ','ÿ∑','ÿ®','ÿ¨','ÿØ']);
-function isQalqala(arr, i) {
-  if (!QALQALA_LETTERS.has(arr[i])) return false;
-  // Check next char is sukun, or last char of word (waqf = implicit sukun)
-  for (let j = i + 1; j < arr.length; j++) {
-    const nc = arr[j];
-    if (nc === SUKUN) return true;
-    if (nc === ' ' || j === arr.length - 1) return true; // waqf
-    if (nc >= 'ÿÄ' && nc <= '€ø') continue; // other diacritics ‚Äî keep looking
-    return false; // base letter follows ‚Äî no sukun
-  }
-  return true; // end of text
-}
-
-// ‚îÄ‚îÄ‚îÄ Madd detection
-const MADD_MARK   = new Set(['Ÿì','Ÿ∞']);
-const LONG_VOWEL  = new Set(['Ÿé','Ÿè','Ÿê']);
-const MADD_LETTER = new Set(['ÿß','Ÿà','Ÿä']);
-const HAMZA_SET   = new Set(['ÿ°','ÿ£','ÿ•','ÿ§','ÿ¶']); // ÿ° ÿ£ ÿ• ÿ§ ÿ¶
-// Izhar halqi letters: ÿ° Ÿá ÿπ ÿ∫ ÿ≠ ÿÆ
-const IZHAR_LETTERS = new Set(['ÿ°','Ÿá','ÿπ','ÿ∫','ÿ≠','ÿÆ']);
-const SUKUN = 'Ÿí'; // Ÿí
-const TANWIN = new Set(['Ÿã','Ÿå','Ÿç']); // Ÿã Ÿå Ÿç
-// Returns true if char at i is a nun-sakin or tanwin that is followed (skip diacritics) by an izhar letter
-function isIzhar(arr, i) {
-  const ch = arr[i];
-  let isNunSakin = false;
-  // Nun with sukun: ŸÜ followed by sukun OR sukun directly on this char
-  if (ch === 'ŸÜ') { // ŸÜ
-    for (let j = i + 1; j < arr.length; j++) {
-      if (arr[j] === ' ') break;
-      if (arr[j] === SUKUN) { isNunSakin = true; break; }
-      if (arr[j] >= 'ÿ°' && arr[j] <= 'Ÿä' && !TANWIN.has(arr[j])) break;
-    }
-  }
-  // Tanwin on current char
-  const isTanwin = TANWIN.has(ch);
-  if (!isNunSakin && !isTanwin) return false;
-  // Find next base letter (skip diacritics and spaces)
-  const start = isTanwin ? i + 1 : i + 2; // skip sukun for nun-sakin
-  for (let j = (isTanwin ? i + 1 : i + 1); j < arr.length; j++) {
-    const nc = arr[j];
-    if (nc === ' ') continue;
-    if (IZHAR_LETTERS.has(nc)) return true;
-    if (nc >= 'ÿ°' && nc <= 'Ÿä' && !TANWIN.has(nc) && nc !== SUKUN) return false;
-  }
-  return false;
-}
-
-// Idgham letters: Ÿä ŸÜ ŸÖ Ÿà ŸÑ ÿ±
-const IDGHAM_LETTERS = new Set(['Ÿä','ŸÜ','ŸÖ','Ÿà','ŸÑ','ÿ±']);
-function isIdgham(arr, i) {
-  const ch = arr[i];
-  let isNunSakin = false;
-  if (ch === 'ŸÜ') {
-    for (let j = i + 1; j < arr.length; j++) {
-      if (arr[j] === SUKUN) { isNunSakin = true; break; }
-      if (arr[j] >= 'ÿ°' && arr[j] <= 'Ÿä' && !TANWIN.has(arr[j])) break;
-    }
-  }
-  const isTanwin = TANWIN.has(ch);
-  if (!isNunSakin && !isTanwin) return false;
-  // Must be at word boundary (next non-diacritic is in next word = after space)
-  // For nun-sakin: skip to next word
-  let hitSpace = false;
-  for (let j = i + 1; j < arr.length; j++) {
-    const nc = arr[j];
-    if (nc === ' ') { hitSpace = true; continue; }
-    if (!hitSpace && (nc >= 'ÿÄ' && nc <= '€ø')) continue; // diacritics same word
-    if (IDGHAM_LETTERS.has(nc)) return true;
-    return false;
-  }
-  return false;
-}
-
-// Returns 'muttasil' (4-5 beats, madd before hamza same word), 'normal' (2 beats), or null
-function getMaddType(arr, i) {
-  const ch = arr[i];
-  // Explicit maddah/superscript-alif mark
-  const hasMark = MADD_MARK.has(ch) || (i + 1 < arr.length && MADD_MARK.has(arr[i + 1]));
-  // Long vowel + letter
-  const isLongVowelLetter = MADD_LETTER.has(ch) && i > 0 && LONG_VOWEL.has(arr[i - 1]);
-  if (!hasMark && !isLongVowelLetter) return null;
-  // Check if a hamza follows (skip diacritics) within the same word
-  for (let j = i + 1; j < arr.length; j++) {
-    const nc = arr[j];
-    if (nc === ' ') break; // word boundary
-    if (HAMZA_SET.has(nc)) return 'muttasil';
-    if (nc >= 'ÿ°' && nc <= 'Ÿä') break; // another base letter ‚Äî no hamza follows immediately
-  }
-  return 'normal';
-}
-// Backward-compat single-char check
-function isMaddChar(arr, i) { return getMaddType(arr, i) !== null; }
-
-// ‚îÄ‚îÄ‚îÄ VOICE COMMAND PARSER ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function parseVoiceCommand(transcript, surahs, ayats, currentSurah) {
-  const t = transcript.toLowerCase().trim()
-    .replace(/[,;.!?]/g, ' ')
-    .replace(/\s+/g, ' ');
-
-  // Play / pause / stop
-  if (/\b(play|joue|lecture|lire|lancer|d√©marrer|start)\b/.test(t)) return { action: 'play' };
-  if (/\b(pause|pauser|mettre en pause)\b/.test(t)) return { action: 'pause' };
-  if (/\b(stop|arr√™ter|arr√™te|stopper)\b/.test(t)) return { action: 'stop' };
-  if (/\b(suivant|next|verset suivant)\b/.test(t)) return { action: 'next' };
-  if (/\b(pr√©c√©dent|retour|previous|verset pr√©c√©dent)\b/.test(t)) return { action: 'prev' };
-
-  // Surah selection: "sourate fatiha", "ouvre al-baqara", "va √† la sourate 2"
-  const surahByNum = t.match(/\b(?:sourate|surah|sura|ouvre|va √† la sourate|va sourate)\s+(\d+)\b/i);
-  if (surahByNum) {
-    const n = parseInt(surahByNum[1]);
-    if (n >= 1 && n <= 114) return { action: 'surah', number: n };
-  }
-  // By name
-  for (const [key, num] of Object.entries(SURAH_NAMES)) {
-    if (t.includes(key)) return { action: 'surah', number: num };
-  }
-
-  // Ayat: "verset 5", "ayat 12", "va au verset 7", "commence au verset 3"
-  const ayatMatch = t.match(/\b(?:verset|ayat|ayah|aya|commence|va au|aller au verset|aller verset)\s+(\d+)\b/i);
-  if (ayatMatch) {
-    const n = parseInt(ayatMatch[1]);
-    return { action: 'ayat', number: n };
-  }
-
-  // Loop range: "boucle versets 2 √† 5", "r√©p√©ter 3 √† 7", "loop 1 5"
-  const loopMatch = t.match(/\b(?:boucle|loop|r√©p√©ter|r√©p√®te|lire en boucle)\s+(?:versets?\s+)?(\d+)\s+(?:√†|au|jusqu'√†|to|-)\s+(\d+)\b/i);
-  if (loopMatch) {
-    return { action: 'loop', from: parseInt(loopMatch[1]), to: parseInt(loopMatch[2]) };
-  }
-
-  // Loop off: "arr√™ter la boucle", "stop loop"
-  if (/\b(arr√™ter la boucle|stop loop|d√©sactiver boucle|no loop|sans boucle)\b/.test(t)) {
-    return { action: 'loop_off' };
-  }
-
-  // Repetitions: "r√©p√©ter 3 fois", "5 fois"
-  const repMatch = t.match(/\b(\d+)\s+fois\b/i);
-  if (repMatch) return { action: 'repeat', times: parseInt(repMatch[1]) };
-
-  return null;
-}
-
-// ‚îÄ‚îÄ‚îÄ CONCORDANCE PAGE ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-const SURAH_INFO = [
-  {n:1,en:"Al-Fatiha",ar:"ÿßŸÑŸÅÿßÿ™ÿ≠ÿ©"},{n:2,en:"Al-Baqara",ar:"ÿßŸÑÿ®ŸÇÿ±ÿ©"},{n:3,en:"Al-Imran",ar:"ÿ¢ŸÑ ÿπŸÖÿ±ÿßŸÜ"},
-  {n:4,en:"An-Nisa",ar:"ÿßŸÑŸÜÿ≥ÿßÿ°"},{n:5,en:"Al-Maida",ar:"ÿßŸÑŸÖÿßÿ¶ÿØÿ©"},{n:6,en:"Al-Anam",ar:"ÿßŸÑÿ£ŸÜÿπÿßŸÖ"},
-  {n:7,en:"Al-Araf",ar:"ÿßŸÑÿ£ÿπÿ±ÿßŸÅ"},{n:8,en:"Al-Anfal",ar:"ÿßŸÑÿ£ŸÜŸÅÿßŸÑ"},{n:9,en:"At-Tawba",ar:"ÿßŸÑÿ™Ÿàÿ®ÿ©"},
-  {n:10,en:"Yunus",ar:"ŸäŸàŸÜÿ≥"},{n:11,en:"Hud",ar:"ŸáŸàÿØ"},{n:12,en:"Yusuf",ar:"ŸäŸàÿ≥ŸÅ"},
-  {n:13,en:"Ar-Rad",ar:"ÿßŸÑÿ±ÿπÿØ"},{n:14,en:"Ibrahim",ar:"ÿ•ÿ®ÿ±ÿßŸáŸäŸÖ"},{n:15,en:"Al-Hijr",ar:"ÿßŸÑÿ≠ÿ¨ÿ±"},
-  {n:16,en:"An-Nahl",ar:"ÿßŸÑŸÜÿ≠ŸÑ"},{n:17,en:"Al-Isra",ar:"ÿßŸÑÿ•ÿ≥ÿ±ÿßÿ°"},{n:18,en:"Al-Kahf",ar:"ÿßŸÑŸÉŸáŸÅ"},
-  {n:19,en:"Maryam",ar:"ŸÖÿ±ŸäŸÖ"},{n:20,en:"Taha",ar:"ÿ∑Ÿá"},{n:21,en:"Al-Anbiya",ar:"ÿßŸÑÿ£ŸÜÿ®Ÿäÿßÿ°"},
-  {n:22,en:"Al-Hajj",ar:"ÿßŸÑÿ≠ÿ¨"},{n:23,en:"Al-Muminun",ar:"ÿßŸÑŸÖÿ§ŸÖŸÜŸàŸÜ"},{n:24,en:"An-Nur",ar:"ÿßŸÑŸÜŸàÿ±"},
-  {n:25,en:"Al-Furqan",ar:"ÿßŸÑŸÅÿ±ŸÇÿßŸÜ"},{n:26,en:"Ash-Shuara",ar:"ÿßŸÑÿ¥ÿπÿ±ÿßÿ°"},{n:27,en:"An-Naml",ar:"ÿßŸÑŸÜŸÖŸÑ"},
-  {n:28,en:"Al-Qasas",ar:"ÿßŸÑŸÇÿµÿµ"},{n:29,en:"Al-Ankabut",ar:"ÿßŸÑÿπŸÜŸÉÿ®Ÿàÿ™"},{n:30,en:"Ar-Rum",ar:"ÿßŸÑÿ±ŸàŸÖ"},
-  {n:31,en:"Luqman",ar:"ŸÑŸÇŸÖÿßŸÜ"},{n:32,en:"As-Sajda",ar:"ÿßŸÑÿ≥ÿ¨ÿØÿ©"},{n:33,en:"Al-Ahzab",ar:"ÿßŸÑÿ£ÿ≠ÿ≤ÿßÿ®"},
-  {n:34,en:"Saba",ar:"ÿ≥ÿ®ÿ£"},{n:35,en:"Fatir",ar:"ŸÅÿßÿ∑ÿ±"},{n:36,en:"Ya-Sin",ar:"Ÿäÿ≥"},
-  {n:37,en:"As-Saffat",ar:"ÿßŸÑÿµÿßŸÅÿßÿ™"},{n:38,en:"Sad",ar:"ÿµ"},{n:39,en:"Az-Zumar",ar:"ÿßŸÑÿ≤ŸÖÿ±"},
-  {n:40,en:"Ghafir",ar:"ÿ∫ÿßŸÅÿ±"},{n:41,en:"Fussilat",ar:"ŸÅÿµŸÑÿ™"},{n:42,en:"Ash-Shura",ar:"ÿßŸÑÿ¥Ÿàÿ±Ÿâ"},
-  {n:43,en:"Az-Zukhruf",ar:"ÿßŸÑÿ≤ÿÆÿ±ŸÅ"},{n:44,en:"Ad-Dukhan",ar:"ÿßŸÑÿØÿÆÿßŸÜ"},{n:45,en:"Al-Jathiya",ar:"ÿßŸÑÿ¨ÿßÿ´Ÿäÿ©"},
-  {n:46,en:"Al-Ahqaf",ar:"ÿßŸÑÿ£ÿ≠ŸÇÿßŸÅ"},{n:47,en:"Muhammad",ar:"ŸÖÿ≠ŸÖÿØ"},{n:48,en:"Al-Fath",ar:"ÿßŸÑŸÅÿ™ÿ≠"},
-  {n:49,en:"Al-Hujurat",ar:"ÿßŸÑÿ≠ÿ¨ÿ±ÿßÿ™"},{n:50,en:"Qaf",ar:"ŸÇ"},{n:51,en:"Adh-Dhariyat",ar:"ÿßŸÑÿ∞ÿßÿ±Ÿäÿßÿ™"},
-  {n:52,en:"At-Tur",ar:"ÿßŸÑÿ∑Ÿàÿ±"},{n:53,en:"An-Najm",ar:"ÿßŸÑŸÜÿ¨ŸÖ"},{n:54,en:"Al-Qamar",ar:"ÿßŸÑŸÇŸÖÿ±"},
-  {n:55,en:"Ar-Rahman",ar:"ÿßŸÑÿ±ÿ≠ŸÖŸÜ"},{n:56,en:"Al-Waqia",ar:"ÿßŸÑŸàÿßŸÇÿπÿ©"},{n:57,en:"Al-Hadid",ar:"ÿßŸÑÿ≠ÿØŸäÿØ"},
-  {n:58,en:"Al-Mujadila",ar:"ÿßŸÑŸÖÿ¨ÿßÿØŸÑÿ©"},{n:59,en:"Al-Hashr",ar:"ÿßŸÑÿ≠ÿ¥ÿ±"},{n:60,en:"Al-Mumtahana",ar:"ÿßŸÑŸÖŸÖÿ™ÿ≠ŸÜÿ©"},
-  {n:61,en:"As-Saff",ar:"ÿßŸÑÿµŸÅ"},{n:62,en:"Al-Juma",ar:"ÿßŸÑÿ¨ŸÖÿπÿ©"},{n:63,en:"Al-Munafiqun",ar:"ÿßŸÑŸÖŸÜÿßŸÅŸÇŸàŸÜ"},
-  {n:64,en:"At-Taghabun",ar:"ÿßŸÑÿ™ÿ∫ÿßÿ®ŸÜ"},{n:65,en:"At-Talaq",ar:"ÿßŸÑÿ∑ŸÑÿßŸÇ"},{n:66,en:"At-Tahrim",ar:"ÿßŸÑÿ™ÿ≠ÿ±ŸäŸÖ"},
-  {n:67,en:"Al-Mulk",ar:"ÿßŸÑŸÖŸÑŸÉ"},{n:68,en:"Al-Qalam",ar:"ÿßŸÑŸÇŸÑŸÖ"},{n:69,en:"Al-Haqqa",ar:"ÿßŸÑÿ≠ÿßŸÇÿ©"},
-  {n:70,en:"Al-Maarij",ar:"ÿßŸÑŸÖÿπÿßÿ±ÿ¨"},{n:71,en:"Nuh",ar:"ŸÜŸàÿ≠"},{n:72,en:"Al-Jinn",ar:"ÿßŸÑÿ¨ŸÜ"},
-  {n:73,en:"Al-Muzzammil",ar:"ÿßŸÑŸÖÿ≤ŸÖŸÑ"},{n:74,en:"Al-Muddaththir",ar:"ÿßŸÑŸÖÿØÿ´ÿ±"},{n:75,en:"Al-Qiyama",ar:"ÿßŸÑŸÇŸäÿßŸÖÿ©"},
-  {n:76,en:"Al-Insan",ar:"ÿßŸÑÿ•ŸÜÿ≥ÿßŸÜ"},{n:77,en:"Al-Mursalat",ar:"ÿßŸÑŸÖÿ±ÿ≥ŸÑÿßÿ™"},{n:78,en:"An-Naba",ar:"ÿßŸÑŸÜÿ®ÿ£"},
-  {n:79,en:"An-Naziat",ar:"ÿßŸÑŸÜÿßÿ≤ÿπÿßÿ™"},{n:80,en:"Abasa",ar:"ÿπÿ®ÿ≥"},{n:81,en:"At-Takwir",ar:"ÿßŸÑÿ™ŸÉŸàŸäÿ±"},
-  {n:82,en:"Al-Infitar",ar:"ÿßŸÑÿßŸÜŸÅÿ∑ÿßÿ±"},{n:83,en:"Al-Mutaffifin",ar:"ÿßŸÑŸÖÿ∑ŸÅŸÅŸäŸÜ"},{n:84,en:"Al-Inshiqaq",ar:"ÿßŸÑÿßŸÜÿ¥ŸÇÿßŸÇ"},
-  {n:85,en:"Al-Buruj",ar:"ÿßŸÑÿ®ÿ±Ÿàÿ¨"},{n:86,en:"At-Tariq",ar:"ÿßŸÑÿ∑ÿßÿ±ŸÇ"},{n:87,en:"Al-Ala",ar:"ÿßŸÑÿ£ÿπŸÑŸâ"},
-  {n:88,en:"Al-Ghashiya",ar:"ÿßŸÑÿ∫ÿßÿ¥Ÿäÿ©"},{n:89,en:"Al-Fajr",ar:"ÿßŸÑŸÅÿ¨ÿ±"},{n:90,en:"Al-Balad",ar:"ÿßŸÑÿ®ŸÑÿØ"},
-  {n:91,en:"Ash-Shams",ar:"ÿßŸÑÿ¥ŸÖÿ≥"},{n:92,en:"Al-Layl",ar:"ÿßŸÑŸÑŸäŸÑ"},{n:93,en:"Ad-Duha",ar:"ÿßŸÑÿ∂ÿ≠Ÿâ"},
-  {n:94,en:"Ash-Sharh",ar:"ÿßŸÑÿ¥ÿ±ÿ≠"},{n:95,en:"At-Tin",ar:"ÿßŸÑÿ™ŸäŸÜ"},{n:96,en:"Al-Alaq",ar:"ÿßŸÑÿπŸÑŸÇ"},
-  {n:97,en:"Al-Qadr",ar:"ÿßŸÑŸÇÿØÿ±"},{n:98,en:"Al-Bayyina",ar:"ÿßŸÑÿ®ŸäŸÜÿ©"},{n:99,en:"Az-Zalzala",ar:"ÿßŸÑÿ≤ŸÑÿ≤ŸÑÿ©"},
-  {n:100,en:"Al-Adiyat",ar:"ÿßŸÑÿπÿßÿØŸäÿßÿ™"},{n:101,en:"Al-Qaria",ar:"ÿßŸÑŸÇÿßÿ±ÿπÿ©"},{n:102,en:"At-Takathur",ar:"ÿßŸÑÿ™ŸÉÿßÿ´ÿ±"},
-  {n:103,en:"Al-Asr",ar:"ÿßŸÑÿπÿµÿ±"},{n:104,en:"Al-Humaza",ar:"ÿßŸÑŸáŸÖÿ≤ÿ©"},{n:105,en:"Al-Fil",ar:"ÿßŸÑŸÅŸäŸÑ"},
-  {n:106,en:"Quraysh",ar:"ŸÇÿ±Ÿäÿ¥"},{n:107,en:"Al-Maun",ar:"ÿßŸÑŸÖÿßÿπŸàŸÜ"},{n:108,en:"Al-Kawthar",ar:"ÿßŸÑŸÉŸàÿ´ÿ±"},
-  {n:109,en:"Al-Kafirun",ar:"ÿßŸÑŸÉÿßŸÅÿ±ŸàŸÜ"},{n:110,en:"An-Nasr",ar:"ÿßŸÑŸÜÿµÿ±"},{n:111,en:"Al-Masad",ar:"ÿßŸÑŸÖÿ≥ÿØ"},
-  {n:112,en:"Al-Ikhlas",ar:"ÿßŸÑÿ•ÿÆŸÑÿßÿµ"},{n:113,en:"Al-Falaq",ar:"ÿßŸÑŸÅŸÑŸÇ"},{n:114,en:"An-Nas",ar:"ÿßŸÑŸÜÿßÿ≥"},
-];
-
-// Normalize Arabic for fuzzy matching (remove diacritics)
-function normalizeAr(s) {
-  if (!s) return "";
-  return s
-    .replace(/[\u0610-\u061A]/g, "")          // signes arabes (haut de page)
-    .replace(/[\u064B-\u065F]/g, "")          // harakat classiques (fatha, damma, kasra‚Ä¶)
-    .replace(/\u0670/g, "")                    // Ÿ∞ alef superscript (U+0670) ‚Äî cause principale du bug
-    .replace(/[\u06D6-\u06ED]/g, "")          // marques coraniques √©tendues
-    .replace(/[ÿ£ÿ•ÿ¢Ÿ±\u0671]/g, "ÿß")           // toutes variantes d'alef ‚Üí ÿß
-    .replace(/[Ÿâÿ¶]/g, "Ÿä")
-    .replace(/ÿ©/g, "Ÿá")
-    .replace(/\s+/g, " ").trim();
-}
-
-// Arabic root extraction via morphological pattern stripping
-// Handles: prefixes (conj/art/prep), verb conjugation affixes (ŸäŸè/ÿ™Ÿè/ÿ£Ÿé/ŸÜŸé),
-// object/subject suffixes, dual/plural endings, shadda (doubled letter), weak letters.
-function arabicRoot(word) {
-  let w = normalizeAr(word);
-  if (!w) return '';
-
-  // 1. Strip definite article + prepositional prefixes (longest first)
-  w = w.replace(/^(Ÿàÿ®ÿßŸÑ|ŸàŸÉÿßŸÑ|ŸàŸÅÿßŸÑ|ŸàÿßŸÑ|ŸÅÿßŸÑ|ÿ®ÿßŸÑ|ŸÉÿßŸÑ|ŸÑŸÑ|ŸÅŸÑ|ÿ®ŸÑ|ŸÉŸÑ|ŸàŸÑ|ÿßŸÑ)/, '');
-
-  // 2. Strip conjunctions / prepositions (single-letter prefixes)
-  w = w.replace(/^[ŸàŸÅÿ®ŸÉŸÑ](?=[^\s])/, '');
-
-  // 3. Strip verb conjugation prefixes: ŸäŸèŸÄ ŸäŸéŸÄ ÿ™ŸèŸÄ ÿ™ŸéŸÄ ÿ£ŸéŸÄ ŸÜŸéŸÄ
-  //    (imperfect prefixes ‚Äî the letter stays, we just note it's a prefix marker)
-  //    represented after normalizeAr as bare Ÿä ÿ™ ÿß ŸÜ
-  const verbPrefixRe = /^[Ÿäÿ™ÿßŸÜ]/;
-
-  // 4. Strip common verb/noun suffixes (longest first)
-  w = w.replace(/(ŸàŸÉŸÖ|ŸàŸÉŸÜ|ŸàŸáŸÖ|ŸàŸáŸÜ|ŸàŸáÿß|ŸàŸÜŸä|ŸàŸÉŸé|ŸàŸÉ|ŸàŸÜ|ŸäŸÜ|ÿ™ŸÖ|ÿ™ŸÜ|ŸÉŸÖ|ŸÉŸÜ|ŸáŸÖ|ŸáŸÜ|Ÿàÿß|Ÿáÿß|ŸÜŸä|ÿ™Ÿä|ÿßŸÜ|ÿßÿ™|ÿßŸá|ÿßŸÉ|ŸÜÿß|ŸÉ|Ÿá|ÿß|ŸÜ)$/, '');
-
-  // 5. Strip verb conjugation prefix AFTER suffix stripping (order matters)
-  if (verbPrefixRe.test(w) && w.length > 3) w = w.replace(/^[Ÿäÿ™ÿßŸÜ]/, '');
-
-  // 6. Collapse shadda-equivalent doubled letters (ÿ¥ÿØÿ© effect):
-  //    In uthmani text after normalizeAr, shadda (Ÿë) is stripped by normalizeAr already,
-  //    but the doubled consonant may appear as two identical letters ‚Äî deduplicate runs of 2
-  w = w.replace(/(.)\1/, '$1');
-
-  // 7. Strip remaining weak letters at edges if root still > 3 chars
-  if (w.length > 3) {
-    w = w.replace(/^[ÿßŸàŸäÿ°]/, '');
-    w = w.replace(/[ÿßŸàŸä]$/, '');
-  }
-
-  // 8. Collapse again after weak-letter stripping
-  w = w.replace(/(.)\1/, '$1');
-
-  return w.length >= 2 ? w : normalizeAr(word);
-}
-
-// Highlight occurrences of query in text
-function highlightArabic(text, query) {
-  if (!query || !text) return text;
-  const normQ = normalizeAr(query.trim());
-  if (!normQ) return text;
-  const words = text.split(' ');
-  const result = [];
-  words.forEach((w, i) => {
-    const normW = normalizeAr(w);
-    const hit = normW.includes(normQ);
-    result.push(
-      <span key={i}>
-        {hit ? <mark className="concord-highlight">{w}</mark> : w}
-        {i < words.length - 1 ? ' ' : ''}
-      </span>
-    );
-  });
-  return result;
-}
-
-const SUGGESTED_SEARCHES = [
-  "ÿßŸÑÿ±ÿ≠ŸÖŸÜ","ÿßŸÑŸÑŸá","ÿßŸÑÿµŸÑÿßÿ©","ÿßŸÑÿ¨ŸÜÿ©","ÿßŸÑŸÜÿßÿ±","ÿßŸÑÿ•ŸäŸÖÿßŸÜ","ÿßŸÑÿ™Ÿàÿ®ÿ©","ÿßŸÑÿµÿ®ÿ±","ÿßŸÑÿ¥Ÿäÿ∑ÿßŸÜ","ÿßŸÑŸÉÿßŸÅÿ±ŸäŸÜ",
-  "ÿßŸÑŸÑŸáŸÖ","ÿßŸÑŸÖÿ§ŸÖŸÜŸäŸÜ","ÿßŸÑÿ±ÿ≠ŸäŸÖ","ÿßŸÑÿ≥ŸÖÿßÿ°","ÿßŸÑÿ£ÿ±ÿ∂"
-];
-
-// ‚îÄ‚îÄ‚îÄ Lecteur audio inline pour concordance ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function ConcordInlinePlayer({ audioUrl }) {
-  const [playing, setPlaying] = useState(false);
-  const audioRef = useRef(null);
-  useEffect(() => () => { audioRef.current?.pause(); }, []);
-  const toggle = () => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (playing) { a.pause(); setPlaying(false); }
-    else { a.currentTime = 0; a.play().catch(()=>{}); setPlaying(true); }
-  };
-  return (
-    <>
-      <audio ref={audioRef} src={audioUrl} onEnded={() => setPlaying(false)} style={{display:'none'}} />
-      <button className="concord-go-btn" onClick={toggle}
-        style={{ color: playing ? 'var(--teal)' : undefined, borderColor: playing ? 'var(--teal)' : undefined }}>
-        {playing ? '‚èπ' : '‚ñ∂'}
-      </button>
-    </>
-  );
-}
-
-// ‚îÄ‚îÄ Sous-composant : un groupe sourate avec lazy-load √† l'ouverture ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function ConcordGroup({ group, debouncedQ, onNavigate, isLinked, toggleLink, textCache, onOpenCollModal, ayatInCollectionsFn }) {
-  const [open, setOpen]       = useState(false);
-  const [ayats, setAyats]     = useState(null); // null = pas encore charg√©
-  const [loadingAyats, setLoadingAyats] = useState(false);
-  const headerRef   = useRef(null);
-  const observerRef = useRef(null);
-
-  // IntersectionObserver : charge les ayats d√®s que le header entre dans le viewport
-  // ET que le groupe est ouvert ‚Äî √©vite tout chargement hors-√©cran
-  const loadAyats = useCallback(async () => {
-    if (ayats !== null || loadingAyats) return; // d√©j√† charg√© ou en cours
-    setLoadingAyats(true);
-    try {
-      // R√©utiliser le cache de phase 1 (quran-simple, sans diacritiques)
-      // pour garantir que normalizeAr produit le m√™me r√©sultat qu'au scan
-      let all = textCache?.current?.[group.surahNum];
-      if (!all) {
-        all = await fetchSurahSimple(group.surahNum);
-        if (textCache?.current) textCache.current[group.surahNum] = all;
-      }
-      const normQ = normalizeAr(debouncedQ.trim());
-      const matching = all.filter(a => {
-        const t = normalizeAr(a.text);
-        const words = normQ.split(/\s+/).filter(Boolean);
-        if (group.fuzzy)    return words.every(w => t.includes(w));
-        if (group.wordMode) return t.split(" ").some(w => w === normQ || w.startsWith(normQ) || w.endsWith(normQ));
-        return t.includes(normQ);
-      });
-      setAyats(matching);
-    } catch {
-      setAyats([]);
-    }
-    setLoadingAyats(false);
-  }, [ayats, loadingAyats, group.surahNum, group.fuzzy, debouncedQ, textCache]);
-
-  // Quand on ouvre le groupe, charger les ayats
-  const handleToggle = () => {
-    const next = !open;
-    setOpen(next);
-    if (next && ayats === null) loadAyats();
-  };
-
-  // Observer scroll : si le header devient visible ET groupe d√©j√† ouvert, charger
-  useEffect(() => {
-    if (!headerRef.current) return;
-    observerRef.current = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting && open && ayats === null) loadAyats(); },
-      { rootMargin: '120px' }
-    );
-    observerRef.current.observe(headerRef.current);
-    return () => observerRef.current?.disconnect();
-  }, [open, ayats, loadAyats]);
-
-  const displayAyats = ayats ?? [];
-
-  return (
-    <div className="concord-group">
-      {/* En-t√™te cliquable */}
-      <div ref={headerRef} className="concord-group-header" onClick={handleToggle}>
-        <div className="concord-group-num">{group.surahNum}</div>
-        <div className="concord-group-name">{group.surahEn}</div>
-        <div className="concord-group-ar">{group.surahAr}</div>
-        <div className="concord-group-badge">
-          {ayats === null ? `~${group.count}` : displayAyats.length} AYAT{group.count>1?"S":""}
-        </div>
-        <div className={`concord-group-chevron${open?" open":""}`}>‚ñ∂</div>
-      </div>
-
-      {/* Corps ‚Äî visible seulement si ouvert */}
-      {open && (
-        <div>
-          {loadingAyats && (
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 18px",color:"var(--text3)",fontSize:10,letterSpacing:1}}>
-              <div className="loading-ring" style={{width:16,height:16,borderWidth:2}} />
-              CHARGEMENT...
-            </div>
-          )}
-          {!loadingAyats && displayAyats.length === 0 && (
-            <div style={{padding:"12px 18px",fontSize:10,color:"var(--text3)",letterSpacing:1}}>
-              AUCUN R√âSULTAT DANS CETTE SOURATE
-            </div>
-          )}
-          {displayAyats.map(ayat => (
-            <div key={ayat.num} className="concord-ayat-item">
-              <div className="concord-ayat-num">{ayat.num}</div>
-              <div className="concord-ayat-text">
-                {highlightArabic(ayat.text, debouncedQ)}
-              </div>
-              <div className="concord-ayat-actions">
-                <button className="concord-go-btn" onClick={() => onNavigate(group.surahNum, ayat.num)}>
-                  ‚Üí OUVRIR
-                </button>
-                {onOpenCollModal && (
-                  <button
-                    className="concord-go-btn"
-                    style={{ color: ayatInCollectionsFn?.(group.surahNum, ayat.num)?.length > 0 ? "#c878ff" : undefined,
-                             borderColor: ayatInCollectionsFn?.(group.surahNum, ayat.num)?.length > 0 ? "#c878ff" : undefined }}
-                    onClick={() => onOpenCollModal({ surahNum: group.surahNum, surahEn: group.surahEn, ayatNum: ayat.num, text: ayat.text, number: ayat.num })}
-                  >
-                    üóÇ
-                  </button>
-                )}
-                <button
-                  className={`concord-link-btn${isLinked(group.surahNum, ayat.num) ? " linked" : ""}`}
-                  onClick={() => toggleLink(group.surahNum, group.surahEn, ayat.num, ayat.text)}
-                >
-                  {isLinked(group.surahNum, ayat.num) ? "‚úì LI√â" : "üîó LIER"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ‚îÄ‚îÄ‚îÄ SharedGroup ‚Äî affiche un groupe d'ayats partageant une s√©quence ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function SharedGroup({ group, sharedN, searchMode, onNavigate, toggleLink, isLinked, onOpenCollModal }) {
-  const [open, setOpen] = useState(false);
-  const label = searchMode === 'shared-start' ? 'D√âBUT' : searchMode === 'shared-end' ? 'FIN' : 'S√âQUENCE';
-  return (
-    <div style={{borderBottom:'1px solid var(--border2)',margin:'0'}}>
-      <div onClick={()=>setOpen(o=>!o)}
-        style={{padding:'10px 20px',cursor:'pointer',display:'flex',alignItems:'center',gap:10,background:open?'var(--surface2)':'transparent',transition:'background .15s'}}>
-        <div style={{width:28,height:28,borderRadius:'50%',border:'1px solid var(--gold)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,color:'var(--gold)',fontFamily:"'Cinzel',serif",flexShrink:0}}>
-          {group.count}
-        </div>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:8,letterSpacing:1.5,color:'var(--text3)',marginBottom:3}}>{label} ¬∑ {sharedN} MOT{sharedN>1?'S':''}</div>
-          <div style={{fontFamily:"'Amiri Quran',serif",fontSize:17,direction:'rtl',color:'var(--gold2)',textAlign:'right',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-            {group.seq}
-          </div>
-        </div>
-        <span style={{fontSize:8,color:'var(--text3)'}}>{open?'‚ñ≤':'‚ñº'}</span>
-      </div>
-      {open && (
-        <div style={{background:'var(--surface2)',padding:'4px 0 8px'}}>
-          {group.ayats.map((a,i) => {
-            const info = SURAH_INFO.find(s=>s.n===a.sn);
-            const linked = isLinked(a.sn, a.num);
-            return (
-              <div key={i} style={{padding:'8px 20px',borderBottom:'1px solid rgba(42,47,64,.3)',display:'flex',alignItems:'flex-start',gap:10}}>
-                <div style={{flexShrink:0,display:'flex',flexDirection:'column',gap:3,alignItems:'center',minWidth:44}}>
-                  <div style={{width:30,height:30,border:'1px solid var(--border2)',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'var(--text3)',fontFamily:"'Cinzel',serif"}}>{a.num}</div>
-                  <div style={{fontSize:7,letterSpacing:1,color:'var(--text3)'}}>{info?.en||`S.${a.sn}`}</div>
-                </div>
-                <div style={{flex:1,minWidth:0,fontFamily:"'Amiri Quran',serif",fontSize:18,direction:'rtl',textAlign:'right',lineHeight:1.8,color:'var(--text)',cursor:'pointer'}}
-                  onClick={()=>onNavigate(a.sn,a.num)}>
-                  {a.text}
-                </div>
-                <div style={{flexShrink:0,display:'flex',flexDirection:'column',gap:4}}>
-                  <button onClick={()=>toggleLink(a.sn,info?.en||`S.${a.sn}`,a.num,a.text)}
-                    style={{fontSize:8,padding:'3px 8px',border:`1px solid ${linked?'var(--gold)':'var(--border2)'}`,background:linked?'rgba(201,168,76,.12)':'transparent',color:linked?'var(--gold)':'var(--text3)',borderRadius:10,cursor:'pointer',fontFamily:"'Cinzel',serif"}}>
-                    {linked?'‚úì':'üîó'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ConcordancePage({ surahs: surahList, onNavigate, collections, onOpenCollModal, ayatInCollectionsFn, initialQuery }) {
-  const [query, setQuery]           = useState(initialQuery || "");
-  const [debouncedQ, setDebouncedQ] = useState(initialQuery || "");
-  const [searchMode, setSearchMode] = useState("exact");
-  const [surahFilter, setSurahFilter]= useState("all"); // "all" | Set of surahNums as strings
-  const surahFilterKey = useMemo(() =>
-    surahFilter instanceof Set ? [...surahFilter].sort().join(',') : String(surahFilter),
-  [surahFilter]);
-  const [surahPickerOpen, setSurahPickerOpen] = useState(false);
-  const [surahPickerSearch, setSurahPickerSearch] = useState("");
-  // surahsToSearch helper (shared by both useEffects)
-  const getsurahsToSearch = (filter) =>
-    filter === "all" ? SURAH_INFO.map(s => s.n)
-    : filter instanceof Set ? [...filter].map(Number).sort((a,b)=>a-b)
-    : [parseInt(filter)];
-  // groups = [{surahNum, surahEn, surahAr, count, fuzzy}] ‚Äî PAS les ayats
-  const [groups, setGroups]         = useState([]);
-  const [loading, setLoading]       = useState(false);
-  const [sharedN, setSharedN]         = useState(3);   // nb de mots pour modes shared-*
-  const [sharedGroups, setSharedGroups] = useState([]); // [{seq, count, ayats:[{sn,num,text}]}]
-  const [sharedLoading, setSharedLoading] = useState(false);
-  const sharedTokenRef = useRef(0);
-
-  const [linkedAyats, setLinkedAyats]= useState(() => {
-    try { const s = localStorage.getItem("quran_concordLinks"); return s ? JSON.parse(s) : []; } catch { return []; }
-  });
-  const debounceRef    = useRef(null);
-  const cacheRef       = useRef({}); // surahNum -> ayats[] (texte brut)
-  const searchTokenRef = useRef(0);
-  const listRef        = useRef(null); // ref sur le conteneur de r√©sultats
-
-  // Debounce
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedQ(query), 400);
-    return () => clearTimeout(debounceRef.current);
-  }, [query]);
-
-  // Re-sync when a new "search selection" query arrives while page stays mounted
-  useEffect(() => {
-    if (initialQuery && initialQuery !== query) { setQuery(initialQuery); setDebouncedQ(initialQuery); }
-  }, [initialQuery]); // eslint-disable-line
-
-  // Fetch texte brut d'une sourate (cache l√©ger ‚Äî texte seul, pas d'audio)
-  const fetchSurahText = useCallback(async (num) => {
-    if (cacheRef.current[num]) return cacheRef.current[num];
-    const ayats = await fetchSurahSimple(num);
-    cacheRef.current[num] = ayats;
-    return ayats;
-  }, []);
-
-  // Phase 1 : scan l√©ger ‚Äî d√©termine quelles sourates contiennent le mot
-  // Charge le texte sans audio (endpoint plus l√©ger), pas les ayats complets
-  useEffect(() => {
-    if (!debouncedQ.trim()) { setGroups([]); setLoading(false); return; }
-    const normQ = normalizeAr(debouncedQ.trim());
-    if (normQ.length < 2) { setGroups([]); return; }
-
-    const token = ++searchTokenRef.current;
-    setGroups([]);
-    setLoading(true);
-
-    const surahsToSearch = getsurahsToSearch(surahFilter);
-
-    const BATCH = 5; // plus rapide pour le scan l√©ger
-    const fuzzy = searchMode === "fuzzy";
-    const wordMode = searchMode === "word";
-    const startMode = searchMode === "start";
-    const endMode   = searchMode === "end";
-
-    // matchText: retourne true si normQ correspond dans le texte selon le mode
-    const matchText = (t, q) => {
-      if (fuzzy) return q.split(/\s+/).filter(Boolean).every(w => t.includes(w));
-      if (wordMode) {
-        const words = t.split(" ");
-        return words.some(w => w === q || w.startsWith(q) || w.endsWith(q));
-      }
-      if (startMode) {
-        // L'ayat (normalis√©) commence par exactement ces mots
-        const qWords = q.split(/\s+/).filter(Boolean);
-        const tWords = t.split(/\s+/).filter(Boolean);
-        return qWords.every((w, i) => tWords[i] !== undefined && (tWords[i] === w || tWords[i].startsWith(w)));
-      }
-      if (endMode) {
-        // L'ayat (normalis√©) se termine par exactement ces mots
-        const qWords = q.split(/\s+/).filter(Boolean);
-        const tWords = t.split(/\s+/).filter(Boolean);
-        const offset = tWords.length - qWords.length;
-        if (offset < 0) return false;
-        return qWords.every((w, i) => tWords[offset + i] !== undefined && (tWords[offset + i] === w || tWords[offset + i].endsWith(w)));
-      }
-      return t.includes(q);
-    };
-
-    (async () => {
-      for (let i = 0; i < surahsToSearch.length; i += BATCH) {
-        if (token !== searchTokenRef.current) return;
-        const batch = surahsToSearch.slice(i, i + BATCH);
-        const batchGroups = await Promise.all(batch.map(async (sn) => {
-          try {
-            const ayats = await fetchSurahText(sn);
-            const count = ayats.filter(a => {
-              const t = normalizeAr(a.text);
-              return matchText(t, normQ);
-            }).length;
-            if (count > 0) {
-              const info = SURAH_INFO.find(s => s.n === sn);
-              return { surahNum: sn, surahEn: info?.en||`Sourate ${sn}`, surahAr: info?.ar||"", count, fuzzy, wordMode, startMode, endMode };
-            }
-          } catch {}
-          return null;
-        }));
-        if (token !== searchTokenRef.current) return;
-        const valid = batchGroups.filter(Boolean);
-        if (valid.length > 0) {
-          setGroups(prev => {
-            const merged = [...prev, ...valid];
-            merged.sort((a,b) => a.surahNum - b.surahNum);
-            return merged;
-          });
-        }
-      }
-      if (token === searchTokenRef.current) setLoading(false);
-    })();
-  }, [debouncedQ, searchMode, surahFilter, fetchSurahText]);
-
-  // ‚îÄ‚îÄ Modes shared-* : grouper les ayats par s√©quence de N mots identiques ‚îÄ‚îÄ
-  const isSharedMode = ["shared-start","shared-end","shared-contain"].includes(searchMode);
-
-  useEffect(() => {
-    if (!isSharedMode) { setSharedGroups([]); return; }
-    const token = ++sharedTokenRef.current;
-    setSharedGroups([]);
-    setSharedLoading(true);
-
-    const surahsToSearch = getsurahsToSearch(surahFilter);
-
-    const N = Math.max(1, sharedN);
-
-    const getSeq = (words, mode) => {
-      if (mode === "shared-start")   return words.slice(0, N).join(" ");
-      if (mode === "shared-end")     return words.slice(-N).join(" ");
-      // shared-contain: toutes les sous-s√©quences de N mots cons√©cutifs
-      const seqs = [];
-      for (let i = 0; i <= words.length - N; i++) seqs.push(words.slice(i, i + N).join(" "));
-      return seqs;
-    };
-
-    (async () => {
-      // Phase 1: charger tous les ayats
-      const allAyats = [];
-      for (let i = 0; i < surahsToSearch.length; i += 10) {
-        if (token !== sharedTokenRef.current) return;
-        const batch = surahsToSearch.slice(i, i + 10);
-        const results = await Promise.all(batch.map(sn =>
-          fetchSurahText(sn).then(ayats => ayats.map(a => ({ sn, num: a.num, text: a.text }))).catch(() => [])
-        ));
-        results.forEach(r => allAyats.push(...r));
-      }
-      if (token !== sharedTokenRef.current) return;
-
-      // Phase 2: grouper par s√©quence
-      const map = new Map(); // seq -> [{sn,num,text}]
-      allAyats.forEach(a => {
-        const words = normalizeAr(a.text).split(/\s+/).filter(Boolean);
-        if (words.length < N) return;
-        const seqs = searchMode === "shared-contain" ? getSeq(words, searchMode) : [getSeq(words, searchMode)];
-        seqs.forEach(seq => {
-          if (!seq) return;
-          if (!map.has(seq)) map.set(seq, []);
-          map.get(seq).push(a);
-        });
-      });
-
-      // Phase 3: garder uniquement les s√©quences partag√©es par ‚â•2 ayats
-      const groups = [];
-      map.forEach((ayats, seq) => {
-        if (ayats.length >= 2) groups.push({ seq, count: ayats.length, ayats });
-      });
-      groups.sort((a, b) => b.count - a.count);
-
-      if (token === sharedTokenRef.current) {
-        setSharedGroups(groups);
-        setSharedLoading(false);
-      }
-    })();
-  }, [searchMode, sharedN, surahFilterKey, isSharedMode, fetchSurahText]);
-
-  // Scroll vers le haut quand une nouvelle recherche commence
-  useEffect(() => {
-    if (debouncedQ && listRef.current) {
-      listRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [debouncedQ]);
-
-  const totalCount = groups.reduce((a, g) => a + g.count, 0);
-
-  const toggleLink = (surahNum, surahEn, ayatNum, text) => {
-    setLinkedAyats(prev => {
-      const key = `${surahNum}:${ayatNum}`;
-      const exists = prev.find(l => l.key === key);
-      const next = exists
-        ? prev.filter(l => l.key !== key)
-        : [...prev, { key, surahNum, surahEn, ayatNum, text }];
-      try { localStorage.setItem("quran_concordLinks", JSON.stringify(next)); } catch {}
-      return next;
-    });
-  };
-
-  const isLinked = (surahNum, ayatNum) =>
-    linkedAyats.some(l => l.key === `${surahNum}:${ayatNum}`);
-
-  return (
-    <div className="concord-page" ref={listRef}>
-      {/* Barre de recherche */}
-      <div className="concord-search-bar">
-        <input
-          type="text"
-          placeholder="Rechercher des mots ou parties d'ayats..."
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-        />
-        <div className="concord-mode-tabs">
-          <button className={`concord-mode-tab${searchMode==="exact"?" active":""}`} onClick={()=>setSearchMode("exact")} title="Correspondance exacte n'importe o√π dans le mot">EXACT</button>
-          <button className={`concord-mode-tab${searchMode==="word"?" active":""}`} onClick={()=>setSearchMode("word")} title="Mot entier ‚Äî premier ou dernier mot de l'ayat inclus">MOT</button>
-          <button className={`concord-mode-tab${searchMode==="fuzzy"?" active":""}`} onClick={()=>setSearchMode("fuzzy")} title="Tous les mots de la recherche pr√©sents dans l'ayat">FLOU</button>
-          <button className={`concord-mode-tab${searchMode==="start"?" active":""}`} onClick={()=>setSearchMode("start")} title="L'ayat commence par ces mots">D√âBUT</button>
-          <button className={`concord-mode-tab${searchMode==="end"?" active":""}`} onClick={()=>setSearchMode("end")} title="L'ayat se termine par ces mots">FIN</button>
-          <button className={`concord-mode-tab${searchMode==="shared-start"?" active":""}`} onClick={()=>setSearchMode("shared-start")} title="Ayats partageant les m√™mes N premiers mots">D√âBUT COMMUN</button>
-          <button className={`concord-mode-tab${searchMode==="shared-end"?" active":""}`} onClick={()=>setSearchMode("shared-end")} title="Ayats partageant les m√™mes N derniers mots">FIN COMMUNE</button>
-          <button className={`concord-mode-tab${searchMode==="shared-contain"?" active":""}`} onClick={()=>setSearchMode("shared-contain")} title="Ayats partageant une s√©quence de N mots identiques">S√âQUENCE</button>
-        </div>
-        {isSharedMode && (
-          <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0 2px',flexWrap:'wrap'}}>
-            <span style={{fontSize:9,letterSpacing:1.5,color:'var(--text3)',fontFamily:"'Cinzel',serif"}}>MOTS :</span>
-            {[1,2,3,4,5,6,7,8].map(n => (
-              <button key={n} onClick={()=>setSharedN(n)}
-                style={{fontSize:9,letterSpacing:1,padding:'3px 10px',borderRadius:12,cursor:'pointer',fontFamily:"'Cinzel',serif",
-                  border:`1px solid ${sharedN===n?'var(--gold)':'var(--border2)'}`,
-                  background:sharedN===n?'rgba(201,168,76,.12)':'transparent',
-                  color:sharedN===n?'var(--gold)':'var(--text3)',transition:'all .2s'}}>
-                {n}
-              </button>
-            ))}
-          </div>
-        )}
-        {/* Surah multi-picker */}
-        <div style={{position:'relative'}}>
-          <button onClick={()=>setSurahPickerOpen(o=>!o)}
-            style={{display:'flex',alignItems:'center',gap:6,background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:'var(--radius-sm)',padding:'7px 12px',color:surahFilter==='all'?'var(--text3)':'var(--gold)',fontSize:10,letterSpacing:1,fontFamily:"'Cinzel',serif",cursor:'pointer',whiteSpace:'nowrap',minWidth:180}}>
-            {surahFilter==='all'
-              ? 'TOUTES LES SOURATES'
-              : `${surahFilter instanceof Set ? surahFilter.size : 1} SOURATE${(surahFilter instanceof Set?surahFilter.size:1)>1?'S':''} S√âLECTIONN√âE${(surahFilter instanceof Set?surahFilter.size:1)>1?'S':''}`}
-            <span style={{marginLeft:'auto',fontSize:8,color:'var(--text3)'}}>{surahPickerOpen?'‚ñ≤':'‚ñº'}</span>
-          </button>
-          {surahPickerOpen && (
-            <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:200,background:'var(--surface)',border:'1px solid var(--border2)',borderRadius:'var(--radius-sm)',boxShadow:'0 8px 24px rgba(0,0,0,.4)',width:260,maxHeight:320,display:'flex',flexDirection:'column'}}>
-              <div style={{padding:'8px 10px',borderBottom:'1px solid var(--border2)',display:'flex',gap:6}}>
-                <input value={surahPickerSearch} onChange={e=>setSurahPickerSearch(e.target.value)}
-                  placeholder="Filtrer sourates‚Ä¶"
-                  style={{flex:1,background:'var(--surface2)',border:'1px solid var(--border2)',borderRadius:4,padding:'4px 8px',color:'var(--text)',fontSize:10,outline:'none'}}/>
-                <button onClick={()=>{setSurahFilter('all');setSurahPickerOpen(false);setSurahPickerSearch('');}}
-                  style={{fontSize:8,padding:'4px 8px',border:'1px solid var(--border2)',background:'transparent',color:'var(--text3)',borderRadius:4,cursor:'pointer',fontFamily:"'Cinzel',serif"}}>
-                  TOUT
-                </button>
-              </div>
-              <div style={{overflowY:'auto',flex:1}}>
-                {SURAH_INFO.filter(s=>
-                  !surahPickerSearch.trim() ||
-                  s.en.toLowerCase().includes(surahPickerSearch.toLowerCase()) ||
-                  s.ar.includes(surahPickerSearch) ||
-                  String(s.n).includes(surahPickerSearch)
-                ).map(s => {
-                  const sel = surahFilter instanceof Set ? surahFilter.has(String(s.n)) : surahFilter===String(s.n);
-                  return (
-                    <div key={s.n} onClick={()=>{
-                      setSurahFilter(prev => {
-                        const set = prev === 'all' ? new Set() : prev instanceof Set ? new Set(prev) : new Set([String(prev)]);
-                        if (set.has(String(s.n))) set.delete(String(s.n)); else set.add(String(s.n));
-                        return set.size === 0 ? 'all' : set;
-                      });
-                    }}
-                      style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',background:sel?'rgba(201,168,76,.08)':'transparent',transition:'background .1s',borderBottom:'1px solid rgba(42,47,64,.3)'}}>
-                      <div style={{width:14,height:14,border:`1px solid ${sel?'var(--gold)':'var(--border2)'}`,borderRadius:3,background:sel?'var(--gold)':'transparent',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                        {sel && <span style={{fontSize:8,color:'var(--surface)',lineHeight:1}}>‚úì</span>}
-                      </div>
-                      <span style={{fontSize:9,color:'var(--text3)',minWidth:20}}>{s.n}.</span>
-                      <span style={{fontSize:10,color:sel?'var(--gold)':'var(--text2)',flex:1}}>{s.en}</span>
-                      <span style={{fontFamily:"'Amiri Quran',serif",fontSize:14,color:sel?'var(--gold)':'var(--text3)',direction:'rtl'}}>{s.ar}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{padding:'6px 10px',borderTop:'1px solid var(--border2)',display:'flex',justifyContent:'flex-end'}}>
-                <button onClick={()=>setSurahPickerOpen(false)}
-                  style={{fontSize:8,padding:'4px 12px',border:'1px solid var(--gold)',background:'transparent',color:'var(--gold)',borderRadius:4,cursor:'pointer',fontFamily:"'Cinzel',serif"}}>
-                  OK
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Shared-mode results */}
-      {isSharedMode && (
-        <div style={{padding:'0 0 12px'}}>
-          {sharedLoading && (
-            <div style={{padding:'16px 20px',fontSize:9,letterSpacing:1.5,color:'var(--text3)',fontFamily:"'Cinzel',serif"}}>
-              ANALYSE DU CORPUS‚Ä¶
-            </div>
-          )}
-          {!sharedLoading && sharedGroups.length === 0 && (
-            <div style={{padding:'16px 20px',fontSize:9,letterSpacing:1.5,color:'var(--text3)',fontFamily:"'Cinzel',serif',textAlign:'center"}}>
-              AUCUN AYAT NE PARTAGE {sharedN} MOT{sharedN>1?'S':''} {searchMode==='shared-start'?'DE D√âBUT':searchMode==='shared-end'?'DE FIN':'EN S√âQUENCE'}
-            </div>
-          )}
-          {!sharedLoading && sharedGroups.length > 0 && (
-            <div style={{padding:'8px 0 0'}}>
-              <div style={{padding:'4px 20px 10px',fontSize:9,letterSpacing:1.5,color:'var(--text3)',fontFamily:"'Cinzel',serif"}}>
-                {sharedGroups.length} S√âQUENCE{sharedGroups.length>1?'S':''} ‚Äî {sharedGroups.reduce((a,g)=>a+g.count,0)} AYATS
-              </div>
-              {sharedGroups.map((g, gi) => (
-                <SharedGroup key={gi} group={g} sharedN={sharedN} searchMode={searchMode}
-                  onNavigate={onNavigate} toggleLink={toggleLink} isLinked={isLinked}
-                  onOpenCollModal={onOpenCollModal} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Suggestions */}
-      {!isSharedMode && !query && (
-        <div>
-          <div style={{fontSize:9,letterSpacing:2,color:"var(--text3)",marginBottom:8,fontFamily:"'Cinzel',serif"}}>SUGGESTIONS DE RECHERCHE</div>
-          <div className="concord-tags-row">
-            {SUGGESTED_SEARCHES.map(s => (
-              <button key={s} className="concord-tag" onClick={() => setQuery(s)}>
-                <span style={{fontFamily:"'Amiri Quran',serif",fontSize:16,direction:"rtl"}}>{s}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Chargement initial */}
-      {!isSharedMode && loading && groups.length === 0 && (
-        <div className="concord-loading">
-          <div className="loading-ring" />
-          SCAN EN COURS...
-        </div>
-      )}
-
-      {/* Pas de r√©sultats */}
-      {!loading && debouncedQ && groups.length === 0 && (
-        <div className="concord-empty">
-          <div className="concord-empty-arabic">ŸÑÿß ŸÜÿ™ÿßÿ¶ÿ¨</div>
-          <div className="concord-empty-msg">AUCUN AYAT TROUV√â<br/>Essayez un autre mot ou le mode FLOU</div>
-        </div>
-      )}
-
-      {/* R√©sultats */}
-      {groups.length > 0 && (
-        <>
-          <div className="concord-results-header">
-            <div className="concord-results-count">
-              <span>~{totalCount}</span> AYAT{totalCount>1?"S":""} ¬∑ <span>{groups.length}</span> SOURATE{groups.length>1?"S":""}
-              {loading && (
-                <span style={{marginLeft:8,display:"inline-flex",alignItems:"center",gap:5,color:"var(--text3)",fontSize:9}}>
-                  <span style={{width:10,height:10,border:"1.5px solid var(--border2)",borderTopColor:"var(--gold)",borderRadius:"50%",display:"inline-block",animation:"spin .8s linear infinite"}}/>
-                  EN COURS...
-                </span>
-              )}
-            </div>
-            <div style={{fontSize:9,letterSpacing:1,color:"var(--text3)"}}>
-              CLIQUEZ SUR UNE SOURATE POUR CHARGER LES AYATS
-            </div>
-          </div>
-
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {groups.map(group => (
-              <ConcordGroup
-                key={`${group.surahNum}-${debouncedQ}`}
-                group={group}
-                debouncedQ={debouncedQ}
-                onNavigate={onNavigate}
-                isLinked={isLinked}
-                toggleLink={toggleLink}
-                textCache={cacheRef}
-                onOpenCollModal={onOpenCollModal}
-                ayatInCollectionsFn={ayatInCollectionsFn}
-              />
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Ayats li√©s */}
-      {linkedAyats.length > 0 && (
-        <div className="concord-links-panel">
-          <div className="concord-links-title">üîó AYATS LI√âS ¬∑ {linkedAyats.length}</div>
-          {linkedAyats.map(link => (
-            <div key={link.key} className="concord-link-card" onClick={()=>onNavigate(link.surahNum, link.ayatNum)}>
-              <div className="concord-link-ref">{link.surahEn} ¬∑ {link.ayatNum}</div>
-              <div className="concord-link-text">{link.text}</div>
-              <button className="concord-link-remove" onClick={e=>{e.stopPropagation();toggleLink(link.surahNum,link.surahEn,link.ayatNum,link.text);}}>‚úï</button>
-            </div>
-          ))}
-          <div style={{marginTop:10}}>
-            <button className="btn-small" style={{color:"var(--red)",borderColor:"var(--red)"}} onClick={()=>{
-              setLinkedAyats([]);
-              try{localStorage.removeItem("quran_concordLinks");}catch{}
-            }}>EFFACER TOUS LES LIENS</button>
-          </div>
-        </div>
-      )}
-
-      {!query && linkedAyats.length === 0 && (
-        <div className="concord-empty">
-          <div className="concord-empty-arabic">ÿßŸÑÿ®ÿ≠ÿ´</div>
-          <div className="concord-empty-msg">
-            RECHERCHEZ DES MOTS OU PARTIES D'AYATS<br/>
-            PUIS LIEZ LES VERSETS QUI PARTAGENT UN TH√àME
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ‚îÄ‚îÄ‚îÄ MAIN APP (inner ‚Äî wrapped by Provider below) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
 function AppInner({ currentUser, onSignOut }) {
   const dispatch = useDispatch();
 
@@ -5784,4322 +2969,49 @@ function AppInner({ currentUser, onSignOut }) {
   );
 }
 
-// ‚îÄ‚îÄ‚îÄ LearningMapPage ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Visual heatmap of Quran learning progress: all 114 surahs, per-ayat coloring
-function LearningMapPage({ surahs, learnData, onNavigate }) {
-  const [selectedSns, setSelectedSns] = React.useState(new Set()); // selected surahs
-  const [view, setView] = React.useState("surahs"); // "surahs" | "detail"
-  const [hoveredSn, setHoveredSn] = React.useState(null);
-  const [pageData, setPageData] = React.useState({}); // sn -> [{numberInSurah, page}]
+export default function App() {
+  const [user, setUser]         = useState(undefined); // undefined = checking
+  const [authReady, setAuthReady] = useState(false);
 
-  // Compute per-surah stats
-  const surahStats = React.useMemo(() => {
-    return surahs.map(s => {
-      const total = s.numberOfAyahs;
-      const learned = Object.keys(learnData).filter(k => {
-        const [sn] = k.split(':').map(Number);
-        return sn === s.number && learnData[k]?.learned;
-      }).length;
-      const perfect = Object.keys(learnData).filter(k => {
-        const [sn] = k.split(':').map(Number);
-        if (sn !== s.number || !learnData[k]?.learned) return false;
-        const attempts = learnData[k]?.writingAttempts || [];
-        return attempts.some(a => a.score === 100);
-      }).length;
-      const questioned = Object.keys(learnData).filter(k => {
-        const [sn] = k.split(':').map(Number);
-        return sn === s.number && learnData[k]?.questionScores && Object.keys(learnData[k].questionScores).length > 0;
-      }).length;
-      return { sn: s.number, name: s.name, ename: s.englishName, total, learned, perfect, questioned };
-    });
-  }, [surahs, learnData]);
-
-  const toggleSn = (sn) => setSelectedSns(prev => {
-    const next = new Set(prev);
-    if (next.has(sn)) next.delete(sn); else next.add(sn);
-    return next;
-  });
-
-  // Fetch page mapping when a surah is expanded
-  const ensurePageData = React.useCallback((sn) => {
-    if (pageData[sn]) return;
-    fetchSurahDefault(sn).then(ayahs => {
-      setPageData(p => ({ ...p, [sn]: ayahs.map(a => ({ numberInSurah: a.numberInSurah, page: a.page })) }));
-    }).catch(() => {});
-  }, [pageData]);
-
-  const selectAll = () => setSelectedSns(new Set(surahs.map(s => s.number)));
-  const clearAll  = () => setSelectedSns(new Set());
-
-  const totalLearned   = surahStats.reduce((a, s) => a + s.learned, 0);
-  const totalAyat      = surahStats.reduce((a, s) => a + s.total, 0);
-  const totalPerfect   = surahStats.reduce((a, s) => a + s.perfect, 0);
-  const totalQuestion  = surahStats.reduce((a, s) => a + s.questioned, 0);
-
-  const selStats = selectedSns.size > 0
-    ? surahStats.filter(s => selectedSns.has(s.sn))
-    : null;
-
-  const getAyatColor = (sn, an) => {
-    const ld = learnData[`${sn}:${an}`];
-    if (!ld?.learned) return { bg: 'var(--surface3)', border: 'var(--border)' };
-    const attempts = ld.writingAttempts || [];
-    const best = attempts.length ? Math.max(...attempts.map(a => a.score)) : 0;
-    const qs = ld.questionScores || {};
-    const qKeys = Object.keys(qs);
-    const allQCorrect = qKeys.length > 0 && qKeys.every(k => { const arr = qs[k]; return arr[arr.length-1] === 1; });
-    if (best === 100 && allQCorrect) return { bg: 'rgba(201,168,76,.4)',  border: 'var(--gold)' };
-    if (best === 100)                return { bg: 'rgba(76,175,129,.35)', border: 'var(--green)' };
-    if (best >= 70)                  return { bg: 'rgba(62,184,160,.25)', border: 'var(--teal)' };
-    if (best > 0)                    return { bg: 'rgba(229,115,115,.2)', border: 'var(--red)' };
-    return { bg: 'rgba(255,255,255,.05)', border: 'var(--border2)' };
-  };
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:14, padding:'12px 0' }}>
-      {/* Global stats */}
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-        {[
-          { label:'TOTAL CORAN', val:totalAyat, color:'var(--text3)' },
-          { label:'APPRIS',      val:totalLearned,  color:'var(--teal2)' },
-          { label:'PARFAITS',    val:totalPerfect,  color:'var(--green)' },
-          { label:'QUESTIONS',   val:totalQuestion, color:'var(--gold)' },
-        ].map(({ label, val, color }) => (
-          <div key={label} style={{ flex:1, minWidth:70, padding:'8px 10px', borderRadius:8,
-            background:'var(--surface2)', border:'1px solid var(--border)', textAlign:'center' }}>
-            <div style={{ fontSize:14, fontFamily:"'Cinzel',serif", color, fontWeight:600 }}>{val}</div>
-            <div style={{ fontSize:7, letterSpacing:1.5, color:'var(--text3)', marginTop:2 }}>{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Progress bar overall */}
-      <div style={{ height:6, borderRadius:3, background:'var(--surface3)', overflow:'hidden' }}>
-        <div style={{ height:'100%', width:`${totalAyat ? (totalLearned/totalAyat*100) : 0}%`,
-          background:'linear-gradient(90deg,var(--teal),var(--green))', borderRadius:3, transition:'width .5s' }} />
-      </div>
-
-      {/* Selection controls */}
-      <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
-        <div style={{ fontSize:8, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>
-          {selectedSns.size > 0 ? `${selectedSns.size} SOURATE${selectedSns.size>1?'S':''} S√âLECTIONN√âE${selectedSns.size>1?'S':''}` : 'CLIQUER POUR S√âLECTIONNER'}
-        </div>
-        <button onClick={selectAll} style={{ fontSize:7, letterSpacing:1, padding:'2px 8px', borderRadius:10,
-          border:'1px solid var(--teal)', background:'rgba(62,184,160,.08)', color:'var(--teal)',
-          fontFamily:"'Cinzel',serif", cursor:'pointer' }}>TOUT</button>
-        {selectedSns.size > 0 && <button onClick={clearAll} style={{ fontSize:7, letterSpacing:1, padding:'2px 8px', borderRadius:10,
-          border:'1px solid var(--border2)', background:'transparent', color:'var(--text3)',
-          fontFamily:"'Cinzel',serif", cursor:'pointer' }}>EFFACER</button>}
-      </div>
-
-      {/* Surah grid */}
-      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-        {surahStats.map(({ sn, name, ename, total, learned, perfect }) => {
-          const pct = total ? learned / total : 0;
-          const pctP = total ? perfect / total : 0;
-          const selected = selectedSns.has(sn);
-          const hovered  = hoveredSn === sn;
-          const si = surahs.find(s => s.number === sn);
-          const ayahs = si ? Array.from({ length: si.numberOfAyahs }, (_, i) => i + 1) : [];
-
-          return (
-            <div key={sn}
-              style={{ borderRadius:9, border:`1px solid ${selected ? 'var(--teal)' : 'var(--border)'}`,
-                background: selected ? 'rgba(62,184,160,.04)' : 'var(--surface2)', overflow:'hidden',
-                transition:'border-color .15s' }}>
-              {/* Surah header row */}
-              <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', cursor:'pointer' }}
-                onClick={() => { toggleSn(sn); ensurePageData(sn); }}
-                onMouseEnter={() => { setHoveredSn(sn); ensurePageData(sn); }}
-                onMouseLeave={() => setHoveredSn(null)}>
-                <div style={{ width:16, height:16, borderRadius:4, flexShrink:0, transition:'all .15s',
-                  background: selected ? 'var(--teal)' : 'transparent',
-                  border:`1px solid ${selected ? 'var(--teal)' : 'var(--border2)'}`,
-                  display:'flex', alignItems:'center', justifyContent:'center',
-                  fontSize:10, color:'var(--surface)' }}>{selected ? '‚úì' : ''}</div>
-                <div style={{ fontSize:8, color:'var(--text3)', fontFamily:"'Cinzel',serif", letterSpacing:1, width:18, flexShrink:0 }}>{sn}</div>
-                <div style={{ flex:1 }}>
-                  {/* Mini progress bar */}
-                  <div style={{ height:4, borderRadius:2, background:'var(--surface3)', overflow:'hidden', marginBottom:2 }}>
-                    <div style={{ height:'100%', width:`${pct*100}%`, borderRadius:2,
-                      background: pct === 1 ? 'var(--gold)' : 'var(--teal)', transition:'width .3s' }} />
-                  </div>
-                  {pctP > 0 && <div style={{ height:2, borderRadius:1, background:'var(--surface3)', overflow:'hidden' }}>
-                    <div style={{ height:'100%', width:`${pctP*100}%`, borderRadius:1, background:'var(--green)' }} />
-                  </div>}
-                </div>
-                <div style={{ fontSize:8, color: learned > 0 ? 'var(--teal2)' : 'var(--text3)',
-                  fontFamily:"'Cinzel',serif", letterSpacing:.5, minWidth:40, textAlign:'right' }}>
-                  {learned}/{total}
-                </div>
-                <div style={{ fontFamily:"'Amiri Quran',serif", fontSize:16, color:'var(--gold)', direction:'rtl' }}>{name}</div>
-              </div>
-
-              {/* Ayat heatmap ‚Äî compact inline with page badges */}
-              {(selected || hovered) && (() => {
-                const pd = pageData[sn];
-                // Build sorted flat list with page boundary markers
-                const items = []; // {type:'badge'|'cell', page?, an?}
-                if (pd && pd.length > 0) {
-                  let lastPage = null;
-                  pd.forEach(({ numberInSurah: an, page }) => {
-                    if (page !== lastPage) { items.push({ type:'badge', page }); lastPage = page; }
-                    items.push({ type:'cell', an });
-                  });
-                } else {
-                  ayahs.forEach(an => items.push({ type:'cell', an }));
-                }
-                return (
-                  <div style={{ borderTop:'1px solid var(--border)', padding:'8px 12px',
-                    display:'flex', flexWrap:'wrap', gap:2, alignItems:'center' }}>
-                    {items.map((item, i) => item.type === 'badge'
-                      ? <span key={`p${item.page}-${i}`} style={{
-                          fontSize:6, letterSpacing:1, color:'#c878ff',
-                          fontFamily:"'Cinzel',serif", padding:'0 3px',
-                          borderLeft: i > 0 ? '1px solid rgba(200,120,255,.2)' : 'none',
-                          marginLeft: i > 0 ? 3 : 0, lineHeight:'18px',
-                        }}>P{item.page}</span>
-                      : (() => {
-                          const { bg, border } = getAyatColor(sn, item.an);
-                          return (
-                            <div key={item.an}
-                              title={`${ename} ${item.an}`}
-                              onClick={e => { e.stopPropagation(); onNavigate?.('quran', sn, item.an); }}
-                              style={{ width:18, height:18, borderRadius:3, cursor:'pointer',
-                                background:bg, border:`1px solid ${border}`,
-                                display:'flex', alignItems:'center', justifyContent:'center',
-                                fontSize:6, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>
-                              {item.an}
-                            </div>
-                          );
-                        })()
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div style={{ display:'flex', gap:10, flexWrap:'wrap', padding:'4px 0' }}>
-        {[
-          { bg:'rgba(201,168,76,.4)',  border:'var(--gold)',    label:'Ma√Ætris√© (√©crit + questions)' },
-          { bg:'rgba(76,175,129,.35)',border:'var(--green)',   label:'Parfait (√©criture)' },
-          { bg:'rgba(62,184,160,.25)',border:'var(--teal)',    label:'Bon (‚â•70%)' },
-          { bg:'rgba(229,115,115,.2)',border:'var(--red)',     label:'√Ä revoir' },
-          { bg:'rgba(255,255,255,.05)',border:'var(--border2)',label:'Non r√©vis√©' },
-          { bg:'var(--surface3)',     border:'var(--border)',  label:'Non appris' },
-        ].map(({ bg, border, label }) => (
-          <div key={label} style={{ display:'flex', alignItems:'center', gap:4 }}>
-            <div style={{ width:10, height:10, borderRadius:2, background:bg, border:`1px solid ${border}`, flexShrink:0 }} />
-            <span style={{ fontSize:7, color:'var(--text3)', letterSpacing:.5 }}>{label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Selected surahs actions */}
-      {selectedSns.size > 0 && selStats && (
-        <div style={{ padding:'14px', background:'var(--surface2)', border:'1px solid var(--teal)',
-          borderRadius:10, display:'flex', flexDirection:'column', gap:10 }}>
-          <div style={{ fontSize:8, letterSpacing:2, color:'var(--teal2)', fontFamily:"'Cinzel',serif" }}>
-            S√âLECTION ‚Äî {selStats.reduce((a,s)=>a+s.learned,0)} ayats appris
-          </div>
-          <div style={{ display:'flex', gap:6 }}>
-            <div style={{ flex:1, textAlign:'center' }}>
-              <div style={{ fontSize:12, color:'var(--green)', fontFamily:"'Cinzel',serif" }}>{selStats.reduce((a,s)=>a+s.perfect,0)}</div>
-              <div style={{ fontSize:7, color:'var(--text3)', letterSpacing:1 }}>PARFAITS</div>
-            </div>
-            <div style={{ flex:1, textAlign:'center' }}>
-              <div style={{ fontSize:12, color:'var(--gold)', fontFamily:"'Cinzel',serif" }}>{selStats.reduce((a,s)=>a+s.questioned,0)}</div>
-              <div style={{ fontSize:7, color:'var(--text3)', letterSpacing:1 }}>QUESTIONS</div>
-            </div>
-            <div style={{ flex:1, textAlign:'center' }}>
-              <div style={{ fontSize:12, color:'var(--teal2)', fontFamily:"'Cinzel',serif" }}>
-                {selStats.reduce((a,s)=>a+s.learned,0)}/{selStats.reduce((a,s)=>a+s.total,0)}
-              </div>
-              <div style={{ fontSize:7, color:'var(--text3)', letterSpacing:1 }}>APPRIS/TOTAL</div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ‚îÄ‚îÄ‚îÄ RevisionPage ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Page d√©di√©e √† la r√©vision de tous les ayats marqu√©s comme appris.
-// Pour chaque ayat, on propose l'exercice d'√©criture (RevisionEcritureMode)
-// directement sur cette page, sans ouvrir le submenu.
-function RevisionPage({ learnData, surahs, setLData, onNavigate, initialFilter }) {
-  const { surahNum: urlSn, rangeFrom: urlRf, rangeTo: urlRt, qIdx: urlQIdx } = useParams();
-  const [filter, setFilter]         = useState(initialFilter || "carte"); // "carte" | "questions"
-  const [openSurahs, setOpenSurahs] = useState({});    // surahNum ‚Üí bool
-  const [openAyat,   setOpenAyat]   = useState(null);  // "surahNum:ayatNum" | null
-  const [ayatTab,    setAyatTab]    = useState({});    // key -> "ecriture" | "tajweed"
-
-  // ‚îÄ‚îÄ Data repair: close orphaned reviseHistory entries ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  // Ayats where toRevise=false but reviseHistory still has an item with endDate
-  // null (left open by a code path that cleared toRevise without closing it).
   useEffect(() => {
-    const now = new Date().toISOString();
-    Object.entries(learnData).forEach(([key, val]) => {
-      if (val?.toRevise) return; // still active, nothing to fix
-      const hist = val?.reviseHistory;
-      if (!hist || hist.length === 0) return;
-      const openIdx = hist.findIndex(e => !e.endDate);
-      if (openIdx === -1) return;
-      const [sn, an] = key.split(":").map(Number);
-      setLData(sn, an, d => {
-        const h = [...(d.reviseHistory || [])];
-        const idx = h.findIndex(e => !e.endDate);
-        if (idx === -1 || d.toRevise) return { ...d }; // already fixed / re-activated meanwhile ‚Äî never return the frozen object as-is
-        h[idx] = { ...h[idx], endDate: now };
-        return { ...d, reviseHistory: h };
-      });
+    const unsub = onAuthStateChanged(firebaseAuth, (u) => {
+      setUser(u);
+      setAuthReady(true);
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Construire la liste des ayats appris group√©s par sourate
-  const learnedBySurah = useMemo(() => {
-    const map = {};
-    Object.entries(learnData).forEach(([key, val]) => {
-      if (!val?.learned) return;
-      const [sn, an] = key.split(":").map(Number);
-      if (!map[sn]) map[sn] = [];
-      map[sn].push({ surahNum: sn, ayatNum: an, ld: val });
-    });
-    // Sort by surah then ayat
-    Object.values(map).forEach(arr => arr.sort((a, b) => a.ayatNum - b.ayatNum));
-    return map;
-  }, [learnData]);
-
-  const surahNums = Object.keys(learnedBySurah).map(Number).sort((a, b) => a - b);
-
-  // Stats globales
-  const totalLearned = useMemo(() => Object.values(learnedBySurah).reduce((s, a) => s + a.length, 0), [learnedBySurah]);
-  const totalPerfect = useMemo(() =>
-    Object.values(learnedBySurah).flat().filter(({ ld }) => {
-      const attempts = ld.writingAttempts || [];
-      return attempts.some(a => a.score === 100);
-    }).length,
-  [learnedBySurah]);
-  const totalNone = useMemo(() =>
-    Object.values(learnedBySurah).flat().filter(({ ld }) => !(ld.writingAttempts?.length > 0)).length,
-  [learnedBySurah]);
-  const totalToRevise = useMemo(() =>
-    Object.values(learnData).filter(ld => ld?.toRevise).length,
-  [learnData]);
-
-  // Filtrage par statut de r√©vision
-  const getRevStatus = (ld) => {
-    const attempts = ld.writingAttempts || [];
-    if (attempts.length === 0) return "none";
-    const best = Math.max(...attempts.map(a => a.score));
-    if (best === 100) return "perfect";
-    if (best >= 70)  return "good";
-    return "bad";
-  };
-
-  const filteredBySurah = useMemo(() => {
-    if (filter === "all") return learnedBySurah;
-    if (filter === "toRevise") {
-      // Include ALL ayats (learned or not) that have toRevise flag
-      const out = {};
-      Object.entries(learnData).forEach(([key, val]) => {
-        if (!val?.toRevise) return;
-        const [sn, an] = key.split(":").map(Number);
-        if (!out[sn]) out[sn] = [];
-        out[sn].push({ surahNum: sn, ayatNum: an, ld: val });
-      });
-      Object.values(out).forEach(arr => arr.sort((a, b) => a.ayatNum - b.ayatNum));
-      return out;
-    }
-    const out = {};
-    surahNums.forEach(sn => {
-      const arr = (learnedBySurah[sn] || []).filter(({ ld }) => {
-        const st = getRevStatus(ld);
-        if (filter === "perfect") return st === "perfect";
-        if (filter === "todo")    return st === "bad" || st === "good";
-        if (filter === "none")    return st === "none";
-        return true;
-      });
-      if (arr.length > 0) out[sn] = arr;
-    });
-    return out;
-  }, [filter, learnedBySurah, surahNums, learnData]);
-
-  const filteredSurahNums = Object.keys(filteredBySurah).map(Number).sort((a, b) => a - b);
-
-  const toggleSurah = (sn) => setOpenSurahs(p => ({ ...p, [sn]: !p[sn] }));
-  const toggleAyat  = (key) => setOpenAyat(p => p === key ? null : key);
-
-  // R√©cup√©rer le texte de l'ayat depuis l'API (cache local)
-  const [ayatTexts, setAyatTexts] = useState({}); // "sn:an" ‚Üí text
-  useEffect(() => {
-    const missing = [];
-    filteredSurahNums.forEach(sn => {
-      (filteredBySurah[sn] || []).forEach(({ ayatNum }) => {
-        const k = `${sn}:${ayatNum}`;
-        if (!ayatTexts[k]) missing.push({ sn, an: ayatNum, k });
-      });
-    });
-    if (missing.length === 0) return;
-    // Group by surah to batch
-    const bySurah = {};
-    missing.forEach(({ sn, an, k }) => { if (!bySurah[sn]) bySurah[sn] = []; bySurah[sn].push({ an, k }); });
-    Object.entries(bySurah).forEach(([sn, items]) => {
-      fetchSurahDefault(Number(sn))
-        .then(ayahs => {
-          if (!ayahs?.length) return;
-          const newTexts = {};
-          ayahs.forEach(a => {
-            const k = `${sn}:${a.numberInSurah}`;
-            newTexts[k] = a.text;
-          });
-          setAyatTexts(p => ({ ...p, ...newTexts }));
-        })
-        .catch(() => {});
-    });
-  }, [filteredSurahNums.join(",")]);
-
-  // Faux objet ayat pour RevisionEcritureMode
-  const makeAyat = (sn, an) => ({ numberInSurah: an, text: ayatTexts[`${sn}:${an}`] || "" });
-
-  const statusColor = {
-    perfect: "var(--green)",
-    good:    "var(--gold)",
-    bad:     "var(--red)",
-    none:    "var(--border2)",
-  };
-  const statusLabel = {
-    perfect: "‚úì PARFAIT",
-    good:    "~ BON",
-    bad:     "‚úó √Ä REVOIR",
-    none:    "‚Äî NON R√âVIS√â",
-  };
-
-  return (
-    <div className="rev-page">
-      {/* Header */}
-      <div className="rev-header-block">
-        <div>
-          <div className="rev-title">‚úè R√âVISION</div>
-          <div className="rev-subtitle">EXERCICES D'√âCRITURE ¬∑ AYATS APPRIS</div>
-        </div>
-        <div className="rev-stats-row">
-          <div className="rev-stat-pill">
-            <div className="rev-stat-num" style={{ color:"var(--gold2)" }}>{totalLearned}</div>
-            <div className="rev-stat-label">APPRIS</div>
-          </div>
-          <div className="rev-stat-pill">
-            <div className="rev-stat-num" style={{ color:"var(--green)" }}>{totalPerfect}</div>
-            <div className="rev-stat-label">PARFAITS</div>
-          </div>
-          <div className="rev-stat-pill">
-            <div className="rev-stat-num" style={{ color:"var(--text3)" }}>{totalNone}</div>
-            <div className="rev-stat-label">√Ä D√âBUTER</div>
-          </div>
-          {totalToRevise > 0 && (
-          <div className="rev-stat-pill" style={{ cursor:'pointer' }} onClick={() => setFilter("toRevise")}>
-            <div className="rev-stat-num" style={{ color:"var(--gold2)" }}>{totalToRevise}</div>
-            <div className="rev-stat-label">üîñ R√âVISER</div>
-          </div>
-          )}
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="rev-filter-row">
-        {[
-          { id:"carte",    label:"üìä CARTE" },
-          { id:"questions",label:"‚ùì QUESTIONS" },
-        ].map(f => (
-          <button key={f.id}
-            className={`rev-filter-btn${filter===f.id?" active":""}`}
-            onClick={() => setFilter(f.id)}>
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {filter === "carte" && (
-        <LearningMapPage surahs={surahs} learnData={learnData} onNavigate={onNavigate} />
-      )}
-
-      {filter === "questions" && (
-        <QuestionsModePage surahs={surahs} learnData={learnData} setLData={setLData}
-          initialSurahNum={urlSn ? Number(urlSn) : undefined}
-          initialRangeFrom={urlRf || undefined}
-          initialRangeTo={urlRt || undefined}
-          initialQIdx={urlQIdx ? Number(urlQIdx) : 0}
-        />
-      )}
-
-      {filter !== "questions" && filter !== "carte" && totalLearned === 0 && (
-        <div className="rev-empty">
-          Aucun ayat appris.<br />
-          Marquez des ayats comme appris dans l'onglet CORAN pour les retrouver ici.
-        </div>
-      )}
-
-      {filter !== "questions" && filter !== "carte" && totalLearned > 0 && filteredSurahNums.length === 0 && (
-        <div className="rev-empty">Aucun ayat dans ce filtre.</div>
-      )}
-
-      {/* Surah blocks */}
-      {(filter !== "questions" && filter !== "carte") && filteredSurahNums.map(sn => {
-        const surahInfo  = surahs.find(s => s.number === sn);
-        const ayatItems  = filteredBySurah[sn] || [];
-        const isOpen     = !!openSurahs[sn];
-        const perfectCnt = ayatItems.filter(({ ld }) => getRevStatus(ld) === "perfect").length;
-        const pct        = ayatItems.length > 0 ? Math.round((perfectCnt / ayatItems.length) * 100) : 0;
-
-        return (
-          <div key={sn} className="rev-surah-block">
-            {/* Surah header */}
-            <div className="rev-surah-header" onClick={() => toggleSurah(sn)}>
-              <div className="rev-surah-num">{sn}</div>
-              <div className="rev-surah-name">
-                <div className="rev-surah-name-ar">{surahInfo?.name ?? `Sourate ${sn}`}</div>
-                <div className="rev-surah-name-en">{surahInfo?.englishName?.toUpperCase() ?? ""}</div>
-                <div className="rev-progress-bar" style={{ width: 120, marginTop: 6 }}>
-                  <div className="rev-progress-fill" style={{ width:`${pct}%`, background: pct===100?"var(--green)":pct>0?"var(--gold)":"var(--border2)" }} />
-                </div>
-              </div>
-              <div className="rev-surah-badge" style={{ borderColor: pct===100?"var(--green)":"var(--border2)", color: pct===100?"var(--green)":"var(--text3)" }}>
-                {perfectCnt}/{ayatItems.length} PARFAIT{perfectCnt!==1?"S":""}
-              </div>
-              <span style={{ fontSize:12, color:"var(--text3)", marginLeft:4 }}>{isOpen ? "‚ñ≤" : "‚ñº"}</span>
-            </div>
-
-            {/* Ayat list */}
-            {isOpen && (
-              <div className="rev-ayat-grid">
-                {ayatItems.map(({ surahNum: sNum, ayatNum: an, ld }) => {
-                  const key      = `${sNum}:${an}`;
-                  const status   = getRevStatus(ld);
-                  const attempts = ld.writingAttempts || [];
-                  const best     = attempts.length > 0 ? Math.max(...attempts.map(a => a.score)) : null;
-                  const isExpanded = openAyat === key;
-                  const text     = ayatTexts[key];
-                  const ayat     = makeAyat(sNum, an);
-
-                  return (
-                    <div key={key} className={`rev-ayat-card${isExpanded?" rev-ayat-active":""}`}>
-                      {/* Card header */}
-                      <div className="rev-ayat-card-header" onClick={() => toggleAyat(key)}>
-                        <div className="rev-ayat-num">{an}</div>
-                        <div className="rev-ayat-text-preview">{text || "‚Ä¶"}</div>
-                        <div className={`rev-ayat-score-badge ${status}`}>
-                          {best !== null ? `${best}%` : statusLabel[status]}
-                        </div>
-                        <button
-                          onClick={e => { e.stopPropagation(); onNavigate(sNum, an); }}
-                          className="btn-small"
-                          style={{ fontSize:8, padding:"2px 7px", marginLeft:4, flexShrink:0 }}
-                          title="Aller √† cet ayat dans le Coran"
-                        >‚Üó</button>
-                        <span style={{ fontSize:11, color:"var(--text3)", marginLeft:4 }}>{isExpanded?"‚ñ≤":"‚ñº"}</span>
-                      </div>
-
-                      {/* Expanded: tab switcher + exercise */}
-                      {isExpanded && (
-                        <div className="rev-ayat-body">
-                          {/* Tab buttons */}
-                          <div style={{ display:"flex", gap:6, marginBottom:10 }}>
-                            {[["ecriture","‚úè R√âVISION"],["tajweed","‚ò™ TAJWEED"]].map(([t,l]) => (
-                              <button key={t}
-                                onClick={e => { e.stopPropagation(); setAyatTab(p => ({ ...p, [key]: t })); }}
-                                style={{ padding:"4px 12px", fontSize:8, letterSpacing:1, fontFamily:"'Cinzel',serif",
-                                  cursor:"pointer", borderRadius:6, border:"none",
-                                  borderBottom:"2px solid " + ((ayatTab[key]||"ecriture")===t ? "var(--teal)" : "transparent"),
-                                  background:(ayatTab[key]||"ecriture")===t ? "rgba(62,184,160,.1)" : "transparent",
-                                  color:(ayatTab[key]||"ecriture")===t ? "var(--teal2)" : "var(--text3)",
-                                  transition:"all .15s" }}>
-                                {l}
-                              </button>
-                            ))}
-                          </div>
-                          {text
-                            ? <div className="rev-ayat-arabic">{text}</div>
-                            : <div style={{ fontSize:9, color:"var(--text3)", letterSpacing:1 }}>Chargement‚Ä¶</div>
-                          }
-                          {text && (ayatTab[key]||"ecriture") === "ecriture" && (
-                            <RevisionEcritureMode
-                              ayat={ayat}
-                              surahNum={sNum}
-                              ld={ld}
-                              setLData={setLData}
-                            />
-                          )}
-                          {text && (ayatTab[key]||"ecriture") === "tajweed" && (
-                            <TajweedExercice ayat={ayat} />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ‚îÄ‚îÄ‚îÄ MemoriseMode ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Mastery helpers (exported so surah list can use them)
-// Non-letter Quranic marks that must never count as a "letter" for mastery:
-// waqf/pause signs, sajda place marker, rub-el-hizb marker, end-of-ayah marker,
-// small Quranic annotation ligatures (U+06D6‚ÄìU+06ED), Arabic-Indic digits
-// (juz/hizb/ayah numerals) and ornate ayah-number parentheses.
-const QURAN_NON_LETTER_RE = /[\u06D6-\u06ED\u0660-\u0669\u06F0-\u06F9\uFD3E\uFD3F]/;
-
-// Split Arabic text into grapheme clusters (letter + harakat), skipping
-// non-letter Quranic annotation marks (juz/hizb/sajda/pause/etc.) entirely ‚Äî
-// they neither form their own cluster nor attach to a neighbouring letter.
-function splitArabicClusters(text) {
-  if (!text) return [];
-  const clusters = [];
-  const base = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
-  const diac = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/;
-  let cur = '';
-  for (const ch of text) {
-    if (QURAN_NON_LETTER_RE.test(ch)) { continue; } // ignore entirely ‚Äî not a letter or harakat
-    if (ch === ' ') { if (cur) { clusters.push(cur); cur = ''; } }
-    else if (base.test(ch)) { if (cur) clusters.push(cur); cur = ch; }
-    else if (diac.test(ch) && cur) { cur += ch; }
-    else { if (cur) clusters.push(cur); cur = ch; }
-  }
-  if (cur) clusters.push(cur);
-  return clusters;
-}
-
-function computeMastery(ld, ayatText) {
-  const toRevise    = ld?.toRevise;
-  const words       = ayatText ? ayatText.split(' ').filter(Boolean) : [];
-  const totalLetters = words.reduce((s, w) => s + splitArabicClusters(w).length, 0);
-
-  if (totalLetters === 0) return 0;
-
-  let reviseLetters = 0;
-  if (toRevise === true) {
-    reviseLetters = totalLetters;
-  } else if (toRevise && typeof toRevise === 'object') {
-    const chars    = toRevise.chars   || {};
-    const revWords = toRevise.words   || [];
-    reviseLetters += Object.values(chars).reduce((s, arr) => s + arr.length, 0);
-    revWords.forEach(wi => {
-      if (!chars[wi] && words[wi]) reviseLetters += splitArabicClusters(words[wi]).length;
-    });
-  }
-
-  const knownLetters = Math.max(0, totalLetters - reviseLetters);
-  return Math.round(knownLetters / totalLetters * 100);
-}
-
-function masteryColor(pct) {
-  if (pct >= 80) return 'var(--green)';
-  if (pct >= 50) return 'var(--gold)';
-  if (pct > 0)   return 'var(--teal2)';
-  return 'var(--border2)';
-}
-
-function MasteryBar({ pct, size = 'sm' }) {
-  const h = size === 'sm' ? 3 : 5;
-  return (
-    <div style={{ width:'100%', height:h, background:'var(--surface3)', borderRadius:h, overflow:'hidden' }}>
-      <div style={{ height:'100%', width:pct+'%', background:masteryColor(pct), borderRadius:h, transition:'width .4s' }} />
-    </div>
-  );
-}
-
-function MasteryBadge({ pct }) {
-  return (
-    <span style={{ fontSize:8, letterSpacing:1, padding:'2px 7px', borderRadius:10,
-      border:'1px solid '+masteryColor(pct), color:masteryColor(pct),
-      fontFamily:"'Cinzel',serif", flexShrink:0 }}>
-      {pct}%
-    </span>
-  );
-}
-
-function MasteryDebug({ ld, ayatText }) {
-  const [open, setOpen] = React.useState(false);
-  if (!ld) return null;
-
-  const toRevise     = ld.toRevise;
-  const words        = ayatText ? ayatText.split(' ').filter(Boolean) : [];
-  const totalLetters = words.reduce((s, w) => s + splitArabicClusters(w).length, 0);
-
-  let reviseLetters = 0;
-  if (toRevise === true) {
-    reviseLetters = totalLetters;
-  } else if (toRevise && typeof toRevise === 'object') {
-    const chars    = toRevise.chars   || {};
-    const revWords = toRevise.words   || [];
-    reviseLetters += Object.values(chars).reduce((s, arr) => s + arr.length, 0);
-    revWords.forEach(wi => { if (!chars[wi] && words[wi]) reviseLetters += splitArabicClusters(words[wi]).length; });
-  }
-
-  const knownLetters = Math.max(0, totalLetters - reviseLetters);
-  const mastery      = totalLetters > 0 ? Math.round(knownLetters / totalLetters * 100) : 0;
-
-  const rows = [
-    { label:'üìù Lettres totales',     val: `${totalLetters}`,                                          color:'var(--text2)' },
-    { label:'üîñ Lettres √† r√©viser',   val: `${reviseLetters}`,                                         color: reviseLetters > 0 ? '#ff7eb3' : 'var(--text3)' },
-    { label:'‚úÖ Lettres connues',     val: `${knownLetters}`,                                           color:'var(--teal2)' },
-    { label:'üéØ MA√éTRISE',            val: `${knownLetters} / ${totalLetters} = ${mastery}%`,           color: masteryColor(mastery), bold: true },
-  ];
-
-  return (
-    <div style={{ marginTop:6 }}>
-      <button onClick={() => setOpen(v => !v)}
-        style={{ fontSize:7, letterSpacing:1.5, padding:'3px 10px', borderRadius:6, cursor:'pointer',
-          fontFamily:"'Cinzel',serif", background:'transparent',
-          border:`1px solid ${open ? masteryColor(mastery) : 'rgba(255,255,255,.1)'}`,
-          color: open ? masteryColor(mastery) : 'var(--text3)', transition:'all .2s' }}>
-        üî¨ DEBUG MA√éTRISE {open ? '‚ñ≤' : '‚ñº'}
-      </button>
-      {open && (
-        <div style={{ marginTop:6, background:'var(--surface2)', border:'1px solid var(--border)',
-          borderRadius:9, overflow:'hidden', fontSize:8 }}>
-          {rows.map(({ label, val, color, bold }) => (
-            <div key={label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
-              padding:'6px 12px', borderBottom:'1px solid rgba(255,255,255,.04)' }}>
-              <span style={{ color:'var(--text3)', letterSpacing:.5 }}>{label}</span>
-              <span style={{ color, fontWeight: bold ? 700 : 400, fontFamily: bold ? "'Cinzel',serif" : 'inherit',
-                fontSize: bold ? 11 : 8 }}>{val}</span>
-            </div>
-          ))}
-          <div style={{ padding:'8px 12px' }}>
-            <MasteryBar pct={mastery} size="lg" />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ‚îÄ‚îÄ‚îÄ TextAnswerInput ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Text input widget for QuestionsMode non-reconstruct questions.
-// - User types their answer in Arabic (or any text)
-// - On submit: auto-grades by comparing normalised strings
-// - Shows diff word by word on wrong answer
-// - onReveal(true|false|null): passes auto-grade result; null = user skipped
-function TextAnswerInput({ q, onReveal }) {
-  const { activeInput } = useArabicKeyboard();
-  const [value,    setValue]    = React.useState('');
-  const [graded,   setGraded]   = React.useState(null); // null | true | false
-  const [diffWords, setDiffWords] = React.useState(null); // [{word, correct}]
-  const inputRef = React.useRef(null);
-
-  React.useEffect(() => { inputRef.current?.focus(); }, []);
-
-  const submit = () => {
-    if (!value.trim()) { onReveal(null); return; }
-    const userNorm = normalizeArabic(value.trim());
-    const corrNorm = normalizeArabic(q.answer.trim());
-    const correct  = userNorm === corrNorm;
-    // Build word-level diff for wrong answers
-    if (!correct) {
-      const userWords = value.trim().split(/\s+/);
-      const corrWords = q.answer.trim().split(/\s+/);
-      const diff = corrWords.map((w, i) => ({
-        word: w,
-        correct: i < userWords.length && normalizeArabic(userWords[i]) === normalizeArabic(w),
-      }));
-      setDiffWords(diff);
-    }
-    setGraded(correct);
-  };
-
-  const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (graded === null) submit(); }
-  };
-
-  const borderColor = graded === true  ? 'var(--green)'
-                    : graded === false ? 'var(--red)'
-                    : 'var(--border)';
-
-  return (
-    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:10 }}>
-      {/* Input field */}
-      <div style={{ position:'relative' }}>
-        <textarea
-          ref={inputRef}
-          value={value}
-          onChange={e => { if (graded === null) setValue(e.target.value); }}
-          onKeyDown={handleKey}
-          disabled={graded !== null}
-          placeholder="ŸÉÿ™ÿ® ÿ•ÿ¨ÿßÿ®ÿ™ŸÉ‚Ä¶"
-          rows={2}
-          onFocus={e => { if (activeInput) activeInput.current = e.target; }}
-          style={{
-            width:'100%', boxSizing:'border-box',
-            padding:'10px 12px', fontSize:18,
-            fontFamily:"'Amiri Quran',serif",
-            direction:'rtl', textAlign:'right',
-            background:'var(--surface3)',
-            border:'1.5px solid ' + borderColor,
-            borderRadius:10, color:'var(--text)',
-            resize:'none', outline:'none',
-            transition:'border-color .25s',
-            lineHeight:1.8,
-          }}
-        />
-        {graded !== null && (
-          <div style={{ position:'absolute', top:8, left:10, fontSize:16,
-            color: graded ? 'var(--green)' : 'var(--red)' }}>
-            {graded ? '‚úì' : '‚úó'}
-          </div>
-        )}
-      </div>
-
-      {/* Word-level diff on wrong answer */}
-      {graded === false && diffWords && (
-        <div style={{ padding:'8px 12px', background:'rgba(224,90,90,.06)',
-          border:'1px solid var(--red)', borderRadius:8, direction:'rtl' }}>
-          <div style={{ fontSize:8, letterSpacing:2, color:'var(--text3)',
-            direction:'ltr', marginBottom:6 }}>MOT PAR MOT</div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-            {diffWords.map((d, i) => (
-              <span key={i} style={{
-                fontFamily:"'Amiri Quran',serif", fontSize:16,
-                padding:'2px 8px', borderRadius:6,
-                background: d.correct ? 'rgba(76,175,129,.18)' : 'rgba(224,90,90,.18)',
-                border:'1px solid ' + (d.correct ? 'var(--green)' : 'var(--red)'),
-                color:'var(--text)',
-              }}>{d.word}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Action buttons */}
-      {graded === null ? (
-        <div style={{ display:'flex', gap:8 }}>
-          <button onClick={() => onReveal(null)}
-            style={{ padding:'7px 14px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-              background:'transparent', border:'1px solid var(--border2)', color:'var(--text3)',
-              borderRadius:8, cursor:'pointer' }}>
-            üëÅ VOIR
-          </button>
-          <button onClick={submit} disabled={!value.trim()}
-            style={{ flex:1, padding:'9px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-              background: value.trim() ? 'rgba(201,168,76,.12)' : 'transparent',
-              border:'1px solid ' + (value.trim() ? 'var(--gold)' : 'var(--border2)'),
-              color: value.trim() ? 'var(--gold2)' : 'var(--text3)',
-              borderRadius:8, cursor: value.trim() ? 'pointer' : 'default', transition:'all .2s' }}>
-            VALIDER
-          </button>
-        </div>
-      ) : (
-        <button onClick={() => onReveal(graded)}
-          style={{ padding:'9px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-            background: graded ? 'rgba(76,175,129,.12)' : 'rgba(224,90,90,.08)',
-            border:'1px solid ' + (graded ? 'var(--green)' : 'var(--red)'),
-            color: graded ? 'var(--green)' : 'var(--red)',
-            borderRadius:8, cursor:'pointer', width:'100%' }}>
-          {graded ? '‚úì CORRECT ‚Äî VOIR LE VERSET' : '‚úó INCORRECT ‚Äî VOIR LE VERSET'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-
-// ‚îÄ‚îÄ‚îÄ Arabic word categorizer for ReconstructQuestion ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Returns a category label for each Arabic word (approximate, pattern-based).
-const ARABIC_WORD_CATS = (() => {
-  const n = (s) => {
-    if (!s) return '';
-    return s
-      .replace(/[Ÿ±ÿ£ÿ•ÿ¢ÿ§ÿ¶ÿ°Ÿî]/g, 'ÿß')   // alef variants
-      .replace(/€å/g, 'Ÿä')
-      .replace(/[\u0670\u0640]/g, '')  // dagger alef + tatweel
-      .replace(/[ŸÄŸã-Ÿüÿê-ÿö€ñ-€≠\u0870-\u08FF\uFE70-\uFEFF]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
-
-  // Divine names / Allah set
-  const ALLAH = new Set(['ÿßŸÑŸÑŸá','ÿßŸÑÿ±ÿ≠ŸÖŸÜ','ÿßŸÑÿ±ÿ≠ŸäŸÖ','ÿßŸÑŸÖŸÑŸÉ','ÿßŸÑŸÇÿØŸàÿ≥','ÿßŸÑÿ≥ŸÑÿßŸÖ','ÿßŸÑŸÖÿ§ŸÖŸÜ','ÿßŸÑŸÖŸáŸäŸÖŸÜ','ÿßŸÑÿπÿ≤Ÿäÿ≤','ÿßŸÑÿ¨ÿ®ÿßÿ±','ÿßŸÑŸÖÿ™ŸÉÿ®ÿ±','ÿßŸÑÿÆÿßŸÑŸÇ','ÿßŸÑÿ®ÿßÿ±ÿ¶','ÿßŸÑŸÖÿµŸàÿ±','ÿßŸÑÿ∫ŸÅŸàÿ±','ÿßŸÑŸÇŸáÿßÿ±','ÿ±ÿ®ŸÉ','ÿ±ÿ®Ÿá','ÿ±ÿ®ŸÜÿß','ÿ±ÿ®ŸÉŸÖ','ÿ•ŸÑŸáŸÉŸÖ','ÿ•ŸÑŸáŸÜÿß','ÿ•ŸÑŸáŸáŸÖ']);
-
-  // Proper nouns ‚Äî all names of persons, peoples, places, books, angels cited in the Quran
-  // Each entry in its base form; normalize() handles diacritics/alef variants at match time
-  const PROPER = new Set([
-    // ‚îÄ‚îÄ Prophets (25 named in Quran) ‚îÄ‚îÄ
-    'ÿ¢ÿØŸÖ','ÿßÿØÿ±Ÿäÿ≥','ŸÜŸàÿ≠','ŸáŸàÿØ','ÿµÿßŸÑÿ≠','ÿßÿ®ÿ±ÿßŸáŸäŸÖ','ŸÑŸàÿ∑','ÿßÿ≥ŸÖÿßÿπŸäŸÑ','ÿßÿ≥ÿ≠ÿßŸÇ','ŸäÿπŸÇŸàÿ®',
-    'ŸäŸàÿ≥ŸÅ','ÿ¥ÿπŸäÿ®','ŸÖŸàÿ≥Ÿâ','Ÿáÿßÿ±ŸàŸÜ','ÿØÿßŸàÿØ','ÿ≥ŸÑŸäŸÖÿßŸÜ','ÿßŸäŸàÿ®','ŸäŸàŸÜÿ≥','ÿ∞ŸàÿßŸÑŸÉŸÅŸÑ',
-    'ÿßŸÑŸäÿßÿ≥','ÿßŸÑŸäÿ≥ÿπ','ÿ≤ŸÉÿ±Ÿäÿß','Ÿäÿ≠ŸäŸâ','ÿπŸäÿ≥Ÿâ','ŸÖÿ≠ŸÖÿØ','ÿßÿ≠ŸÖÿØ',
-    // ‚îÄ‚îÄ Other Quranic persons ‚îÄ‚îÄ
-    'ŸÖÿ±ŸäŸÖ','ÿπŸÖÿ±ÿßŸÜ','ŸÅÿ±ÿπŸàŸÜ','ŸáÿßŸÖÿßŸÜ','ŸÇÿßÿ±ŸàŸÜ','ÿ¨ÿßŸÑŸàÿ™','ÿ∑ÿßŸÑŸàÿ™','ŸÑŸÇŸÖÿßŸÜ',
-    'ÿ∞ŸàÿßŸÑŸÇÿ±ŸÜŸäŸÜ','ÿßŸÑÿπÿ≤Ÿäÿ≤','ÿßÿØÿ±Ÿäÿ≥','ÿÆÿ∂ÿ±','ÿßÿ®ŸÑŸäÿ≥','ÿπÿ≤Ÿäÿ±','ŸÑŸÇŸÖÿßŸÜ',
-    'ÿ≠ÿßÿ®ŸäŸÑ','ŸÇÿßÿ®ŸäŸÑ','ÿßŸÑŸäÿ≥ÿπ','ÿßÿ±ŸÖ','ÿπÿßÿØ','ÿ´ŸÖŸàÿØ',
-    // ‚îÄ‚îÄ Angels ‚îÄ‚îÄ
-    'ÿ¨ÿ®ÿ±ŸäŸÑ','ÿ¨ÿ®ÿ±ÿßÿ¶ŸäŸÑ','ŸÖŸäŸÉÿßÿ¶ŸäŸÑ','ŸÖŸäŸÉÿßŸÑ','ÿßÿ≥ÿ±ÿßŸÅŸäŸÑ','Ÿáÿßÿ±Ÿàÿ™','ŸÖÿßÿ±Ÿàÿ™','ŸÖÿßŸÑŸÉ',
-    // ‚îÄ‚îÄ Peoples / tribes ‚îÄ‚îÄ
-    'ÿßÿ≥ÿ±ÿßÿ¶ŸäŸÑ','ŸäŸáŸàÿØ','ŸÜÿµÿßÿ±Ÿâ','ŸÇÿ±Ÿäÿ¥','ÿßÿπÿ±ÿßÿ®','ÿßÿµÿ≠ÿßÿ®','ŸÅÿ±ÿπŸàŸÜ',
-    'ÿπÿßÿØ','ÿ´ŸÖŸàÿØ','ŸÖÿØŸäŸÜ','ÿ≥ÿ®ÿß','Ÿäÿßÿ¨Ÿàÿ¨','ŸÖÿßÿ¨Ÿàÿ¨',
-    // ‚îÄ‚îÄ Places ‚îÄ‚îÄ
-    'ŸÖŸÉÿ©','ÿ®ŸÉÿ©','ŸÖÿØŸäŸÜÿ©','Ÿäÿ´ÿ±ÿ®','ÿ∑Ÿàÿ±','ÿ≥ŸäŸÜÿßÿ°','ÿ®ÿßÿ®ŸÑ','ŸÖÿµÿ±','ÿßŸÑÿßÿ≠ŸÇÿßŸÅ',
-    'ÿßŸÑÿ±ÿ≥','ÿßŸäŸÉÿ©','ÿ≠ÿ¨ÿ±','ÿ®ÿØÿ±','ÿ≠ŸÜŸäŸÜ','ÿßŸÑÿßÿ≠ÿ≤ÿßÿ®','ÿ™ÿ®ŸàŸÉ',
-    // ‚îÄ‚îÄ Revealed books ‚îÄ‚îÄ
-    'ÿ™Ÿàÿ±ÿßÿ©','ÿßŸÜÿ¨ŸäŸÑ','ÿ≤ÿ®Ÿàÿ±','ÿµÿ≠ŸÅ',
-    // ‚îÄ‚îÄ Surahs referenced by name in Quran ‚îÄ‚îÄ
-    'ÿßŸÑŸÅÿ±ŸÇÿßŸÜ',
-  ]);
-
-  // Pronouns
-  const PRON = new Set(['ŸáŸà','ŸáŸä','ŸáŸÖ','ŸáŸÜ','ÿ£ŸÜÿ™','ÿ£ŸÜÿ™ŸÖ','ÿ£ŸÜÿ™ŸÜ','ŸÜÿ≠ŸÜ','ÿßŸÜÿß','ÿßŸÜÿß','ŸáŸÖÿß','ŸáŸÖÿß','ÿßŸÜÿ™ŸÖÿß']);
-
-  // Particles / prepositions / conjunctions / negations
-  const PART = new Set(['ŸÅŸä','ŸÖŸÜ','ÿ•ŸÑŸâ','ÿπŸÑŸâ','ÿπŸÜ','ÿ®','ŸÑ','ŸÉ','Ÿà','ŸÅ','ÿ´ŸÖ','ÿ£ŸÜ','ÿ£ŸÜŸë','ÿ•ŸÜ','ÿ•ŸÜŸë','ÿßŸÜ','ÿßŸÜ','ŸÑÿß','ŸÖÿß','ŸÑŸÜ','ŸÑŸÖ','ŸÑŸÖÿß','ÿ•ÿ∞ÿß','ÿßÿ∞ÿß','ÿ•ÿ∞','ÿßÿ∞','ÿ≠ÿ™Ÿâ','ŸÉŸä','ŸÑŸÉŸä','ŸÇÿØ','ÿ≥ŸàŸÅ','ÿ≥','ŸáŸÑ','ÿ£ŸÖ','ÿ£Ÿà','ÿßŸÖ','ÿ®ŸÑ','ŸÑŸà','ŸÑŸàŸÑÿß','ŸàŸÑŸà','ŸÉŸÖ','ÿßŸÑÿ∞Ÿä','ÿßŸÑÿ™Ÿä','ÿßŸÑÿ∞ŸäŸÜ','ÿßŸÑŸÑŸàÿßÿ™Ÿä','ŸÖÿßÿ∞ÿß','ŸÖÿ™Ÿâ','ŸÉŸäŸÅ','ÿßŸäŸÜ','ÿ£ŸäŸÜ','ŸÑŸÖÿßÿ∞ÿß','ÿπŸÜÿØ','ŸÖÿπ','ÿ®ŸäŸÜ','ÿØŸàŸÜ','ÿ™ÿ≠ÿ™','ŸÅŸàŸÇ','ÿÆŸÑŸÅ','ÿßŸÖÿßŸÖ','Ÿàÿ±ÿßÿ°','ÿ≠ŸàŸÑ','Ÿàÿ≥ÿ∑','ÿ∫Ÿäÿ±','ÿ≥ŸàŸâ','ÿ•ŸÑÿß','ÿßŸÑÿß','ŸÑŸäÿ≥','ŸÑŸÉŸÜ','ŸÑŸÉŸÜŸë','ŸÑŸÉŸÜ','ÿßŸÖÿß','ÿ•ŸÖÿß','ÿ≠ŸäŸÜ','ÿπŸÜÿØŸÖÿß','ÿ®ÿπÿØ','ŸÇÿ®ŸÑ','ŸÖŸÜÿ∞']);
-
-  // Pre-normalize all sets so classify(w) matches normalized input
-  const ALLAH_N  = new Set([...ALLAH].map(n));
-  const PROPER_N = new Set([...PROPER].map(n));
-  // Also build sorted array by length desc for prefix matching
-  const PROPER_LIST = [...PROPER_N].sort((a,b) => b.length - a.length);
-  const PRON_N   = new Set([...PRON].map(n));
-  const PART_N   = new Set([...PART].map(n));
-
-  const isProperNoun = (w) => {
-    if (PROPER_N.has(w)) return true;
-    // Strip definite article and check
-    const wNoAl = w.startsWith('ÿßŸÑ') ? w.slice(2) : w;
-    if (PROPER_N.has(wNoAl)) return true;
-    // Strip vocative prefix Ÿäÿß (appears as Ÿäÿß or merged as first letters Ÿäÿß/Ÿäÿß)
-    const wNoYa = w.startsWith('Ÿäÿß') ? w.slice(2) : w.startsWith('ŸäŸÄÿß') ? w.slice(3) : w;
-    if (wNoYa !== w && PROPER_N.has(wNoYa)) return true;
-    const wNoYaNoAl = wNoYa.startsWith('ÿßŸÑ') ? wNoYa.slice(2) : wNoYa;
-    if (wNoYaNoAl !== wNoYa && PROPER_N.has(wNoYaNoAl)) return true;
-    // Check if word starts with a proper noun (handles case suffixes like ÿ™ÿßŸÜÿå ŸäŸÜÿå ŸàŸÜ)
-    for (const p of PROPER_LIST) {
-      if (p.length >= 3 && w.startsWith(p) && (w.length - p.length) <= 3) return true;
-      if (p.length >= 3 && wNoAl.startsWith(p) && (wNoAl.length - p.length) <= 3) return true;
-      if (p.length >= 3 && wNoYa.startsWith(p) && (wNoYa.length - p.length) <= 3) return true;
-    }
-    return false;
-  };
-
-  const classify = (rawWord) => {
-    const w = n(rawWord);
-    if (!w) return 'autre';
-
-    // Allah / divine names first
-    if (ALLAH_N.has(w) || w === 'ÿßŸÑŸÑŸá') return 'allah';
-
-    // Proper nouns (before other noun rules)
-    if (isProperNoun(w)) return 'propre';
-
-    // Pronouns
-    if (PRON_N.has(w)) return 'pronom';
-
-    // Particles (single letter or known set)
-    if (PART_N.has(w) || (w.length === 1 && /[ŸÅŸàÿ®ŸÑŸÉ]/.test(w))) return 'particule';
-
-    // Verb detection: starts with Ÿä / ÿ™ / ŸÜ / ÿß (ÿ£ normalized) (mudari') or matches madi pattern
-    // Strip object pronoun suffixes before testing: ŸáŸÖÿåŸáŸÜÿåŸáÿßÿåŸÉŸÖÿåŸÉŸÜÿåŸÜÿßÿåŸÜŸäÿåŸÉÿåŸá
-    const wNoSuffix = w.replace(/(ŸáŸÖ|ŸáŸÜ|Ÿáÿß|ŸÉŸÖ|ŸÉŸÜ|ŸÜÿß|ŸÜŸä|Ÿàÿß|ŸÉ|Ÿá)$/, '');
-    const verbRe = /^[Ÿäÿ™ŸÜ][ÿß-Ÿäÿ°-ÿ∫]{2,9}$/;
-    const verbReA = /^[ÿß][ŸÜ][ÿß-Ÿäÿ°-ÿ∫]{1,7}$/; // ÿ£ŸéŸÜ... imperative/form IV
-    if (!w.startsWith('ÿßŸÑ') && (verbRe.test(wNoSuffix) || verbRe.test(w) || verbReA.test(wNoSuffix) || verbReA.test(w))) return 'verbe';
-    if (!w.startsWith('ÿßŸÑ') && w.length === 3) return 'verbe';
-    if (!w.startsWith('ÿßŸÑ') && !/^[Ÿäÿ™ŸÜÿßÿ£]/.test(w)) {
-      const madiM = w.match(/(ÿ™ŸÖ|ÿ™ŸÜ|ÿ™ŸÖÿß|ÿ™ÿß|ŸÜÿß|Ÿàÿß|ÿ™)$/);
-      if (madiM && (w.length - madiM[0].length) >= 2) return 'verbe';
-    }
-    // Words with definite article ÿßŸÑ = noun
-    if (w.startsWith('ÿßŸÑ')) return 'nom';
-
-    // Tanwin endings (indefinite nouns): ÿßŸÜÿå ŸàŸÜÿå ŸäŸÜ
-    if (/[ÿßŸÜ]$/.test(w) || w.endsWith('ŸàŸÜ') || w.endsWith('ŸäŸÜ')) return 'nom';
-
-    // Masdar / noun patterns: ŸÅŸêÿπŸéÿßŸÑÿå ŸÅŸèÿπŸèŸàŸÑÿå ŸÅŸéÿßÿπŸêŸÑÿå ŸÖŸéŸÅŸíÿπŸèŸàŸÑ
-    if (/^[ŸÖŸÅ]/.test(w) && w.length >= 4) return 'nom';
-
-    // Default: if longer word, treat as noun; short = particule
-    return w.length <= 2 ? 'particule' : 'nom';
-  };
-
-  return { classify };
-})();
-
-const Q_CAT_LABELS = {
-  allah:    { label: 'ÿßŸÑŸÑŸá',   color: 'rgba(201,168,76,.18)',   border: 'var(--gold)',   text: 'var(--gold2)' },
-  propre:   { label: 'ÿ£ÿπŸÑÿßŸÖ',  color: 'rgba(100,160,255,.16)',  border: '#64a0ff',       text: '#64a0ff' },
-  verbe:    { label: 'ÿ£ŸÅÿπÿßŸÑ',  color: 'rgba(62,184,160,.14)',   border: 'var(--teal)',   text: 'var(--teal2)' },
-  nom:      { label: 'ÿ£ÿ≥ŸÖÿßÿ°',  color: 'rgba(111,207,154,.14)',  border: 'var(--green)',  text: 'var(--green)' },
-  pronom:   { label: 'ÿ∂ŸÖÿßÿ¶ÿ±',  color: 'rgba(200,120,255,.14)',  border: '#c878ff',       text: '#c878ff' },
-  particule:{ label: 'ÿ≠ÿ±ŸàŸÅ',   color: 'rgba(224,90,90,.12)',    border: 'var(--red)',    text: 'var(--red)' },
-  autre:    { label: 'ÿ£ÿÆÿ±Ÿâ',   color: 'var(--surface3)',        border: 'var(--border2)',text: 'var(--text3)' },
-};
-
-// ‚îÄ‚îÄ‚îÄ ReconstructQuestion ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function ReconstructQuestion({ q, ayatTexts, selectedSn, onAnswer }) {
-  const pool = React.useMemo(() => {
-    const real = [...q.words];
-    const impostorCandidates = [];
-    Object.entries(ayatTexts).forEach(([k, txt]) => {
-      if (!k.startsWith(selectedSn + ':')) return;
-      const num = parseInt(k.split(':')[1]);
-      if (num === q.ayatNum) return;
-      splitArabicWords(txt).forEach(w => {
-        if (!real.includes(w)) impostorCandidates.push(w);
-      });
-    });
-    const impostorCount = Math.min(8, Math.max(2, Math.round(real.length * 0.4)));
-    const impostors = [...impostorCandidates].sort(() => Math.random() - 0.5).slice(0, impostorCount);
-    return [...real, ...impostors].sort(() => Math.random() - 0.5);
-  }, [q.ayatNum]);
-
-  // Classify each pool word and group by category
-  const poolByCategory = React.useMemo(() => {
-    const realSet = new Set(q.words);
-    const groups = {};
-    pool.forEach((word, idx) => {
-      const cat = ARABIC_WORD_CATS.classify(word);
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push({ word, idx, isReal: realSet.has(word) });
-    });
-    const ORDER = ['allah', 'propre', 'verbe', 'nom', 'pronom', 'particule', 'autre'];
-    return ORDER.filter(c => groups[c]).map(c => ({ cat: c, items: groups[c] }));
-  }, [pool]);
-
-  const [picked,     setPicked]     = React.useState([]);
-  const [graded,     setGraded]     = React.useState(null);
-  const [shake,      setShake]      = React.useState(false);
-  const [poolSearch, setPoolSearch] = React.useState('');
-  // Cursor = insertion position (0 = before first word, picked.length = after last)
-  const [cursor, setCursor] = React.useState(0);
-
-  // Per-position status after grading
-  const wordStatuses = React.useMemo(() => {
-    if (graded === null) return null;
-    return picked.map((poolIdx, pos) => {
-      if (pos >= q.words.length) return 'extra';
-      return normalizeArabic(pool[poolIdx]) === normalizeArabic(q.words[pos]) ? 'correct' : 'wrong';
-    });
-  }, [graded, picked, pool]);
-
-  // Per-pool-index status after grading
-  const poolStatuses = React.useMemo(() => {
-    if (graded === null) return {};
-    const m = {};
-    picked.forEach((poolIdx, pos) => {
-      m[poolIdx] = pos < q.words.length && normalizeArabic(pool[poolIdx]) === normalizeArabic(q.words[pos]) ? 'correct' : 'wrong';
-    });
-    return m;
-  }, [graded, picked]);
-
-  // Insert word at cursor position
-  const pickWord = (idx) => {
-    if (graded !== null || picked.includes(idx)) return;
-    setPicked(p => { const n = [...p]; n.splice(cursor, 0, idx); return n; });
-    setCursor(c => c + 1);
-  };
-  // Remove word at pos, move cursor there
-  const unpick = (pos) => {
-    if (graded !== null) return;
-    setPicked(p => p.filter((_, i) => i !== pos));
-    setCursor(pos);
-  };
-  // Click placed word sets cursor after it (for insertion next to it)
-  const moveCursor = (pos) => {
-    if (graded !== null) return;
-    setCursor(pos + 1);
-  };
-  const submit = () => {
-    if (graded !== null) return;
-    const composed = picked.map(i => pool[i]).join(' ').trim();
-    const correct = normalizeArabic(composed) === normalizeArabic(q.answer.trim());
-    setGraded(correct);
-    if (!correct) { setShake(true); setTimeout(() => setShake(false), 600); }
-  };
-  const reset = () => { setPicked([]); setGraded(null); setShake(false); setCursor(0); };
-
-  const isComplete = picked.length === q.words.length;
-  const borderColor = graded === true ? 'var(--green)' : graded === false ? 'var(--red)' : 'var(--border)';
-
-  return (
-    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:12 }}>
-
-      {/* Composition zone ‚Äî coloured per-word after grading */}
-      <div style={{ minHeight:60, padding:'10px 12px', background:'var(--surface3)',
-        borderRadius:10, border:'1.5px solid ' + borderColor,
-        direction:'rtl', display:'flex', flexWrap:'wrap', alignItems:'center', gap:6,
-        transition:'border-color .3s', animation: shake ? 'shake .5s' : 'none' }}>
-        {picked.length === 0 ? (
-          <React.Fragment>
-            {graded === null && (
-              <span style={{ display:'inline-block', width:2, height:22, background:'var(--teal)',
-                borderRadius:1, animation:'blink 1s step-end infinite', verticalAlign:'middle', marginLeft:2 }} />
-            )}
-            <span style={{ fontSize:9, color:'var(--text3)', letterSpacing:1, direction:'ltr', marginRight:6 }}>
-              Tape les mots dans l&apos;ordre‚Ä¶
-            </span>
-          </React.Fragment>
-        ) : (
-          <React.Fragment>
-            {/* Cursor at position 0 */}
-            {graded === null && cursor === 0 && (
-              <span style={{ display:'inline-block', width:2, height:22, background:'var(--teal)',
-                borderRadius:1, animation:'blink 1s step-end infinite', verticalAlign:'middle' }} />
-            )}
-            {picked.map((poolIdx, pos) => {
-              const status = wordStatuses?.[pos];
-              const bg   = status === 'correct' ? 'rgba(76,175,129,.22)'
-                         : status              ? 'rgba(224,90,90,.22)'
-                         : 'rgba(62,184,160,.18)';
-              const bord = status === 'correct' ? '1px solid var(--green)'
-                         : status              ? '1px solid var(--red)'
-                         : '1px solid var(--teal2)';
-              const icon = status === 'correct' ? ' ‚úì' : status ? ' ‚úó' : '';
-              return (
-                <React.Fragment key={pos}>
-                  <span
-                    onClick={() => { if (graded === null) { cursor === pos + 1 ? unpick(pos) : moveCursor(pos); } }}
-                    title={graded === null ? (cursor === pos + 1 ? 'Cliquer pour retirer' : 'Cliquer pour placer ici') : ''}
-                    style={{ fontFamily:"'Amiri Quran',serif", fontSize:18, padding:'3px 10px',
-                      borderRadius:7, border:bord, background:bg, color:'var(--text)',
-                      cursor: graded === null ? 'pointer' : 'default', transition:'all .2s',
-                      outline: graded === null && cursor === pos + 1 ? '2px solid var(--teal)' : 'none' }}>
-                    {pool[poolIdx]}
-                    {icon && <sup style={{ fontSize:10, marginRight:2,
-                      color: status === 'correct' ? 'var(--green)' : 'var(--red)' }}>{icon}</sup>}
-                  </span>
-                  {/* Cursor after this word */}
-                  {graded === null && cursor === pos + 1 && (
-                    <span style={{ display:'inline-block', width:2, height:22, background:'var(--teal)',
-                      borderRadius:1, animation:'blink 1s step-end infinite', verticalAlign:'middle' }} />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </React.Fragment>
-        )}
-      </div>
-
-      {/* Word pool ‚Äî categorized always; labels + status colors only after grading */}
-      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-        {/* Search bar (before grading only) */}
-        {graded === null && (
-          <div style={{ position:'relative' }}>
-            <input
-              value={poolSearch}
-              onChange={e => setPoolSearch(e.target.value)}
-              placeholder="ÿ®ÿ≠ÿ´‚Ä¶"
-              style={{ width:'100%', boxSizing:'border-box',
-                padding:'7px 30px 7px 10px', fontSize:15,
-                fontFamily:"'Amiri Quran',serif", direction:'rtl',
-                background:'var(--surface3)', border:'1px solid var(--border2)',
-                borderRadius:8, color:'var(--text)', outline:'none' }}
-            />
-            {poolSearch && (
-              <button onClick={() => setPoolSearch('')}
-                style={{ position:'absolute', left:8, top:'50%', transform:'translateY(-50%)',
-                  background:'none', border:'none', color:'var(--text3)',
-                  fontSize:12, cursor:'pointer', padding:0, lineHeight:1 }}>‚úï</button>
-            )}
-          </div>
-        )}
-        {poolByCategory.filter(({ cat }) => cat !== 'autre').map(({ cat, items }) => {
-          const meta = Q_CAT_LABELS[cat] || Q_CAT_LABELS.autre;
-          const visibleItems = items.filter(({ word }) =>
-            !poolSearch || normalizeArabic(word).includes(normalizeArabic(poolSearch))
-          );
-          if (visibleItems.length === 0) return null;
-          return (
-            <div key={cat}>
-              {/* Category label ‚Äî always shown */}
-              <div style={{ fontSize:7, letterSpacing:2,
-                color: graded !== null ? meta.text : 'var(--text3)', opacity: graded !== null ? .85 : .5,
-                fontFamily:"'Cinzel',serif", marginBottom:3, paddingRight:4,
-                textAlign:'right', direction:'rtl', transition:'color .3s' }}>
-                {meta.label}
-              </div>
-              <div style={{ display:'flex', flexWrap:'wrap', gap:4, direction:'rtl' }}>
-                {visibleItems.map(({ word, idx, isReal }) => {
-                  const used      = picked.includes(idx);
-                  const status    = graded !== null ? poolStatuses[idx] : null;
-                  const isMissing = graded === false && !used && isReal;
-                  // Before grading: uniform teal style. After: coloured by status.
-                  const bg   = graded === null
-                    ? (used ? 'var(--surface3)' : meta.color)
-                    : status === 'correct' ? 'rgba(76,175,129,.18)'
-                    : status === 'wrong'   ? 'rgba(224,90,90,.15)'
-                    : isMissing            ? 'rgba(201,168,76,.15)'
-                    : used                 ? 'var(--surface3)'
-                    : meta.color;
-                  const bord = graded === null
-                    ? (used ? 'var(--border2)' : meta.border)
-                    : status === 'correct' ? 'var(--green)'
-                    : status === 'wrong'   ? 'var(--red)'
-                    : isMissing            ? 'var(--gold)'
-                    : used                 ? 'var(--border2)'
-                    : meta.border;
-                  return (
-                    <button key={idx}
-                      onClick={() => pickWord(idx)}
-                      disabled={used || graded !== null}
-                      style={{ fontFamily:"'Amiri Quran',serif", fontSize:17, padding:'5px 12px',
-                        borderRadius:8, border:'1px solid ' + bord, background:bg,
-                        color:'var(--text)',
-                        opacity: used && graded === null ? 0.3 : used && !status ? 0.3 : 1,
-                        cursor: used || graded !== null ? 'default' : 'pointer',
-                        direction:'rtl', transition:'all .2s',
-                        boxShadow: isMissing ? '0 0 0 2px rgba(201,168,76,.3)' : 'none' }}>
-                      {word}
-                      {isMissing && <sup style={{ fontSize:9, color:'var(--gold)', marginRight:2 }}> ‚úï</sup>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-        {/* Impostors (autre) ‚Äî shown ungrouped, no label, muted */}
-        {(() => {
-          const autreGroup = poolByCategory.find(({ cat }) => cat === 'autre');
-          if (!autreGroup) return null;
-          const visibleItems = autreGroup.items.filter(({ word }) =>
-            !poolSearch || normalizeArabic(word).includes(normalizeArabic(poolSearch))
-          );
-          if (visibleItems.length === 0) return null;
-          return (
-            <div style={{ display:'flex', flexWrap:'wrap', gap:4, direction:'rtl', opacity:.7 }}>
-              {visibleItems.map(({ word, idx }) => {
-                const used   = picked.includes(idx);
-                const status = graded !== null ? poolStatuses[idx] : null;
-                const bg   = graded === null
-                  ? (used ? 'var(--surface3)' : 'rgba(62,184,160,.10)')
-                  : status === 'correct' ? 'rgba(76,175,129,.18)'
-                  : status === 'wrong'   ? 'rgba(224,90,90,.15)'
-                  : used ? 'var(--surface3)' : 'rgba(62,184,160,.10)';
-                const bord = graded === null
-                  ? (used ? 'var(--border2)' : 'var(--teal)')
-                  : status === 'correct' ? 'var(--green)'
-                  : status === 'wrong'   ? 'var(--red)'
-                  : used ? 'var(--border2)' : 'var(--teal)';
-                return (
-                  <button key={idx} onClick={() => pickWord(idx)}
-                    disabled={used || graded !== null}
-                    style={{ fontFamily:"'Amiri Quran',serif", fontSize:17, padding:'5px 12px',
-                      borderRadius:8, border:'1px solid ' + bord, background:bg,
-                      color:'var(--text)', opacity: used ? 0.25 : 1,
-                      cursor: used || graded !== null ? 'default' : 'pointer',
-                      direction:'rtl', transition:'all .2s' }}>
-                    {word}
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Correct order ‚Äî shown only on wrong answer */}
-      {graded === false && (
-        <div style={{ padding:'8px 12px', background:'rgba(201,168,76,.07)',
-          border:'1px solid var(--gold)', borderRadius:8, direction:'rtl' }}>
-          <div style={{ fontSize:8, letterSpacing:2, color:'var(--text3)',
-            direction:'ltr', marginBottom:6 }}>ORDRE CORRECT</div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-            {q.words.map((w, i) => {
-              const userWord = picked[i] !== undefined ? pool[picked[i]] : null;
-              const ok = userWord != null && normalizeArabic(userWord) === normalizeArabic(w);
-              return (
-                <span key={i} style={{ fontFamily:"'Amiri Quran',serif", fontSize:17,
-                  padding:'3px 10px', borderRadius:7,
-                  background: ok ? 'rgba(76,175,129,.15)' : 'rgba(201,168,76,.18)',
-                  border:'1px solid ' + (ok ? 'var(--green)' : 'var(--gold)'),
-                  color:'var(--text)' }}>
-                  {w}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
-      {graded === null ? (
-        <div style={{ display:'flex', gap:8 }}>
-          <button onClick={reset} disabled={picked.length === 0}
-            style={{ padding:'7px 14px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-              background:'transparent', border:'1px solid var(--border2)', color:'var(--text3)',
-              borderRadius:8, cursor:'pointer', opacity: picked.length===0 ? 0.4 : 1 }}>
-            ‚Ü∫
-          </button>
-          <button onClick={submit} disabled={!isComplete}
-            style={{ flex:1, padding:'9px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-              background: isComplete ? 'rgba(201,168,76,.12)' : 'transparent',
-              border:'1px solid ' + (isComplete ? 'var(--gold)' : 'var(--border2)'),
-              color: isComplete ? 'var(--gold2)' : 'var(--text3)',
-              borderRadius:8, cursor: isComplete ? 'pointer' : 'default', transition:'all .2s' }}>
-            VALIDER ({picked.length}/{q.words.length})
-          </button>
-        </div>
-      ) : (
-        <div style={{ display:'flex', gap:8 }}>
-          {!graded && (
-            <button onClick={reset}
-              style={{ padding:'7px 14px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-                background:'transparent', border:'1px solid var(--teal)', color:'var(--teal)',
-                borderRadius:8, cursor:'pointer' }}>
-              ‚Ü∫ R√âESSAYER
-            </button>
-          )}
-          <button onClick={() => onAnswer(graded)}
-            style={{ flex:1, padding:'9px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-              background: graded ? 'rgba(76,175,129,.12)' : 'rgba(224,90,90,.08)',
-              border:'1px solid ' + (graded ? 'var(--green)' : 'var(--red)'),
-              color: graded ? 'var(--green)' : 'var(--red)',
-              borderRadius:8, cursor:'pointer' }}>
-            SUIVANT ‚Üí
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-// ‚îÄ‚îÄ‚îÄ QAyatPlayer ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Interactive ayat display for QuestionsMode:
-// - Letter-by-letter highlight driven by local RAF currentMs
-// - Click word ‚Üí play from that word's timestamp
-// - Parts shown as colored chips ‚Üí click to play that range
-// - Full-ayat play/pause button
-function QAyatPlayer({ ayatText, timestamps, parts, audioUrl, learnData }) {
-  const [currentMs,  setCurrentMs]  = React.useState(0);
-  const [isPlaying,  setIsPlaying]  = React.useState(false);
-  const [rangeEnd,   setRangeEnd]   = React.useState(null);  // ms ‚Äî null = play to end
-  const [rangeStart, setRangeStart] = React.useState(null);
-  const audioRef = React.useRef(null);
-  const rafRef   = React.useRef(null);
-  const containerRef = React.useRef(null);
-
-  const PART_COLORS  = ["rgba(201,168,76,.22)","rgba(62,184,160,.18)","rgba(111,207,154,.18)","rgba(224,90,90,.15)","rgba(200,120,255,.15)"];
-  const PART_BORDERS = ["var(--gold)","var(--teal)","var(--green)","var(--red)","#c878ff"];
-
-  // RAF loop ‚Äî updates char highlight via DOM
-  const startRaf = () => {
-    const tick = () => {
-      const a = audioRef.current;
-      if (!a) return;
-      const ms = a.currentTime * 1000;
-      setCurrentMs(ms);
-      // Apply highlight via DOM
-      if (containerRef.current && timestamps?.words) {
-        const spans = containerRef.current.querySelectorAll('.char-span');
-        let si = 0;
-        timestamps.words.forEach(word => {
-          const chars = fixChars(word.chars || []);
-          chars.forEach(c => {
-            if (si < spans.length) {
-              const active = ms >= c.start && ms <= c.end;
-              const done   = ms > c.end && ms > 0 && (rangeStart == null || c.end > rangeStart);
-              const el = spans[si];
-              if (active) { el.classList.add('char-active'); el.classList.remove('char-done'); }
-              else if (done) { el.classList.add('char-done'); el.classList.remove('char-active'); }
-              else { el.classList.remove('char-active','char-done'); }
-              si++;
-            }
-          });
-        });
-      }
-      // Stop at range end
-      if (rangeEnd !== null && ms >= rangeEnd) {
-        a.pause();
-        setIsPlaying(false);
-        setRangeEnd(null);
-        setRangeStart(null);
-        cancelAnimationFrame(rafRef.current);
-        return;
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(tick);
-  };
-
-  const stopRaf = () => { cancelAnimationFrame(rafRef.current); };
-
-  // Clear highlight
-  const clearHighlight = () => {
-    if (containerRef.current) {
-      containerRef.current.querySelectorAll('.char-span').forEach(el => {
-        el.classList.remove('char-active','char-done');
-      });
-    }
-  };
-
-  React.useEffect(() => () => { stopRaf(); audioRef.current?.pause(); }, []);
-
-  // Play from a specific time, with optional end time
-  const playFrom = (startMs, endMs = null) => {
-    const a = audioRef.current;
-    if (!a || !audioUrl) return;
-    if (a.src !== audioUrl) a.src = audioUrl;
-    a.currentTime = startMs / 1000;
-    setRangeEnd(endMs);
-    setRangeStart(startMs);
-    a.play().then(() => { setIsPlaying(true); startRaf(); }).catch(() => {});
-  };
-
-  const toggleFull = () => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (isPlaying) {
-      a.pause(); setIsPlaying(false); stopRaf();
-    } else {
-      playFrom(0, null);
-    }
-  };
-
-  // Click a word ‚Üí play from that word's start to word's end
-  const onWordClick = (wi) => {
-    if (!timestamps?.words?.[wi]) return;
-    const word = timestamps.words[wi];
-    const chars = fixChars(word.chars || []);
-    if (!chars.length) return;
-    const startMs = chars[0].start;
-    const endMs   = chars[chars.length - 1].end;
-    playFrom(startMs, endMs);
-  };
-
-  // Click a part ‚Üí play its word range
-  const onPartClick = (part) => {
-    if (!timestamps?.words || !part.wordIndices?.length) return;
-    const firstW = timestamps.words[part.wordIndices[0]];
-    const lastW  = timestamps.words[part.wordIndices[part.wordIndices.length - 1]];
-    if (!firstW || !lastW) return;
-    const firstChars = fixChars(firstW.chars || []);
-    const lastChars  = fixChars(lastW.chars || []);
-    if (!firstChars.length || !lastChars.length) return;
-    playFrom(firstChars[0].start, lastChars[lastChars.length - 1].end);
-  };
-
-  // Build word-to-part map
-  const wordPartMap = {};
-  (parts || []).forEach((p, pi) => p.wordIndices?.forEach(wi => { wordPartMap[wi] = pi; }));
-
-  const hasTs = !!timestamps?.words;
-  const hasParts = (parts || []).length > 0;
-
-  return (
-    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:10 }}>
-      <audio ref={audioRef} style={{ display:'none' }}
-        onEnded={() => { setIsPlaying(false); setRangeEnd(null); setRangeStart(null); stopRaf(); clearHighlight(); }}
-        onPause={() => { if (!audioRef.current?.ended) { setIsPlaying(false); stopRaf(); } }}
-      />
-
-      {/* Arabic text + optional play button */}
-      <div style={{ padding:'12px 14px', background:'var(--surface3)', borderRadius:10,
-        border:'1px solid var(--border2)', direction:'rtl', textAlign:'right',
-        position:'relative' }}>
-        {/* Play/pause full ayat */}
-        {audioUrl && (
-          <button onClick={toggleFull}
-            style={{ position:'absolute', top:8, left:8, width:30, height:30, borderRadius:'50%',
-              border:'none', background: isPlaying && rangeEnd === null ? 'rgba(62,184,160,.3)' : 'rgba(62,184,160,.1)',
-              color:'var(--teal2)', fontSize:13, cursor:'pointer',
-              display:'flex', alignItems:'center', justifyContent:'center',
-              boxShadow: isPlaying && rangeEnd === null ? '0 0 0 2px rgba(62,184,160,.4)' : 'none',
-              transition:'all .2s', zIndex:1 }}>
-            {isPlaying && rangeEnd === null ? '‚è∏' : '‚ñ∂'}
-          </button>
-        )}
-        {/* Clickable words or plain text */}
-        {hasTs ? (
-          <div className="ayat-arabic" ref={containerRef}>
-            {timestamps.words.map((word, wi) => {
-              const pi = wordPartMap[wi];
-              const part = pi !== undefined ? (parts || [])[pi] : null;
-              const chars = fixChars(word.chars || []);
-              const isActivePart = isPlaying && rangeStart !== null && part &&
-                chars.length > 0 && rangeStart <= chars[0].start;
-              const bg     = part ? PART_COLORS[pi % PART_COLORS.length]  : 'transparent';
-              const border = part ? `1px solid ${PART_BORDERS[pi % PART_BORDERS.length]}` : 'none';
-              return (
-                <span key={wi}
-                  onClick={() => audioUrl && onWordClick(wi)}
-                  style={{
-                    background: isActivePart ? 'rgba(62,184,160,.28)' : bg,
-                    border, borderRadius: part ? 5 : 0,
-                    padding: part ? '1px 4px' : 0,
-                    margin: part ? '1px' : 0,
-                    cursor: audioUrl ? 'pointer' : 'default',
-                    display:'inline',
-                    transition:'background .15s',
-                  }}>
-                  {chars.map((c, ci) => (
-                    <span key={ci} className="char-span">{c.char}</span>
-                  ))}
-                  {wi < timestamps.words.length - 1 ? ' ' : ''}
-                </span>
-              );
-            })}
-          </div>
-        ) : (
-          <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:20, color:'var(--text)', lineHeight:2 }}>
-            {ayatText}
-          </span>
-        )}
-      </div>
-
-      {/* Parts as clickable chips */}
-      {hasParts && (
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, direction:'rtl' }}>
-          {(parts || []).map((part, pi) => (
-            <button key={part.id ?? pi}
-              onClick={() => audioUrl ? onPartClick(part) : null}
-              style={{ fontFamily:"'Amiri Quran',serif", fontSize:15,
-                padding:'4px 10px', borderRadius:7,
-                background: PART_COLORS[pi % PART_COLORS.length],
-                border:`1px solid ${PART_BORDERS[pi % PART_BORDERS.length]}`,
-                color:'var(--text)', cursor: audioUrl ? 'pointer' : 'default',
-                direction:'rtl', transition:'all .15s',
-                boxShadow: isPlaying && rangeStart !== null ? '0 0 0 2px rgba(62,184,160,.3)' : 'none',
-              }}>
-              {part.text || (part.wordIndices?.map(i => timestamps?.words?.[i]?.chars?.map(c=>c.char).join('')).join(' '))}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Split Arabic text into words, separating attached prefix particles (Ÿà ŸÅ ÿ® ŸÑ)
-// so ŸàŸéŸ±ŸÑŸÑŸéŸëŸáŸè ‚Üí ['ŸàŸé', 'Ÿ±ŸÑŸÑŸéŸëŸáŸè'] matching the space-split form from quran-simple
-function splitArabicWords(text) {
-  if (!text) return [];
-
-  const PREFIXES = [
-    { p: 'Ÿà', alefOnly: false },
-    { p: 'ŸÅ', alefOnly: false },
-    { p: 'ŸÑ', alefOnly: false },
-    { p: 'ÿ®', alefOnly: true  },
-  ];
-  const ALEF_VARIANTS = new Set(['ÿß','ÿ£','ÿ•','ÿ¢','Ÿ±','\u0671','\u0622','\u0623','\u0625']);
-
-  // Zero-width / invisible joiners that should NOT cause word breaks
-  const ZW_RE = /[\u2060\uFEFF\u200B\u200C\u200D]/;
-  const ZW_STRIP = /[\u2060\uFEFF\u200B\u200C\u200D]/g;
-
-  // Step 1: split on whitespace, then merge tokens around ZW chars
-  const rawTokens = text.trim().split(/[ \t\n\r\u00A0\u202F\u2009]+/).filter(t => t.length > 0);
-
-  const merged = [];
-  let i = 0;
-  while (i < rawTokens.length) {
-    const raw = rawTokens[i];
-    const tok = raw.replace(ZW_STRIP, '');
-    if (!tok) {
-      // Purely ZW token ‚Üí merge previous and next
-      if (merged.length > 0 && i + 1 < rawTokens.length) {
-        merged[merged.length - 1] += rawTokens[i + 1].replace(ZW_STRIP, '');
-        i += 2; continue;
-      }
-    } else if (ZW_RE.test(raw)) {
-      // Token contains ZW (at start, end, or middle)
-      // If ZW is at the end, merge with next token
-      if (/[\u2060\uFEFF\u200B\u200C\u200D]$/.test(raw) && i + 1 < rawTokens.length) {
-        merged.push(tok + rawTokens[i + 1].replace(ZW_STRIP, ''));
-        i += 2; continue;
-      }
-      // If ZW is at the start, merge into previous token
-      if (/^[\u2060\uFEFF\u200B\u200C\u200D]/.test(raw) && merged.length > 0) {
-        merged[merged.length - 1] += tok;
-      } else {
-        merged.push(tok);
-      }
-    } else {
-      merged.push(tok);
-    }
-    i++;
-  }
-
-  // Also merge any token that is purely diacritics/starts with dagger alif into the previous token,
-  // AND merge any token with only 1 Arabic consonant (incomplete word, e.g. ŸÅŸé split by newline) with the next
-  const COMBINING = /^[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0870-\u08FF]+$/;
-  const STARTS_COMBINING = /^[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/; // starts with diacritic/dagger alif
-  const ARABIC_CONS = /[\u0600-\u063F\u0641-\u064A\u066E-\u066F\u0671-\u06D3\u06D5\u06EE-\u06EF\u06FA-\u06FC\u06FF]/g;
-  const isSingleConsonant = (tok) => (tok.match(ARABIC_CONS) || []).length === 1;
-
-  const cleaned = [];
-  for (let j = 0; j < merged.length; j++) {
-    const tok = merged[j];
-    if (cleaned.length > 0 && (COMBINING.test(tok) || STARTS_COMBINING.test(tok))) {
-      // Token is purely diacritics OR starts with dagger alif ‚Äî belongs to previous word
-      cleaned[cleaned.length - 1] += tok;
-    } else if (isSingleConsonant(tok) && j + 1 < merged.length) {
-      // Single consonant token (e.g. ŸÅŸé from ŸÅŸéÿ∂€°ŸÑŸê split by newline): merge with next
-      merged[j + 1] = tok + merged[j + 1];
-    } else {
-      cleaned.push(tok);
-    }
-  }
-
-  // Step 3: prefix splitting
-  const result = [];
-  cleaned.forEach(token => {
-    const norm = normalizeArabic(token);
-    let split = false;
-    for (const { p, alefOnly } of PREFIXES) {
-      const rest = norm.slice(p.length);
-      if (norm.startsWith(p) && norm.length > 2 && (!alefOnly || ALEF_VARIANTS.has(rest[0]))) {
-        let i = 0;
-        const originalChars = [...token];
-        let letterCount = 0;
-        while (i < originalChars.length) {
-          const cp = originalChars[i].codePointAt(0);
-          const isDiacritic = (cp >= 0x064B && cp <= 0x065F) || cp === 0x0670 || (cp >= 0x0610 && cp <= 0x061A) ||
-                              (cp >= 0x06D6 && cp <= 0x06ED) || (cp >= 0x0870 && cp <= 0x08FF);
-          if (!isDiacritic) letterCount++;
-          i++;
-          if (letterCount === 1) {
-            while (i < originalChars.length) {
-              const cp2 = originalChars[i].codePointAt(0);
-              const isDia2 = (cp2 >= 0x064B && cp2 <= 0x065F) || cp2 === 0x0670 || (cp2 >= 0x0610 && cp2 <= 0x061A) ||
-                             (cp2 >= 0x06D6 && cp2 <= 0x06ED) || (cp2 >= 0x0870 && cp2 <= 0x08FF);
-              if (!isDia2) break;
-              i++;
-            }
-            break;
-          }
-        }
-        if (i < originalChars.length) {
-          result.push(originalChars.slice(0, i).join(''));
-          result.push(originalChars.slice(i).join(''));
-          split = true;
-          break;
-        }
-      }
-    }
-    if (!split) result.push(token);
-  });
-  return result;
-}
-
-// ‚îÄ‚îÄ‚îÄ CompareVerseQuestion ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Shows multiple ayat texts (same number, different surahs), user taps to match
-function CompareVerseQuestion({ q, onAnswer, globalNums }) {
-  const { entries } = q;
-  const [playingIdx, setPlayingIdx] = React.useState(null);
-  const [progress, setProgress]     = React.useState({});  // idx ‚Üí 0..1
-  const audioRef = React.useRef(null);
-
-  const playEntry = (i, sn, an) => {
-    const gn = globalNums?.[`${sn}:${an}`];
-    if (!gn) return;
-    const url = `${getAudioBase()}/${gn}.mp3`;
-    if (playingIdx === i) {
-      audioRef.current?.pause();
-      setPlayingIdx(null);
-      return;
-    }
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = url;
-      audioRef.current.play().catch(() => {});
-    }
-    setPlayingIdx(i);
-  };
-
-  React.useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    const onEnd  = () => { setPlayingIdx(null); };
-    const onTime = () => {
-      if (el.duration) setProgress(p => ({ ...p, [playingIdx]: el.currentTime / el.duration }));
-    };
-    el.addEventListener('ended', onEnd);
-    el.addEventListener('timeupdate', onTime);
-    return () => { el.removeEventListener('ended', onEnd); el.removeEventListener('timeupdate', onTime); };
-  }, [playingIdx]);
-
-  // Shuffle display order
-  const shuffled = React.useMemo(() => {
-    const arr = [...entries];
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  }, [q.id]);
-
-  // Shuffled surah names (to match)
-  const shuffledNames = React.useMemo(() => {
-    const arr = [...entries.map(e => ({ sn: e.sn, name: e.name }))];
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  }, [q.id]);
-
-  const [assignments, setAssignments] = React.useState({}); // textIndex ‚Üí snAssigned
-  const [selected, setSelected] = React.useState(null); // { side: 'text'|'name', index }
-  const [checked, setChecked] = React.useState(false);
-
-  const assign = (side, index) => {
-    if (checked) return;
-    if (!selected) { setSelected({ side, index }); return; }
-    if (selected.side === side) { setSelected({ side, index }); return; }
-    // Cross-assign
-    if (side === 'name' && selected.side === 'text') {
-      setAssignments(prev => ({ ...prev, [selected.index]: shuffledNames[index].sn }));
-    } else if (side === 'text' && selected.side === 'name') {
-      setAssignments(prev => ({ ...prev, [index]: shuffledNames[selected.index].sn }));
-    }
-    setSelected(null);
-  };
-
-  const allAssigned = shuffled.every((_, i) => assignments[i] !== undefined);
-
-  const check = () => {
-    setChecked(true);
-    const correct = shuffled.every((e, i) => assignments[i] === e.sn);
-    onAnswer(correct);
-  };
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:14, width:'100%' }}>
-      <audio ref={audioRef} style={{ display:'none' }} />
-      <div style={{ fontSize:8, color:'var(--text3)', letterSpacing:2, textAlign:'center' }}>
-        ASSOCIE CHAQUE TEXTE √Ä SA SOURATE
-      </div>
-      <div style={{ display:'flex', gap:8 }}>
-        {/* Texts column */}
-        <div style={{ flex:1, display:'flex', flexDirection:'column', gap:6 }}>
-          {shuffled.map((e, i) => {
-            const isSelected = selected?.side === 'text' && selected.index === i;
-            const assignedSn = assignments[i];
-            const assignedName = assignedSn ? shuffledNames.find(n => n.sn === assignedSn)?.name : null;
-            const correct = checked && assignedSn === e.sn;
-            const wrong   = checked && assignedSn !== undefined && assignedSn !== e.sn;
-            const isPlaying = playingIdx === i;
-            const hasAudio  = !!(globalNums?.[`${e.sn}:${q.ayatNum}`]);
-            return (
-              <div key={i}
-                style={{ borderRadius:8, cursor:'pointer',
-                  border:`1px solid ${isSelected ? 'var(--gold)' : correct ? 'var(--green)' : wrong ? 'var(--red)' : 'var(--border2)'}`,
-                  background: isSelected ? 'rgba(201,168,76,.08)' : correct ? 'rgba(76,175,129,.08)' : wrong ? 'rgba(229,115,115,.08)' : 'var(--surface2)',
-                  overflow:'hidden' }}>
-                {/* Audio bar */}
-                {hasAudio && (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px',
-                    borderBottom:`1px solid var(--border)`, background:'rgba(0,0,0,.15)', cursor:'pointer' }}
-                    onClick={ev => { ev.stopPropagation(); playEntry(i, e.sn, q.ayatNum); }}>
-                    <span style={{ fontSize:16, color: isPlaying ? 'var(--teal2)' : 'var(--text3)', flexShrink:0 }}>
-                      {isPlaying ? '‚è∏' : '‚ñ∂'}
-                    </span>
-                    <div style={{ flex:1, height:3, borderRadius:2, background:'var(--surface3)', overflow:'hidden' }}>
-                      <div style={{ height:'100%', borderRadius:2, background:'var(--teal)',
-                        width:`${(progress[i] ?? 0) * 100}%`,
-                        transition: isPlaying ? 'width .1s linear' : 'width .2s' }} />
-                    </div>
-                  </div>
-                )}
-                <div style={{ padding:'8px 10px' }} onClick={() => assign('text', i)}>
-                  <div style={{ direction:'rtl', fontFamily:"'Amiri Quran',serif", fontSize:15, lineHeight:1.7, color:'var(--text)' }}>
-                    {e.text}
-                  </div>
-                  {assignedName && (
-                    <div style={{ fontSize:7, color: correct ? 'var(--green)' : wrong ? 'var(--red)' : 'var(--gold)',
-                      fontFamily:"'Cinzel',serif", letterSpacing:1, direction:'ltr', marginTop:4 }}>
-                      {assignedName}{checked && !correct && ` ‚Üí ${e.name}`}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {/* Names column */}
-        <div style={{ flex:'0 0 auto', display:'flex', flexDirection:'column', gap:6, minWidth:90 }}>
-          {shuffledNames.map((nm, i) => {
-            const isSelected = selected?.side === 'name' && selected.index === i;
-            const used = Object.values(assignments).includes(nm.sn);
-            return (
-              <div key={i} onClick={() => assign('name', i)}
-                style={{ padding:'8px 10px', borderRadius:8, cursor:'pointer', textAlign:'center',
-                  border:`1px solid ${isSelected ? 'var(--gold)' : used ? 'var(--teal)' : 'var(--border2)'}`,
-                  background: isSelected ? 'rgba(201,168,76,.1)' : used ? 'rgba(62,184,160,.08)' : 'var(--surface2)',
-                  fontSize:8, letterSpacing:1, fontFamily:"'Cinzel',serif",
-                  color: isSelected ? 'var(--gold2)' : used ? 'var(--teal2)' : 'var(--text3)',
-                  opacity: used && !isSelected ? 0.6 : 1 }}>
-                {nm.name.toUpperCase()}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      {!checked && allAssigned && (
-        <button onClick={check}
-          style={{ padding:'10px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-            background:'rgba(201,168,76,.12)', border:'1px solid var(--gold)', color:'var(--gold2)',
-            borderRadius:8, cursor:'pointer' }}>
-          ‚úì V√âRIFIER
-        </button>
-      )}
-      {checked && (
-        <div style={{ textAlign:'center', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-          color: shuffled.every((_,i) => assignments[i] === shuffled[i].sn) ? 'var(--green)' : 'var(--red)',
-          padding:'8px', borderRadius:8,
-          background: shuffled.every((_,i) => assignments[i] === shuffled[i].sn) ? 'rgba(76,175,129,.08)' : 'rgba(229,115,115,.08)' }}>
-          {shuffled.every((_,i) => assignments[i] === shuffled[i].sn) ? '‚úì CORRECT' : '‚úó INCORRECT'}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ‚îÄ‚îÄ‚îÄ FindSurahQuestion ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function FindSurahQuestion({ q, surahs, onAnswer }) {
-  const [chosen, setChosen] = React.useState(null);
-  const correct = q.answer;
-  const pick = (sn) => {
-    if (chosen !== null) return;
-    setChosen(String(sn));
-    onAnswer(String(sn) === correct);
-  };
-  return (
-    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:14, alignItems:'center' }}>
-      <div style={{ fontFamily:"'Amiri Quran',serif", fontSize:24, direction:'rtl', textAlign:'center',
-        color:'var(--text1)', padding:'14px 18px', background:'var(--surface3)',
-        borderRadius:10, border:'1px solid var(--border)', lineHeight:2.2, width:'100%' }}>
-        {q.questionData}
-      </div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center', width:'100%' }}>
-        {(q.options || []).map(sn => {
-          const s = surahs.find(x => x.number === sn);
-          const isCorrect = String(sn) === correct;
-          const isChosen  = String(sn) === chosen;
-          let bg = 'transparent', border = 'var(--border2)', color = 'var(--text2)';
-          if (chosen !== null) {
-            if (isCorrect)     { bg='rgba(76,175,129,.15)'; border='var(--green)'; color='var(--green)'; }
-            else if (isChosen) { bg='rgba(224,90,90,.12)';  border='var(--red)';   color='var(--red)'; }
-          }
-          return (
-            <button key={sn} onClick={() => pick(sn)}
-              style={{ padding:'9px 16px', fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif",
-                background:bg, border:`1px solid ${border}`, color, borderRadius:8,
-                cursor: chosen===null ? 'pointer' : 'default', transition:'all .2s', minWidth:120 }}>
-              <span style={{ opacity:.6, marginRight:4 }}>{sn}.</span>{s ? s.englishName : `S.${sn}`}
-            </button>
-          );
-        })}
-      </div>
-      {chosen !== null && (
-        <div style={{ fontSize:9, letterSpacing:1, color: chosen===correct ? 'var(--green)' : 'var(--red)' }}>
-          {chosen===correct ? '‚úì Correct' : `‚úó ‚Äî ${surahs.find(x=>String(x.number)===correct)?.englishName ?? correct}`}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ‚îÄ‚îÄ‚îÄ QuranBookPage ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Inspired by Codrops / billionbd CodePen: hardcover_front + pages + spine
-// Structure: <ul class="qbook"> with li.qbook-hc-front, li.qbook-pages,
-//            li.qbook-page (flipping leaf), li.qbook-hc-back
-const MUSHAF_TOTAL = 604;
-
-function QuranBookPage({ surahs }) {
-  const navigate = useNavigate();
-  const [spread,    setSpread]    = React.useState(0);    // 0 = cover closed
-  const [flipState, setFlipState] = React.useState('idle'); // 'idle'|'fwd'|'bwd'
-  const [pageCache, setPageCache] = React.useState({});
-  const [inputVal,  setInputVal]  = React.useState('1');
-  const [bookOpen,  setBookOpen]  = React.useState(false);
-  const [sz,        setSz]        = React.useState({ w: 440, h: 560 });
-  const [showSurahMenu, setShowSurahMenu] = React.useState(false);
-  const [bookmark,  setBookmark]  = React.useState(() => {
-    try { return parseInt(localStorage.getItem('quranbook_bm')) || null; } catch { return null; }
-  });
-
-  // Responsive single-page width (book shows one spread = two half-pages)
-  React.useEffect(() => {
-    const upd = () => {
-      const vw = window.innerWidth, vh = window.innerHeight;
-      // single page half-width; full spread = w*2
-      const maxH = vh - 160;
-      const maxW = Math.min((vw - 40) / 2, maxH * 0.68, 440);
-      setSz({ w: Math.round(maxW), h: Math.round(maxW / 0.68) });
-    };
-    upd(); window.addEventListener('resize', upd);
-    return () => window.removeEventListener('resize', upd);
+    return unsub;
   }, []);
 
-  const rPage = spread === 0 ? null : 2 * spread - 1;
-  const lPage = spread === 0 ? null : Math.min(2 * spread, MUSHAF_TOTAL);
-
-  const loadPage = React.useCallback(async (n) => {
-    if (!n || n < 1 || n > MUSHAF_TOTAL || pageCache[n] !== undefined) return;
-    setPageCache(c => ({ ...c, [n]: null }));
-    try {
-      const data = await fetchQuranPage(n);
-      setPageCache(c => ({ ...c, [n]: data }));
-    } catch {
-      setPageCache(c => ({ ...c, [n]: [] }));
-    }
-  }, [pageCache]);
-
-  React.useEffect(() => {
-    if (spread === 0) return;
-    [rPage, lPage, rPage+2, lPage+2, rPage-2, lPage-2]
-      .filter(Boolean).forEach(loadPage);
-  }, [spread]); // eslint-disable-line
-
-  React.useEffect(() => {
-    if (rPage) setInputVal(String(rPage));
-  }, [rPage]);
-
-  // Open book: animate cover swing then go to spread 1
-  const openBook = React.useCallback(() => {
-    if (bookOpen) return;
-    setBookOpen(true);
-    setTimeout(() => {
-      setSpread(1);
-      setFlipState('idle');
-    }, 820);
-  }, [bookOpen]);
-
-  const closeBook = React.useCallback(() => {
-    setBookOpen(false);
-    setTimeout(() => setSpread(0), 820);
-  }, []);
-
-  const goNext = React.useCallback(async () => {
-    if (flipState !== 'idle' || !lPage || lPage >= MUSHAF_TOTAL) return;
-    // preload next spread before animating
-    const np1 = rPage + 2, np2 = lPage + 2;
-    await Promise.all([np1, np2].filter(p => p >= 1 && p <= MUSHAF_TOTAL && pageCache[p] === undefined)
-      .map(async p => {
-        setPageCache(c => ({ ...c, [p]: null }));
-        try { const d = await fetchQuranPage(p); setPageCache(c => ({ ...c, [p]: d })); }
-        catch { setPageCache(c => ({ ...c, [p]: [] })); }
-      }));
-    setFlipState('fwd');
-    setTimeout(() => { setSpread(s => s + 1); setFlipState('idle'); }, 720);
-  }, [flipState, lPage, rPage, pageCache]);
-
-  const goPrev = React.useCallback(async () => {
-    if (flipState !== 'idle' || spread <= 1) return;
-    const pp1 = rPage - 2, pp2 = lPage ? lPage - 2 : null;
-    await Promise.all([pp1, pp2].filter(p => p && p >= 1 && pageCache[p] === undefined)
-      .map(async p => {
-        setPageCache(c => ({ ...c, [p]: null }));
-        try { const d = await fetchQuranPage(p); setPageCache(c => ({ ...c, [p]: d })); }
-        catch { setPageCache(c => ({ ...c, [p]: [] })); }
-      }));
-    setFlipState('bwd');
-    setTimeout(() => { setSpread(s => s - 1); setFlipState('idle'); }, 720);
-  }, [flipState, spread, rPage, lPage, pageCache]);
-
-  const jumpTo = (v) => {
-    const p = Math.max(1, Math.min(MUSHAF_TOTAL, parseInt(v) || 1));
-    setSpread(Math.ceil(p / 2));
-    if (!bookOpen) { setBookOpen(true); }
-  };
-
-  // Keyboard
-  React.useEffect(() => {
-    const h = e => {
-      if (e.key === 'ArrowLeft')  goNext();
-      if (e.key === 'ArrowRight') goPrev();
-    };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [goNext, goPrev]);
-
-  // Touch swipe
-  const tx = React.useRef(0);
-
-  const isFwd  = flipState === 'fwd';
-  const isBwd  = flipState === 'bwd';
-  const isFlip = isFwd || isBwd;
-
-  // Page content renderer
-  const PageContent = React.useCallback(({ pageNum, side }) => {
-    const ayahs = pageCache[pageNum];
-    if (!pageNum) return null;
-    if (ayahs === undefined || ayahs === null)
-      return <div className="qbook-loading-page">ÿßŸÑŸÇÿ±ÿ¢ŸÜ</div>;
-
-    const groups = [];
-    (ayahs || []).forEach(a => {
-      const last = groups[groups.length - 1];
-      if (!last || last.sn !== a.surah.number)
-        groups.push({ sn: a.surah.number, name: a.surah.name, eng: a.surah.englishName, ayahs: [] });
-      groups[groups.length - 1].ayahs.push(a);
-    });
-
-    const fs = Math.max(Math.min(sz.h / 20, sz.w / 14, 16), 10);
-
+  if (!authReady) {
     return (
-      <div className={`qbook-page-content${side === 'right' ? ' qbook-page-content-right' : ''}`}>
-        {groups.map((g, gi) => (
-          <React.Fragment key={gi}>
-            {g.ayahs[0]?.numberInSurah === 1 && (
-              <>
-                <div className="qbook-surah-header">
-                  {g.eng.toUpperCase()}
-                  <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:'1.3em', margin:'0 5px' }}>{g.name}</span>
-                </div>
-                {g.sn !== 9 && (
-                  <div className="qbook-basmala" style={{ fontSize: fs + 1 }}>
-                    ÿ®Ÿêÿ≥ŸíŸÖŸê Ÿ±ŸÑŸÑŸéŸëŸáŸê Ÿ±ŸÑÿ±ŸéŸëÿ≠ŸíŸÖŸéŸ∞ŸÜŸê Ÿ±ŸÑÿ±ŸéŸëÿ≠ŸêŸäŸÖŸê
-                  </div>
-                )}
-              </>
-            )}
-            <div className="qbook-ayah-text" style={{ fontSize: fs }}>
-              {g.ayahs.map(a => (
-                <React.Fragment key={a.numberInSurah}>
-                  {a.text}<span className="qbook-ayah-num">Ô¥ø{a.numberInSurah}Ô¥æ</span>{' '}
-                </React.Fragment>
-              ))}
-            </div>
-          </React.Fragment>
-        ))}
-        <div className="qbook-page-num">{pageNum}</div>
+      <div style={{
+        minHeight:"100vh", background:"var(--bg)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        flexDirection:"column", gap:16, fontFamily:"'Cinzel',serif",
+      }}>
+        <div style={{fontSize:40}}>‚òΩ</div>
+        <div style={{fontSize:10, letterSpacing:5, color:"var(--text3)"}}>CHARGEMENT‚Ä¶</div>
       </div>
     );
-  }, [pageCache, sz]);
-
-  const spineW = Math.max(Math.round(sz.w * 0.052), 20);
-  const totalW = sz.w * 2 + spineW;
-
-  return (
-    <div className="qbook-wrapper">
-
-      {/* ‚îÄ‚îÄ Top bar ‚îÄ‚îÄ */}
-      <div className="qbook-topbar" style={{ maxWidth: totalW + 60 }}>
-        <button onClick={() => navigate('/quran')}
-          style={{ fontSize:8,letterSpacing:1.5,padding:'4px 12px',fontFamily:"'Cinzel',serif",
-            background:'transparent',border:'1px solid rgba(201,168,76,.25)',
-            color:'rgba(201,168,76,.55)',borderRadius:6,cursor:'pointer',flexShrink:0 }}>
-          ‚Üê SOURATES
-        </button>
-
-        {/* Surah picker */}
-        <div style={{ position:'relative', flexShrink:0 }}>
-          <button onClick={() => setShowSurahMenu(v => !v)}
-            style={{ fontSize:8,letterSpacing:1.2,padding:'4px 10px',fontFamily:"'Cinzel',serif",
-              background:'rgba(201,168,76,.07)',border:'1px solid rgba(201,168,76,.22)',
-              color:'rgba(201,168,76,.6)',borderRadius:6,cursor:'pointer' }}>
-            SOURATE ‚ñæ
-          </button>
-          {showSurahMenu && (
-            <div style={{ position:'absolute',top:'115%',left:0,zIndex:300,minWidth:240,
-              background:'#120701',border:'1px solid rgba(201,168,76,.2)',borderRadius:8,
-              maxHeight:260,overflowY:'auto',boxShadow:'0 10px 40px rgba(0,0,0,.85)' }}>
-              {surahs.map(s => (
-                <div key={s.number}
-                  onClick={() => { jumpTo(s.startPage || s.number * 2 - 1); setShowSurahMenu(false); }}
-                  style={{ display:'flex',alignItems:'center',gap:8,padding:'7px 12px',
-                    cursor:'pointer',borderBottom:'1px solid rgba(201,168,76,.05)' }}
-                  onMouseEnter={e => e.currentTarget.style.background='rgba(201,168,76,.1)'}
-                  onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                  <span style={{ fontSize:8,color:'rgba(201,168,76,.4)',minWidth:20 }}>{s.number}</span>
-                  <span style={{ fontFamily:"'Amiri Quran',serif",fontSize:14,color:'#c9a84c',direction:'rtl' }}>{s.name}</span>
-                  <span style={{ fontSize:7,color:'rgba(201,168,76,.35)',marginLeft:'auto' }}>{s.englishName}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={{ fontFamily:"'Amiri Quran',serif",fontSize:Math.max(sz.w*.044,16),
-          color:'rgba(201,168,76,.48)',direction:'rtl',textAlign:'center',flex:1,
-          textShadow:'0 0 16px rgba(201,168,76,.2)' }}>
-          ÿßŸÑŸÇÿ±ÿ¢ŸÜ ÿßŸÑŸÉÿ±ŸäŸÖ
-        </div>
-
-        {/* Bookmark */}
-        <button onClick={() => { setBookmark(rPage); if(rPage) localStorage.setItem('quranbook_bm', String(rPage)); }}
-          style={{ fontSize:14,background:'transparent',border:'none',cursor:'pointer',flexShrink:0,
-            color: bookmark === rPage ? '#c0392b' : 'rgba(201,168,76,.32)' }}>üîñ</button>
-        {bookmark && rPage && bookmark !== rPage && (
-          <button onClick={() => jumpTo(bookmark)}
-            style={{ fontSize:8,letterSpacing:1,padding:'4px 8px',fontFamily:"'Cinzel',serif",
-              background:'rgba(192,57,43,.14)',border:'1px solid rgba(192,57,43,.28)',
-              color:'rgba(220,100,80,.7)',borderRadius:6,cursor:'pointer',flexShrink:0 }}>
-            p.{bookmark}
-          </button>
-        )}
-
-        {/* Page input */}
-        {bookOpen && (
-          <div style={{ display:'flex',alignItems:'center',gap:4,flexShrink:0 }}>
-            <span style={{ fontSize:7,color:'rgba(201,168,76,.4)',fontFamily:"'Cinzel',serif" }}>P.</span>
-            <input type="number" value={inputVal}
-              onChange={e => setInputVal(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && jumpTo(inputVal)}
-              onBlur={() => jumpTo(inputVal)}
-              style={{ width:44,textAlign:'center',background:'transparent',
-                border:'1px solid rgba(201,168,76,.22)',borderRadius:6,
-                padding:'3px 5px',color:'var(--gold)',fontSize:12,
-                fontFamily:"'Cinzel',serif",outline:'none' }} />
-            <span style={{ fontSize:7,color:'rgba(201,168,76,.25)',fontFamily:"'Cinzel',serif" }}>/604</span>
-          </div>
-        )}
-      </div>
-
-      {/* ‚îÄ‚îÄ Book scene ‚îÄ‚îÄ */}
-      <div className="qbook-scene"
-        onTouchStart={e => { tx.current = e.touches[0].clientX; }}
-        onTouchEnd={e => {
-          const dx = e.changedTouches[0].clientX - tx.current;
-          if (dx < -55) goNext(); if (dx > 55) goPrev();
-        }}>
-
-        {/* Ambient glow under book */}
-        <div style={{ position:'absolute',bottom:'8%',left:'50%',transform:'translateX(-50%)',
-          width:'55%',height:30,pointerEvents:'none',
-          background:'radial-gradient(ellipse,rgba(180,110,20,.16) 0%,transparent 70%)' }}/>
-
-        {/* ‚îÄ‚îÄ THE BOOK ‚îÄ‚îÄ */}
-        <div style={{
-          position:'relative',
-          width: totalW,
-          height: sz.h,
-          transformStyle:'preserve-3d',
-          transform:'rotateX(4deg)',
-          filter:`drop-shadow(0 ${sz.h*.12}px ${sz.h*.16}px rgba(0,0,0,.95)) drop-shadow(0 8px 24px rgba(0,0,0,.6))`,
-        }}>
-
-          {/* ‚îÄ‚îÄ HARDCOVER BACK ‚îÄ‚îÄ */}
-          <ul style={{ listStyle:'none',margin:0,padding:0,
-            position:'absolute',top:0,left:0,width:sz.w,height:sz.h,
-            transformStyle:'preserve-3d',zIndex:0 }}>
-            {/* back board */}
-            <li style={{ position:'absolute',top:0,left:0,width:'100%',height:'100%',
-              borderRadius:'3px 0 0 3px',
-              background:'linear-gradient(135deg,#200800,#4a1508,#200800)',
-              boxShadow:'-4px 0 12px rgba(0,0,0,.5),inset 4px 0 10px rgba(0,0,0,.3)' }}/>
-            {/* thickness edge */}
-            <li style={{ position:'absolute',top:4,right:-spineW*.35,
-              width:spineW*.35, height:'calc(100% - 8px)',
-              background:'linear-gradient(to right,#1a0500,#0e0200)',
-              borderRadius:'0 2px 2px 0' }}/>
-          </ul>
-
-          {/* ‚îÄ‚îÄ STACKED PAGES (visible fore-edge) ‚îÄ‚îÄ */}
-          <ul style={{ listStyle:'none',margin:0,padding:0,
-            position:'absolute',top:3,left:3,
-            width: sz.w * 2 + spineW - 6, height: sz.h - 6,
-            transformStyle:'preserve-3d',zIndex:1 }}>
-            {[0,1,2,3,4].map(k => (
-              <li key={k} style={{
-                position:'absolute',top:0,left:0,width:'100%',height:'100%',
-                borderRadius:'0 2px 2px 0',
-                background: ['#ede1bb','#f0e4c0','#f3e7c6','#f6eacc','#f9edd2'][k],
-                transform:`translateX(${-k}px)`,
-              }}/>
-            ))}
-          </ul>
-
-          {/* ‚îÄ‚îÄ LEFT PAGE (even) ‚Äî always visible under the flipping leaf ‚îÄ‚îÄ */}
-          <div style={{ position:'absolute',top:0,left:0,width:sz.w,height:sz.h,zIndex:2,overflow:'hidden',
-            background:'linear-gradient(160deg,#fef9ee,#fdf3d8,#faecc0)',
-            borderRadius:'2px 0 0 2px',
-            boxShadow:'inset 8px 0 20px rgba(0,0,0,.08)' }}>
-            {bookOpen && <PageContent pageNum={isFwd ? lPage + 2 : lPage} side="left" />}
-          </div>
-
-          {/* ‚îÄ‚îÄ RIGHT PAGE (odd) ‚Äî always visible ‚îÄ‚îÄ */}
-          <div style={{ position:'absolute',top:0,left:sz.w + spineW,width:sz.w,height:sz.h,zIndex:2,
-            overflow:'hidden',
-            background:'linear-gradient(160deg,#fef9ee,#fdf3d8,#faecc0)',
-            borderRadius:'0 2px 2px 0',
-            boxShadow:'inset -8px 0 20px rgba(0,0,0,.08)' }}>
-            {bookOpen && <PageContent pageNum={isBwd ? rPage - 2 : rPage} side="right" />}
-          </div>
-
-          {/* ‚îÄ‚îÄ SPINE ‚îÄ‚îÄ */}
-          <div style={{ position:'absolute',top:0,left:sz.w,width:spineW,height:sz.h,zIndex:20,
-            background:`linear-gradient(to right,#0a0200 0%,#3a1204 18%,#8a3810 34%,#d08c38 50%,#8a3810 66%,#3a1204 82%,#0a0200 100%)`,
-            boxShadow:'0 0 18px rgba(0,0,0,.7),inset 0 0 6px rgba(255,195,70,.08)' }}>
-            <div style={{ position:'absolute',inset:0,
-              background:'repeating-linear-gradient(to bottom,transparent 0,transparent 20px,rgba(255,190,60,.07) 20px,rgba(255,190,60,.07) 21px)' }}/>
-          </div>
-
-          {/* ‚îÄ‚îÄ FLIPPING PAGE ‚îÄ‚îÄ */}
-          {isFlip && (
-            <div className={`qbook-page${isFwd ? ' qbook-flip-fwd' : ' qbook-flip-bwd'}`}
-              style={{
-                position:'absolute',top:0,
-                left: isFwd ? 0 : sz.w + spineW,
-                width:sz.w,height:sz.h,
-                transformOrigin: isFwd ? 'right center' : 'left center',
-                transformStyle:'preserve-3d',zIndex:200,
-              }}>
-              {/* front face */}
-              <div className="qbook-page-face">
-                <PageContent pageNum={isFwd ? lPage : rPage} side={isFwd ? 'left' : 'right'} />
-              </div>
-              {/* back face */}
-              <div className="qbook-page-face qbook-page-face-back">
-                <PageContent pageNum={isFwd ? rPage + 2 : lPage - 2} side={isFwd ? 'right' : 'left'} />
-              </div>
-            </div>
-          )}
-
-          {/* ‚îÄ‚îÄ HARDCOVER FRONT ‚îÄ‚îÄ */}
-          <ul className={`qbook-hc-front${bookOpen ? ' qbook-open' : ''}`}
-            style={{ listStyle:'none',margin:0,padding:0,
-              position:'absolute',top:0,
-              left: sz.w + spineW,   // cover starts at right half
-              width:sz.w,height:sz.h,
-              transformStyle:'preserve-3d',
-              transformOrigin:'left center',
-              transition:'transform .82s cubic-bezier(.645,.045,.355,1)',
-              transform: bookOpen ? 'rotateY(-175deg)' : 'rotateY(0deg)',
-              zIndex:bookOpen ? 5 : 150,
-            }}>
-            {/* front face */}
-            <li style={{ position:'absolute',top:0,left:0,width:'100%',height:'100%',
-              backfaceVisibility:'hidden',borderRadius:'0 3px 3px 0',overflow:'hidden',
-              background:'linear-gradient(135deg,#280b01 0%,#561c05 30%,#8b3210 50%,#561c05 70%,#280b01 100%)',
-              boxShadow:'inset -8px 0 24px rgba(0,0,0,.45),inset 0 0 40px rgba(0,0,0,.28)' }}>
-              <div className="qbook-cover-design">
-                <div className="qbook-medallion">‚òΩ</div>
-                <div className="qbook-cover-title">ÿßŸÑŸÇÿ±ÿ¢ŸÜ ÿßŸÑŸÉÿ±ŸäŸÖ</div>
-                <div className="qbook-cover-sub">THE NOBLE QURAN</div>
-                {!bookOpen && (
-                  <button className="qbook-open-btn" style={{ marginTop:16 }}
-                    onClick={openBook}>
-                    OUVRIR LE LIVRE
-                  </button>
-                )}
-              </div>
-            </li>
-            {/* back face (inside of front cover) */}
-            <li style={{ position:'absolute',top:0,left:0,width:'100%',height:'100%',
-              backfaceVisibility:'hidden',transform:'rotateY(180deg)',
-              borderRadius:'0 3px 3px 0',overflow:'hidden',
-              background:'linear-gradient(to right,#1c0601,#3a1008)',
-              display:'flex',alignItems:'center',justifyContent:'center' }}>
-              <div style={{ fontFamily:"'Amiri Quran',serif",fontSize:'1.8em',
-                color:'rgba(201,168,76,.22)',direction:'rtl' }}>Ô∑Ω</div>
-            </li>
-          </ul>
-
-          {/* ‚îÄ‚îÄ Click zones (when open) ‚îÄ‚îÄ */}
-          {bookOpen && !isFlip && <>
-            <div className="qbook-click qbook-click-left"
-              style={{ left:0, width:sz.w*.46, height:sz.h, position:'absolute',top:0,zIndex:250,cursor:'pointer' }}
-              onClick={goNext} title="Suivant (‚Üê)" />
-            <div className="qbook-click qbook-click-right"
-              style={{ left:sz.w + spineW + sz.w*.54, width:sz.w*.46, height:sz.h, position:'absolute',top:0,zIndex:250,cursor:'pointer' }}
-              onClick={goPrev} title="Pr√©c√©dent (‚Üí)" />
-          </>}
-
-          {/* ‚îÄ‚îÄ Top & bottom hardcover boards (3D depth illusion) ‚îÄ‚îÄ */}
-          <div style={{ position:'absolute',top:-5,left:0,right:0,height:6,
-            background:'linear-gradient(to bottom,#1e0602,#5a1a08)',
-            borderRadius:'2px 2px 0 0',boxShadow:'0 -2px 8px rgba(0,0,0,.5)' }}/>
-          <div style={{ position:'absolute',bottom:-5,left:0,right:0,height:6,
-            background:'linear-gradient(to top,#1e0602,#5a1a08)',
-            borderRadius:'0 0 2px 2px',boxShadow:'0 2px 8px rgba(0,0,0,.5)' }}/>
-        </div>
-      </div>
-
-      {/* ‚îÄ‚îÄ Bottom nav ‚îÄ‚îÄ */}
-      <div className="qbook-botnav">
-        {bookOpen ? (<>
-          <button className="qbook-navbtn" onClick={goPrev} disabled={spread <= 1 || isFlip}>
-            ‚Üí PR√âC.
-          </button>
-
-          <div style={{ textAlign:'center', minWidth:80 }}>
-            <div className="qbook-navlabel">
-              {rPage}{lPage && lPage <= MUSHAF_TOTAL ? '‚Äì' + lPage : ''}
-            </div>
-            <div className="qbook-progress">
-              <div className="qbook-progress-bar"
-                style={{ width:`${rPage ? (rPage/MUSHAF_TOTAL)*100 : 0}%` }}/>
-            </div>
-          </div>
-
-          <button className="qbook-navbtn" onClick={goNext}
-            disabled={!lPage || lPage >= MUSHAF_TOTAL || isFlip}>
-            SUIV. ‚Üê
-          </button>
-
-          <button className="qbook-navbtn" onClick={closeBook}
-            style={{ fontSize:8,padding:'5px 12px',opacity:.6 }}>
-            ‚úï FERMER
-          </button>
-        </>) : (
-          <button className="qbook-navbtn" onClick={openBook}>
-            üìñ OUVRIR LE LIVRE
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-
-// ‚îÄ‚îÄ‚îÄ QuranBook3DPage ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Architecture: single WebGL canvas for all rendering.
-// Each page spread is drawn as a WebGL texture (parchment + text composited
-// on an offscreen 2D canvas) then mapped through the curl shader.
-// No separate 2D overlay ‚Äî everything in one GL canvas.
-
-const _MUSHAF_PAGES = 604;
-const _API3D = "https://api.alquran.cloud/v1";
-
-// ‚îÄ‚îÄ Vertex shader ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-const _VS3D = `
-attribute vec2 a_pos;
-attribute vec2 a_uv;
-varying   vec2 v_uv;
-void main(){ v_uv = a_uv; gl_Position = vec4(a_pos, 0., 1.); }`;
-
-// ‚îÄ‚îÄ Page spread fragment shader ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Renders left+right page textures with:
-//  ‚Ä¢ cylindrical curl with crease highlight + back-face tint
-//  ‚Ä¢ spine groove + gold filament
-//  ‚Ä¢ per-page AO shadow near spine
-//  ‚Ä¢ stacked-pages fore-edge
-const _PAGE_FS = `
-precision highp float;
-varying vec2 v_uv;
-
-uniform sampler2D u_tex;     // current spread texture (both pages)
-uniform sampler2D u_texNext; // next spread (shown on back of curling leaf)
-uniform float u_curl;        // 0=flat ‚Ä¶ 1=fully turned
-uniform float u_dir;         // +1 = right-page curls forward, -1 = left-page
-
-float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
-float noise(vec2 p){
-  vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
-  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),
-             mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
-}
-
-// ‚îÄ‚îÄ Spine ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-vec4 spineColor(float t, float vy){
-  vec3 base = mix(vec3(.055,.020,.004), vec3(.095,.038,.009), noise(vec2(t*8.,vy*30.))*.5);
-  float gold = exp(-pow((t-.5)*4.8,2.));
-  base = mix(base, vec3(.82,.60,.20), gold*.6);
-  float gl2  = smoothstep(.007,0.,abs(t-.20)) + smoothstep(.007,0.,abs(t-.80));
-  base = mix(base, vec3(.78,.55,.18), gl2*.75);
-  base -= smoothstep(.78,1.,fract(vy*58.))*.05;
-  float sv = 1.-smoothstep(.82,1.,abs(vy-.5)*2.);
-  base *= mix(.55,1.,sv);
-  return vec4(base,1.);
-}
-
-// ‚îÄ‚îÄ Cylindrical curl ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-void curl(
-  in  vec2  pageUV,  // 0..1 within this half-page
-  in  float c,       // curl progress 0..1
-  in  bool  right,   // is this the right page?
-  out vec2  mapped,  // remapped UV into the page texture half
-  out float shade,   // darkening factor
-  out bool  isBack,  // are we on the back face?
-  out float crease   // crease highlight (0..1)
-){
-  mapped = pageUV; shade = 1.; isBack = false; crease = 0.;
-  if(c < .001) return;
-
-  bool curling = (u_dir > 0.) == right;
-  if(!curling) return;
-
-  float foldX = u_dir > 0. ? (1. - c) : c;
-  float x     = u_dir > 0. ? pageUV.x : (1. - pageUV.x);
-  float d     = x - foldX;
-  float R     = max(.06, .55 * (1. - c * .65));
-
-  crease = exp(-abs(d) * 180.) * c;
-
-  if(d > 0.){
-    // back face
-    float ang   = min(d / (R * 3.14159), 1.);
-    float flipX = foldX - sin(ang * 3.14159) * R * .55;
-    float flipY = pageUV.y + (cos(ang * 3.14159) - 1.) * R * .07;
-    mapped  = u_dir > 0. ? vec2(flipX, flipY) : vec2(1.-flipX, flipY);
-    mapped  = clamp(mapped, 0., 1.);
-    shade   = (.55 + .30 * (1.-c)) * cos(ang * 3.14159 * .4);
-    isBack  = true;
-  } else {
-    // front face bulge
-    float t2 = clamp((-d)/(.4*(1.-foldX)+.01),0.,1.);
-    float by = sin(t2*3.14159)*c*.035;
-    float bx = sin(t2*3.14159)*c*.010;
-    mapped = u_dir > 0.
-      ? vec2(pageUV.x-bx, pageUV.y+by*(pageUV.y-.5))
-      : vec2(pageUV.x+bx, pageUV.y+by*(pageUV.y-.5));
-    mapped = clamp(mapped, 0., 1.);
-    shade  = .80 + .20*smoothstep(0.,.20,-d);
-  }
-}
-
-// ‚îÄ‚îÄ Fore-edge (stacked pages) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-vec3 foreEdge(vec2 puv, vec3 col, bool right){
-  float e = right ? smoothstep(.93,1.,puv.x) : smoothstep(.07,0.,puv.x);
-  vec3 edge = vec3(.76,.68,.50);
-  col = mix(col, edge, e * .55);
-  float lines = fract(puv.y * 140.);
-  col -= e * smoothstep(.65,1.,lines) * .045;
-  return col;
-}
-
-void main(){
-  bool  right  = v_uv.x > .5;
-  float spW    = .014;
-  float sx     = abs(v_uv.x - .5);
-
-  // ‚îÄ‚îÄ Spine ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  if(sx < spW){
-    float t = (v_uv.x - (.5-spW)) / (spW*2.);
-    gl_FragColor = spineColor(t, v_uv.y);
-    return;
   }
 
-  // ‚îÄ‚îÄ Page UV (0..1 within this half) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  vec2 pageUV = right ? vec2((v_uv.x-.5)*2., v_uv.y)
-                      : vec2(v_uv.x*2.,       v_uv.y);
-
-  vec2  mapped; float shade; bool isBack; float crease;
-  curl(pageUV, u_curl, right, mapped, shade, isBack, crease);
-
-  // ‚îÄ‚îÄ Sample texture ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  // texture layout: left-half = left page, right-half = right page
-  vec2 texUV = right ? vec2(.5 + mapped.x*.5, mapped.y)
-                     : vec2(mapped.x*.5,       mapped.y);
-
-  vec4 col;
-  bool curling2 = (u_dir > 0.) == right;
-  if(isBack && curling2 && u_curl > .01){
-    // back face shows next spread
-    vec2 nextUV = right ? vec2(.5 + mapped.x*.5, mapped.y)
-                        : vec2(mapped.x*.5,       mapped.y);
-    col = texture2D(u_texNext, nextUV);
-  } else {
-    col = texture2D(u_tex, texUV);
-  }
-
-  // ‚îÄ‚îÄ Spine AO ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  float ao = right ? 1.-.44*exp(-pageUV.x*10.)
-                   : 1.-.44*exp(-(1.-pageUV.x)*10.);
-  col.rgb *= ao;
-
-  // ‚îÄ‚îÄ Fore-edge ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  col.rgb = foreEdge(pageUV, col.rgb, right);
-
-  // ‚îÄ‚îÄ Back face tint ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  if(isBack){
-    col.rgb = mix(col.rgb * .70, vec3(.86,.76,.58), .15);
-  }
-
-  // ‚îÄ‚îÄ Curl shade ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  col.rgb *= shade;
-
-  // ‚îÄ‚îÄ Crease highlight ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  col.rgb += vec3(.98,.90,.72) * crease * .65;
-
-  // ‚îÄ‚îÄ Fold shadow on unturned pages ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  if(u_curl > .01){
-    bool curling3 = (u_dir > 0.) == right;
-    if(!isBack){
-      float foldX2 = u_dir > 0. ? (1.-u_curl) : u_curl;
-      float fx = u_dir > 0. ? pageUV.x : (1.-pageUV.x);
-      col.rgb -= .32 * u_curl * exp(-abs(fx-foldX2)*24.) * (1.-float(isBack));
-    }
-  }
-
-  gl_FragColor = vec4(clamp(col.rgb,0.,1.), 1.);
-}`;
-
-// ‚îÄ‚îÄ Cover shader ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-const _CVR_FS = `
-precision highp float;
-varying vec2 v_uv;
-attribute vec2 a_uv;
-uniform float u_time;
-
-float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
-float noise(vec2 p){
-  vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
-  return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),
-             mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
-}
-float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<7;i++){v+=a*noise(p);p*=2.1;a*=.48;}return v;}
-vec3 gold(float t){ return mix(vec3(.66,.42,.08),vec3(.96,.80,.34),t); }
-
-float rosette(vec2 c, float r, float petals, float t){
-  float a=atan(c.y,c.x);
-  float petal=.5+.5*cos(petals*a+t);
-  return smoothstep(r*.85,r*.05, length(c)-petal*r*.48);
-}
-
-void main(){
-  float n=fbm(v_uv*7.)*.2+fbm(v_uv*23.+3.)*.08;
-  vec3 col=mix(vec3(.040,.015,.003),vec3(.110,.046,.011),n);
-  vec2 c=v_uv-.5; float r=length(c),a=atan(c.y,c.x);
-
-  // rings
-  for(int k=0;k<5;k++){
-    float rk=.40-float(k)*.055; float w=.007-.001*float(k);
-    float ring=smoothstep(w*.5,0.,abs(r-rk));
-    float sh=.65+.35*sin(float(k)*1.4+u_time*.7+a*4.);
-    col=mix(col,gold(sh),ring*(.92-.15*float(k)));
-  }
-
-  // inner field
-  float inner=smoothstep(.27,.22,r);
-  vec3 fillC=mix(vec3(.07,.028,.006),vec3(.13,.055,.014),fbm(c*15.+u_time*.03)*.5);
-  float tr=max(
-    smoothstep(.035,.0,abs(sin(c.x*26.+u_time*.08)*cos(c.y*26.-.08*u_time)*.4)),
-    smoothstep(.035,.0,abs(sin((c.x+c.y)*18.+u_time*.06)*.35))
-  )*inner;
-  fillC=mix(fillC,gold(.55+.4*sin(r*28.-u_time*1.1+a*3.))*.72,tr);
-  col=mix(col,fillC,inner);
-
-  // rosettes
-  col=mix(col,gold(.55+.4*sin(u_time*1.4+r*18.)),rosette(c,.20,8.,u_time*.22)*.88);
-  col=mix(col,gold(.75+.2*sin(u_time*1.8)),rosette(c,.10,6.,-u_time*.30)*.92);
-  col=mix(col,vec3(1.,.94,.62),smoothstep(.020,.0,r));
-
-  // 8-point star
-  float star=pow(abs(sin(a*4.+u_time*.18)),3.5);
-  col=mix(col,gold(.6+.35*star),star*(1.-smoothstep(.26,.36,r))*smoothstep(.07,.26,r)*.65);
-
-  // corner ornaments
-  vec2 co=abs(v_uv-.5)*2.;
-  float cscroll=smoothstep(.60,.64,max(co.x,co.y))-smoothstep(.72,.76,max(co.x,co.y));
-  col=mix(col,gold(.62+.25*sin(u_time+co.x*4.)),cscroll*.70);
-  float cd=(1.-smoothstep(.0,.14,length(co-.82)))*smoothstep(.055,.0,abs(co.x-co.y));
-  col=mix(col,gold(.72+.2*sin(u_time*.9)),cd*.88);
-
-  // borders
-  vec2 bd=min(v_uv,1.-v_uv);
-  float b1=smoothstep(0.,.006,min(bd.x,bd.y))-smoothstep(.006,.014,min(bd.x,bd.y));
-  float b2=smoothstep(.018,.022,min(bd.x,bd.y))-smoothstep(.022,.028,min(bd.x,bd.y));
-  float b3=smoothstep(.033,.036,min(bd.x,bd.y))-smoothstep(.036,.042,min(bd.x,bd.y));
-  float bs=.5+.5*sin(u_time*.5+(v_uv.x+v_uv.y)*7.);
-  col=mix(col,gold(.58+.32*bs),b1*.92+b2*.72+b3*.55);
-
-  // vignette
-  vec2 dv=v_uv*(1.-v_uv);
-  col*=mix(.35,1.,pow(dv.x*dv.y*18.,.27));
-
-  col+=vec3(.92,.80,.44)*exp(-r*r*5.5)*(.11+.05*sin(u_time*1.8));
-  gl_FragColor=vec4(clamp(col,0.,1.),1.);
-}`;
-
-// ‚îÄ‚îÄ GL helpers ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function _csh(gl,t,src){
-  const s=gl.createShader(t);
-  gl.shaderSource(s,src); gl.compileShader(s);
-  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
-  return s;
-}
-function _cprog(gl,vs,fs){
-  const p=gl.createProgram();
-  gl.attachShader(p,_csh(gl,gl.VERTEX_SHADER,vs));
-  gl.attachShader(p,_csh(gl,gl.FRAGMENT_SHADER,fs));
-  gl.linkProgram(p); return p;
-}
-function _makeTex(gl){
-  const t=gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D,t);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-  // init with 1x1 blank
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([245,235,200,255]));
-  return t;
-}
-function _uploadTex(gl,tex,canvas){
-  gl.bindTexture(gl.TEXTURE_2D,tex);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas);
-}
-
-// ‚îÄ‚îÄ Offscreen spread canvas renderer ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Draws parchment background + ayat text for both pages side by side
-function _renderSpread(leftAyahs, leftPn, rightAyahs, rightPn, W, H){
-  const cvs=document.createElement("canvas"); cvs.width=W; cvs.height=H;
-  const ctx=cvs.getContext("2d");
-
-  const hw=W/2;
-
-  // ‚îÄ‚îÄ Parchment background ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  // We draw it via gradient + noise simulation on 2D canvas
-  for(let side=0;side<2;side++){
-    const x0=side===0?0:hw;
-    ctx.save();
-    // base warm ivory
-    const g=ctx.createLinearGradient(x0,0,x0+hw,H);
-    g.addColorStop(0,  "#fdf8ea");
-    g.addColorStop(.4, "#faf2d8");
-    g.addColorStop(1,  "#f4e8c0");
-    ctx.fillStyle=g;
-    ctx.fillRect(x0,0,hw,H);
-
-    // subtle grain via tiny dots (fast approximation)
-    ctx.globalAlpha=.055;
-    ctx.fillStyle="#8b6030";
-    // draw a grid of semi-random dots for grain texture
-    const step=3;
-    for(let yy=0;yy<H;yy+=step){
-      for(let xx=0;xx<hw;xx+=step){
-        const v=Math.sin(xx*.71+yy*.53)*Math.cos(xx*.37-yy*.81)*.5+.5;
-        if(v>.62){ ctx.fillRect(x0+xx,yy,1,1); }
-      }
-    }
-    // laid lines
-    ctx.globalAlpha=.04;
-    ctx.fillStyle="#7a5520";
-    for(let yy=0;yy<H;yy+=Math.round(H/42)){
-      ctx.fillRect(x0,yy,hw,1);
-    }
-    ctx.globalAlpha=1;
-    ctx.restore();
-
-    // edge yellowing
-    const ew=ctx.createLinearGradient(x0,0,x0+12,0);
-    ew.addColorStop(0,"rgba(140,100,40,.22)"); ew.addColorStop(1,"rgba(140,100,40,0)");
-    ctx.fillStyle=ew; ctx.fillRect(x0,0,18,H);
-    const ew2=side===0
-      ? ctx.createLinearGradient(x0+hw-12,0,x0+hw,0)
-      : ctx.createLinearGradient(x0+hw-12,0,x0+hw,0);
-    ew2.addColorStop(0,"rgba(140,100,40,0)"); ew2.addColorStop(1,"rgba(140,100,40,.22)");
-    ctx.fillStyle=ew2; ctx.fillRect(x0+hw-18,0,18,H);
-    const ewt=ctx.createLinearGradient(0,0,0,12);
-    ewt.addColorStop(0,"rgba(140,100,40,.18)"); ewt.addColorStop(1,"rgba(140,100,40,0)");
-    ctx.fillStyle=ewt; ctx.fillRect(x0,0,hw,14);
-    const ewb=ctx.createLinearGradient(0,H-12,0,H);
-    ewb.addColorStop(0,"rgba(140,100,40,0)"); ewb.addColorStop(1,"rgba(140,100,40,.18)");
-    ctx.fillStyle=ewb; ctx.fillRect(x0,H-14,hw,14);
-  }
-
-  // ‚îÄ‚îÄ Double border on each page ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  const gold1="rgba(160,105,22,.55)", gold2="rgba(120,78,15,.35)";
-  [[0,hw],[hw,hw]].forEach(([x0,w2])=>{
-    const pm=w2*.044, pm2=w2*.060;
-    ctx.strokeStyle=gold1; ctx.lineWidth=.9;
-    ctx.strokeRect(x0+pm,H*.044,w2-pm*2,H*(1-.088));
-    ctx.strokeStyle=gold2; ctx.lineWidth=.65;
-    ctx.strokeRect(x0+pm2,H*.060,w2-pm2*2,H*(1-.12));
-  });
-
-  // ‚îÄ‚îÄ Text: right page (odd) on right half, left page (even) on left half ‚îÄ‚îÄ
-  _drawPageText(ctx, rightAyahs, rightPn, hw, 0, hw, H);  // right half
-  _drawPageText(ctx, leftAyahs,  leftPn,  0,  0, hw, H);  // left half
-
-  return cvs;
-}
-
-function _drawPageText(ctx, ayahs, pn, x0, y0, w, h){
-  if(!ayahs||!ayahs.length) return;
-
-  const PAD  = Math.max(w*.078, 9);
-  const PADt = Math.max(h*.065, 7);
-  const BOT  = h - Math.max(h*.055, 6);
-  const TW   = w - PAD*2;
-
-  // Font ‚Äî scales to available space, clamped for legibility
-  const fs  = Math.max(Math.min(h/18.5, w/21, 17), 10);
-  const lh  = fs * 1.52;
-  const hfs = Math.max(fs*.56, 8);
-  const bfs = Math.max(fs*.98, 11);
-
-  // Top ornament rule
-  ctx.save();
-  ctx.strokeStyle="rgba(139,90,20,.30)"; ctx.lineWidth=.8;
-  ctx.beginPath(); ctx.moveTo(x0+PAD*.85,y0+PADt-4); ctx.lineTo(x0+w-PAD*.85,y0+PADt-4); ctx.stroke();
-  ctx.restore();
-
-  let y=y0+PADt;
-
-  // Group by surah
-  const groups=[];
-  (ayahs||[]).forEach(a=>{
-    const last=groups[groups.length-1];
-    if(!last||last.sn!==a.surah.number)
-      groups.push({sn:a.surah.number,name:a.surah.name,eng:a.surah.englishName,ayahs:[]});
-    groups[groups.length-1].ayahs.push(a);
-  });
-
-  for(const g of groups){
-    if(g.ayahs[0]?.numberInSurah===1){
-      y+=lh*.22;
-      // header band
-      ctx.save();
-      const grd=ctx.createLinearGradient(x0+PAD,0,x0+w-PAD,0);
-      grd.addColorStop(0,"rgba(139,90,20,.0)");
-      grd.addColorStop(.3,"rgba(139,90,20,.09)");
-      grd.addColorStop(.7,"rgba(139,90,20,.09)");
-      grd.addColorStop(1,"rgba(139,90,20,.0)");
-      ctx.fillStyle=grd;
-      ctx.fillRect(x0+PAD*.7,y,w-PAD*1.4,lh*.92);
-
-      ctx.strokeStyle="rgba(139,90,20,.32)"; ctx.lineWidth=.7;
-      ctx.beginPath(); ctx.moveTo(x0+PAD*.75,y); ctx.lineTo(x0+w-PAD*.75,y); ctx.stroke();
-
-      // English name left
-      ctx.font=`italic ${hfs}px Georgia,serif`;
-      ctx.fillStyle="rgba(65,35,5,.80)";
-      ctx.textAlign="left"; ctx.textBaseline="middle"; ctx.direction="ltr";
-      ctx.fillText(g.eng.toUpperCase(), x0+PAD*.85, y+lh*.46);
-
-      // Arabic name right
-      ctx.font=`${Math.max(hfs*1.3,10)}px 'Amiri Quran','Scheherazade New',serif`;
-      ctx.fillStyle="rgba(75,40,6,.82)";
-      ctx.textAlign="right"; ctx.textBaseline="middle"; ctx.direction="rtl";
-      ctx.fillText(g.name, x0+w-PAD*.85, y+lh*.46);
-
-      y+=lh*.92;
-      ctx.strokeStyle="rgba(139,90,20,.32)"; ctx.lineWidth=.7;
-      ctx.beginPath(); ctx.moveTo(x0+PAD*.75,y); ctx.lineTo(x0+w-PAD*.75,y); ctx.stroke();
-      ctx.restore();
-      y+=lh*.22;
-
-      // Basmala
-      if(g.sn!==9 && y+bfs*1.5<y0+BOT){
-        ctx.save();
-        ctx.font=`${bfs}px 'Amiri Quran','Scheherazade New',serif`;
-        ctx.fillStyle="rgba(24,10,2,.87)";
-        ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.direction="rtl";
-        ctx.fillText("\u0628\u0650\u0633\u0652\u0645\u0650 \u0671\u0644\u0644\u0651\u064e\u0647\u0650 \u0671\u0644\u0631\u0651\u064e\u062d\u0652\u0645\u064e\u0670\u0646\u0650 \u0671\u0644\u0631\u0651\u064e\u062d\u0650\u064a\u0645\u0650",
-          x0+w/2, y+bfs*.55);
-        ctx.restore();
-        y+=lh*1.0;
-      }
-    }
-
-    // Word-wrap ayahs
-    ctx.font=`${fs}px 'Amiri Quran','Scheherazade New',serif`;
-    const lines=[];
-    let cur="";
-    for(const a of g.ayahs){
-      const words=a.text.split(" ");
-      words.forEach((wd,wi)=>{
-        const token = wi===words.length-1 ? wd+" Ô¥ø"+a.numberInSurah+"Ô¥æ" : wd;
-        const test  = cur ? cur+" "+token : token;
-        ctx.font=`${fs}px 'Amiri Quran','Scheherazade New',serif`;
-        if(ctx.measureText(test).width>TW && cur){ lines.push(cur); cur=token; }
-        else cur=test;
-      });
-    }
-    if(cur) lines.push(cur);
-
-    ctx.save();
-    ctx.font=`${fs}px 'Amiri Quran','Scheherazade New',serif`;
-    ctx.fillStyle="rgba(18,7,2,.91)";
-    ctx.direction="rtl"; ctx.textAlign="right"; ctx.textBaseline="alphabetic";
-    for(const ln of lines){
-      if(y+lh>y0+BOT) break;
-      ctx.fillText(ln, x0+w-PAD, y+lh);
-      y+=lh;
-    }
-    ctx.restore();
-    y+=lh*.12;
-  }
-
-  // Page number + ornament
-  const pnfs=Math.max(h*.027,7);
-  ctx.save();
-  ctx.strokeStyle="rgba(139,90,20,.26)"; ctx.lineWidth=.7;
-  ctx.beginPath();
-  ctx.moveTo(x0+PAD*.85,y0+BOT+3); ctx.lineTo(x0+w-PAD*.85,y0+BOT+3);
-  ctx.stroke();
-
-  const oy=y0+BOT+3+pnfs*1.1;
-  const dd=pnfs*.38;
-  ctx.fillStyle="rgba(120,78,18,.36)";
-  [[x0+w/2-dd*5.5,oy],[x0+w/2+dd*5.5,oy]].forEach(([px2,py2])=>{
-    ctx.beginPath();
-    ctx.moveTo(px2,py2-dd*.65); ctx.lineTo(px2+dd*.65,py2);
-    ctx.lineTo(px2,py2+dd*.65); ctx.lineTo(px2-dd*.65,py2);
-    ctx.closePath(); ctx.fill();
-  });
-
-  ctx.font=`${pnfs}px 'Cinzel',Georgia,serif`;
-  ctx.fillStyle="rgba(108,68,16,.46)";
-  ctx.textAlign="center"; ctx.textBaseline="middle";
-  ctx.fillText(String(pn), x0+w/2, oy);
-  ctx.restore();
-}
-
-// ‚îÄ‚îÄ Main component ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function QuranBook3DPage({ surahs }) {
-  const navigate = useNavigate();
-
-  const cvs3 = React.useRef(null);  // single WebGL canvas
-  const raf3 = React.useRef(null);
-  const gl3  = React.useRef(null);
-  const glState = React.useRef({
-    pageProg: null, coverProg: null,
-    buf: null, uvBuf: null,
-    texCur: null, texNext: null,
-  });
-
-  const pd  = React.useRef({});    // pageNum ‚Üí ayahs[] (null=loading)
-  const tx0 = React.useRef(0);
-
-  const SR = React.useRef({
-    curl: 0, targetCurl: 0, dir: 1,
-    spread: 0,
-    flipping: false,
-    time: 0,
-    phase: "cover",   // "cover"|"open"
-    texDirty: true,   // need to re-upload textures
-  });
-
-  const [sp,    setSp]    = React.useState(0);
-  const [ph,    setPh]    = React.useState("cover");
-  const [smenu, setSmenu] = React.useState(false);
-  const [bm,    setBm]    = React.useState(()=>parseInt(localStorage.getItem("q3d_bm")||"0")||0);
-  const [sz,    setSz]    = React.useState({w:860,h:522});
-  const [ready, setReady] = React.useState(false);
-
-  // Responsive size
-  React.useEffect(()=>{
-    const u=()=>{
-      const vw=window.innerWidth, vh=window.innerHeight;
-      const w=Math.min((vw-14)*.97, (vh-85)*1.63, 980);
-      setSz({w:Math.round(w), h:Math.round(w/1.63)});
-    };
-    u(); window.addEventListener("resize",u);
-    return()=>window.removeEventListener("resize",u);
-  },[]);
-
-  // ‚îÄ‚îÄ Build and upload spread textures to WebGL ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  const uploadSpreadTex = React.useCallback((spread, which="cur")=>{
-    const gl=gl3.current; const gls=glState.current;
-    if(!gl||spread===0) return;
-    const rp=2*spread-1, lp=Math.min(2*spread,_MUSHAF_PAGES);
-    const rd=pd.current[rp], ld=pd.current[lp];
-    if(!rd||!ld) return;  // not loaded yet
-    const cvs=_renderSpread(ld, lp, rd, rp, sz.w, sz.h);
-    const tex=which==="cur"?gls.texCur:gls.texNext;
-    _uploadTex(gl,tex,cvs);
-  },[sz.w, sz.h]);
-
-  // ‚îÄ‚îÄ Prefetch ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  const prefetch=React.useCallback(async(spread, onReady)=>{
-    if(spread===0) return;
-    const pages=[
-      2*spread-1, 2*spread,
-      2*spread+1, 2*spread+2,
-      2*spread-3, 2*spread-2,
-    ].filter(p=>p>=1&&p<=_MUSHAF_PAGES);
-
-    const crit=[2*spread-1,2*spread].filter(p=>p>=1&&p<=_MUSHAF_PAGES);
-
-    // load critical first
-    await Promise.all(crit.map(async p=>{
-      if(pd.current[p]!==undefined) return;
-      pd.current[p]=null;
-      try{
-        const d=await fetch(`${_API3D}/page/${p}/quran-uthmani`).then(r=>r.json()).then(r=>r.data?.ayahs||[]);
-        pd.current[p]=d;
-      }catch{ pd.current[p]=[]; }
-    }));
-
-    if(onReady) onReady();
-
-    // load rest in background
-    for(const p of pages){
-      if(pd.current[p]!==undefined) continue;
-      pd.current[p]=null;
-      try{
-        const d=await fetch(`${_API3D}/page/${p}/quran-uthmani`).then(r=>r.json()).then(r=>r.data?.ayahs||[]);
-        pd.current[p]=d;
-      }catch{ pd.current[p]=[]; }
-    }
-  },[]);
-
-  // ‚îÄ‚îÄ WebGL init ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  React.useEffect(()=>{
-    const cvs=cvs3.current; if(!cvs)return;
-    const gl=cvs.getContext("webgl",{antialias:true,alpha:false});
-    if(!gl){console.error("WebGL not available");return;}
-    gl3.current=gl;
-
-    const gls=glState.current;
-    gls.pageProg  = _cprog(gl,_VS3D,_PAGE_FS);
-    gls.coverProg = _cprog(gl,_VS3D,_CVR_FS);
-
-    // Full-screen quad
-    const verts=new Float32Array([-1,-1, 1,-1, -1,1, 1,-1, 1,1, -1,1]);
-    const uvs  =new Float32Array([ 0, 1,  1, 1,  0,0,  1, 1, 1,0,  0,0]);
-    gls.buf   = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER,gls.buf);
-    gl.bufferData(gl.ARRAY_BUFFER,verts,gl.STATIC_DRAW);
-    gls.uvBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER,gls.uvBuf);
-    gl.bufferData(gl.ARRAY_BUFFER,uvs,gl.STATIC_DRAW);
-
-    gls.texCur  = _makeTex(gl);
-    gls.texNext = _makeTex(gl);
-
-    let lastSp=-1, lastW=0, lastH=0;
-
-    const draw=(ts)=>{
-      const s=SR.current;
-      s.time=ts*.001;
-
-      // smooth curl
-      const diff=s.targetCurl-s.curl;
-      s.curl+=diff*(diff>0?.15:.18);
-      if(Math.abs(diff)<.003){
-        s.curl=s.targetCurl;
-        if(s.targetCurl===1&&s.flipping){
-          s.flipping=false; s.curl=0; s.targetCurl=0;
-          s.spread+=s.dir>0?1:-1;
-          s.spread=Math.max(1,Math.min(302,s.spread));
-          s.texDirty=true;
-          setSp(s.spread);
-          setReady(false);
-          prefetch(s.spread,()=>{
-            uploadSpreadTex(s.spread,"cur");
-            prefetch(s.spread+1,()=>uploadSpreadTex(s.spread+1,"next"));
-            prefetch(s.spread-1,()=>uploadSpreadTex(s.spread-1,"next"));
-            setReady(true);
-          });
-        }
-      }
-
-      // re-upload textures when spread changed or canvas resized
-      if(s.phase==="open" && (s.spread!==lastSp||sz.w!==lastW||sz.h!==lastH)){
-        lastSp=s.spread; lastW=sz.w; lastH=sz.h;
-        uploadSpreadTex(s.spread,"cur");
-      }
-
-      gl.viewport(0,0,cvs.width,cvs.height);
-      gl.clearColor(.028,.012,.003,1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-
-      const usePageProg = s.phase==="open";
-      const prog = usePageProg ? gls.pageProg : gls.coverProg;
-      gl.useProgram(prog);
-
-      // bind vertex pos
-      const aPos=gl.getAttribLocation(prog,"a_pos");
-      gl.bindBuffer(gl.ARRAY_BUFFER,gls.buf);
-      gl.enableVertexAttribArray(aPos);
-      gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
-
-      // bind uv (cover shader also has varying v_uv via a_pos*.5+.5, but page shader uses a_uv)
-      const aUv=gl.getAttribLocation(prog,"a_uv");
-      if(aUv>=0){
-        gl.bindBuffer(gl.ARRAY_BUFFER,gls.uvBuf);
-        gl.enableVertexAttribArray(aUv);
-        gl.vertexAttribPointer(aUv,2,gl.FLOAT,false,0,0);
-      }
-
-      gl.uniform1f(gl.getUniformLocation(prog,"u_time"),s.time);
-
-      if(usePageProg){
-        gl.uniform1f(gl.getUniformLocation(prog,"u_curl"),s.curl);
-        gl.uniform1f(gl.getUniformLocation(prog,"u_dir"),s.dir);
-
-        // texCur ‚Üí unit 0
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D,gls.texCur);
-        gl.uniform1i(gl.getUniformLocation(prog,"u_tex"),0);
-
-        // texNext ‚Üí unit 1
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D,gls.texNext);
-        gl.uniform1i(gl.getUniformLocation(prog,"u_texNext"),1);
-      }
-
-      gl.drawArrays(gl.TRIANGLES,0,6);
-      raf3.current=requestAnimationFrame(draw);
-    };
-    raf3.current=requestAnimationFrame(draw);
-    return()=>cancelAnimationFrame(raf3.current);
-  },[]); // eslint-disable-line
-
-  // Resize canvas
-  React.useEffect(()=>{
-    const c=cvs3.current; if(!c)return;
-    c.width=sz.w; c.height=sz.h;
-    if(SR.current.phase==="open") uploadSpreadTex(SR.current.spread,"cur");
-  },[sz,uploadSpreadTex]);
-
-  // ‚îÄ‚îÄ Open book ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  const openBook=React.useCallback(()=>{
-    const s=SR.current; if(s.phase!=="cover")return;
-    s.spread=1; s.phase="open"; setPh("open"); setSp(1); setReady(false);
-    prefetch(1,()=>{
-      uploadSpreadTex(1,"cur");
-      prefetch(2,()=>uploadSpreadTex(2,"next"));
-      setReady(true);
-    });
-  },[prefetch,uploadSpreadTex]);
-
-  // ‚îÄ‚îÄ Flip ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  const startFlip=React.useCallback((dir)=>{
-    const s=SR.current;
-    if(s.flipping||s.phase!=="open") return;
-    if(dir>0&&2*(s.spread+1)-1>_MUSHAF_PAGES) return;
-    if(dir<0&&s.spread<=1) return;
-
-    const next=s.spread+dir;
-    const doFlip=()=>{
-      // upload next spread to texNext before flipping
-      uploadSpreadTex(next,"next");
-      s.flipping=true; s.dir=dir; s.curl=0; s.targetCurl=1;
-    };
-
-    // ensure next spread is loaded
-    const np=[2*next-1,2*next].filter(p=>p>=1&&p<=_MUSHAF_PAGES);
-    const missing=np.filter(p=>pd.current[p]===undefined);
-    if(missing.length===0){
-      doFlip();
-    } else {
-      Promise.all(missing.map(async p=>{
-        if(pd.current[p]!==undefined)return;
-        pd.current[p]=null;
-        try{
-          const d=await fetch(`${_API3D}/page/${p}/quran-uthmani`).then(r=>r.json()).then(r=>r.data?.ayahs||[]);
-          pd.current[p]=d;
-        }catch{pd.current[p]=[];}
-      })).then(doFlip);
-    }
-  },[uploadSpreadTex]);
-
-  const flipFwd =React.useCallback(()=>startFlip(1), [startFlip]);
-  const flipBwd =React.useCallback(()=>startFlip(-1),[startFlip]);
-
-  const jumpTo=React.useCallback((pn)=>{
-    const s=SR.current; if(s.phase!=="open")return;
-    const p=Math.max(1,Math.min(_MUSHAF_PAGES,parseInt(pn)||1));
-    s.spread=Math.ceil(p/2); s.curl=0; s.targetCurl=0; s.flipping=false;
-    setSp(s.spread); setReady(false); setSmenu(false);
-    prefetch(s.spread,()=>{
-      uploadSpreadTex(s.spread,"cur");
-      prefetch(s.spread+1,()=>uploadSpreadTex(s.spread+1,"next"));
-      setReady(true);
-    });
-  },[prefetch,uploadSpreadTex]);
-
-  // Keyboard
-  React.useEffect(()=>{
-    const h=e=>{if(e.key==="ArrowLeft")flipFwd();if(e.key==="ArrowRight")flipBwd();};
-    window.addEventListener("keydown",h);
-    return()=>window.removeEventListener("keydown",h);
-  },[flipFwd,flipBwd]);
-
-  const rp=2*sp-1, lp=Math.min(2*sp,_MUSHAF_PAGES);
-  const BB={
-    fontSize:9,letterSpacing:1.6,padding:"6px 14px",
-    fontFamily:"'Cinzel',serif",
-    background:"rgba(201,168,76,.07)",
-    border:"1px solid rgba(201,168,76,.26)",
-    color:"rgba(201,168,76,.68)",
-    borderRadius:7,cursor:"pointer",transition:"all .18s",
-  };
-  const BBh=(e,on)=>{
-    e.currentTarget.style.background=on?"rgba(201,168,76,.17)":"rgba(201,168,76,.07)";
-    e.currentTarget.style.borderColor=on?"rgba(201,168,76,.52)":"rgba(201,168,76,.26)";
-  };
-
-  return(
-    <div style={{display:"flex",flexDirection:"column",height:"100%",
-      background:"radial-gradient(ellipse at 50% 28%,#1e0d03 0%,#060200 100%)",
-      alignItems:"center",justifyContent:"space-between",
-      overflow:"hidden",userSelect:"none",fontFamily:"'Cinzel',Georgia,serif"}}>
-
-      {/* ambient floor */}
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",
-        width:"70%",height:55,pointerEvents:"none",
-        background:"radial-gradient(ellipse,rgba(170,105,18,.13) 0%,transparent 70%)"}}/>
-
-      {/* ‚îÄ‚îÄ Top bar ‚îÄ‚îÄ */}
-      <div style={{display:"flex",alignItems:"center",gap:10,width:"100%",
-        maxWidth:sz.w+40,padding:"8px 16px",boxSizing:"border-box",flexShrink:0,
-        background:"linear-gradient(to bottom,rgba(0,0,0,.42),transparent)",flexWrap:"wrap"}}>
-
-        <button onClick={()=>navigate("/quran")} style={{...BB,flexShrink:0}}
-          onMouseEnter={e=>BBh(e,true)} onMouseLeave={e=>BBh(e,false)}>‚Üê SOURATES</button>
-
-        <div style={{fontFamily:"'Amiri Quran',serif",
-          fontSize:Math.max(sz.w*.022,13),
-          color:"rgba(201,168,76,.50)",direction:"rtl",flex:1,textAlign:"center",
-          textShadow:"0 0 18px rgba(201,168,76,.18)"}}>ÿßŸÑŸÇÿ±ÿ¢ŸÜ ÿßŸÑŸÉÿ±ŸäŸÖ</div>
-
-        {ph==="open"&&<>
-          {/* Surah picker */}
-          <div style={{position:"relative",flexShrink:0}}>
-            <button onClick={()=>setSmenu(v=>!v)} style={BB}
-              onMouseEnter={e=>BBh(e,true)} onMouseLeave={e=>BBh(e,false)}>SOURATE ‚ñæ</button>
-            {smenu&&(
-              <div style={{position:"absolute",top:"115%",right:0,zIndex:200,
-                background:"linear-gradient(160deg,#150902,#0d0500)",
-                border:"1px solid rgba(201,168,76,.20)",borderRadius:10,
-                maxHeight:260,overflowY:"auto",minWidth:220,
-                boxShadow:"0 14px 55px rgba(0,0,0,.9)"}}>
-                {surahs.map(s=>(
-                  <div key={s.number}
-                    onClick={()=>jumpTo(s.startPage||(s.number*2-1))}
-                    style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",
-                      cursor:"pointer",borderBottom:"1px solid rgba(201,168,76,.05)"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="rgba(201,168,76,.1)"}
-                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <span style={{fontSize:8,color:"rgba(201,168,76,.36)",minWidth:18,flexShrink:0}}>{s.number}</span>
-                    <span style={{fontFamily:"'Amiri Quran',serif",fontSize:14,color:"#c9a84c",direction:"rtl"}}>{s.name}</span>
-                    <span style={{fontSize:7,color:"rgba(201,168,76,.30)",marginLeft:"auto",flexShrink:0}}>{s.englishName}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Bookmark */}
-          <button onClick={()=>{setBm(rp);localStorage.setItem("q3d_bm",String(rp));}}
-            style={{...BB,fontSize:13,padding:"3px 7px",flexShrink:0,
-              color:bm===rp?"#c0392b":"rgba(201,168,76,.35)"}}>üîñ</button>
-          {bm>0&&bm!==rp&&(
-            <button onClick={()=>jumpTo(bm)} style={{...BB,flexShrink:0}}
-              onMouseEnter={e=>BBh(e,true)} onMouseLeave={e=>BBh(e,false)}>p.{bm}</button>
-          )}
-
-          {/* Page jump */}
-          <input type="number" defaultValue={rp} key={rp}
-            onKeyDown={e=>e.key==="Enter"&&jumpTo(e.target.value)}
-            onBlur={e=>jumpTo(e.target.value)}
-            style={{width:44,textAlign:"center",background:"rgba(0,0,0,.22)",
-              border:"1px solid rgba(201,168,76,.20)",borderRadius:6,
-              padding:"4px 4px",color:"#c9a84c",fontSize:11,
-              fontFamily:"'Cinzel',serif",outline:"none",flexShrink:0}}/>
-          <span style={{fontSize:7,color:"rgba(201,168,76,.26)",flexShrink:0}}>/604</span>
-
-          {/* Loading dot */}
-          {!ready&&<div style={{width:7,height:7,borderRadius:"50%",flexShrink:0,
-            background:"rgba(201,168,76,.55)",
-            animation:"q3dpulse 1s ease-in-out infinite"}}/>}
-        </>}
-      </div>
-
-      {/* ‚îÄ‚îÄ Book scene ‚îÄ‚îÄ */}
-      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",
-        width:"100%",position:"relative"}}
-        onTouchStart={e=>{tx0.current=e.touches[0].clientX;}}
-        onTouchEnd={e=>{
-          const dx=e.changedTouches[0].clientX-tx0.current;
-          if(dx<-55)flipFwd(); if(dx>55)flipBwd();
-        }}>
-
-        <div style={{perspective:3600,perspectiveOrigin:"50% 38%",
-          display:"flex",alignItems:"center",justifyContent:"center",
-          width:sz.w+80,height:sz.h+60}}>
-
-          <div style={{position:"relative",width:sz.w,height:sz.h,
-            transform:ph==="cover"
-              ? "rotateX(8deg) rotateY(-5deg)"
-              : "rotateX(5deg) rotateY(0deg)",
-            transformStyle:"preserve-3d",
-            transition:"transform .7s cubic-bezier(.4,0,.2,1)",
-            filter:`drop-shadow(0 ${sz.h*.11}px ${sz.h*.16}px rgba(0,0,0,.97))
-                    drop-shadow(0 ${sz.h*.03}px ${sz.h*.05}px rgba(0,0,0,.70))`,
-            cursor:ph==="cover"?"pointer":"default"}}
-            onClick={ph==="cover"?openBook:undefined}>
-
-            {/* ‚îÄ‚îÄ Single WebGL canvas ‚Äî renders everything ‚îÄ‚îÄ */}
-            <canvas ref={cvs3} width={sz.w} height={sz.h}
-              style={{position:"absolute",top:0,left:0,display:"block",
-                borderRadius:"1px 2px 2px 1px"}}/>
-
-            {/* 3D Spine overlay (DOM element for depth) */}
-            {ph==="open"&&(
-              <div style={{position:"absolute",top:0,bottom:0,left:"50%",
-                width:26,transform:"translateX(-50%) translateZ(1px)",
-                zIndex:40,pointerEvents:"none",
-                background:"linear-gradient(to right,#060200 0%,#321203 17%,#8a3a0e 33%,#d08c38 50%,#8a3a0e 67%,#321203 83%,#060200 100%)",
-                boxShadow:"0 0 22px rgba(0,0,0,.88),inset 0 0 7px rgba(255,195,75,.10)"}}>
-                <div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(to bottom,transparent 0,transparent 22px,rgba(255,182,50,.06) 22px,rgba(255,182,50,.06) 23px)"}}/>
-                <div style={{position:"absolute",top:0,bottom:0,left:"15%",width:1,background:"rgba(255,205,95,.10)"}}/>
-                <div style={{position:"absolute",top:0,bottom:0,right:"15%",width:1,background:"rgba(255,205,95,.10)"}}/>
-              </div>
-            )}
-
-            {/* Cover boards (top / bottom 3D depth) */}
-            <div style={{position:"absolute",top:-6,left:3,right:3,height:7,
-              background:"linear-gradient(135deg,#380d04,#7a2b0a,#380d04)",
-              borderRadius:"2px 2px 0 0",
-              boxShadow:"0 -3px 8px rgba(0,0,0,.65)"}}/>
-            <div style={{position:"absolute",bottom:-6,left:3,right:3,height:7,
-              background:"linear-gradient(135deg,#380d04,#7a2b0a,#380d04)",
-              borderRadius:"0 0 2px 2px",
-              boxShadow:"0 3px 8px rgba(0,0,0,.65)"}}/>
-
-            {/* Click zones */}
-            {ph==="open"&&<>
-              <div onClick={flipBwd}
-                style={{position:"absolute",top:0,right:0,width:"45%",height:"100%",
-                  zIndex:50,cursor:"pointer"}}
-                title="Page pr√©c√©dente (‚Üí)"/>
-              <div onClick={flipFwd}
-                style={{position:"absolute",top:0,left:0,width:"45%",height:"100%",
-                  zIndex:50,cursor:"pointer"}}
-                title="Page suivante (‚Üê)"/>
-            </>}
-
-            {/* Cover CTA */}
-            {ph==="cover"&&(
-              <div style={{position:"absolute",bottom:"19%",left:0,right:0,
-                textAlign:"center",zIndex:60,pointerEvents:"none"}}>
-                <div style={{display:"inline-block",
-                  fontSize:Math.max(sz.w*.009,8),
-                  letterSpacing:Math.max(sz.w*.003,2.5),
-                  color:"rgba(201,168,76,.72)",
-                  border:"1px solid rgba(201,168,76,.24)",
-                  padding:`${Math.max(sz.h*.008,4)}px ${Math.max(sz.w*.02,13)}px`,
-                  borderRadius:30,background:"rgba(0,0,0,.38)",
-                  textShadow:"0 0 14px rgba(201,168,76,.40)",
-                  animation:"q3dpulse 2.6s ease-in-out infinite"}}>
-                  OUVRIR LE LIVRE
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Side arrow hints */}
-        {ph==="open"&&<>
-          {[{side:"right",dir:-1,char:"‚Ä∫"},{side:"left",dir:1,char:"‚Äπ"}].map(({side,dir,char})=>(
-            <div key={side}
-              onClick={dir>0?flipFwd:flipBwd}
-              style={{position:"absolute",[side]:Math.max(sz.w*.004,5),
-                top:"50%",transform:"translateY(-50%)",zIndex:100,cursor:"pointer",
-                fontSize:Math.max(sz.w*.03,20),color:"rgba(201,168,76,.17)",
-                transition:"color .22s,transform .22s",userSelect:"none"}}
-              onMouseEnter={e=>{e.currentTarget.style.color="rgba(201,168,76,.65)";e.currentTarget.style.transform="translateY(-50%) scale(1.18)";}}
-              onMouseLeave={e=>{e.currentTarget.style.color="rgba(201,168,76,.17)";e.currentTarget.style.transform="translateY(-50%) scale(1)";}}>
-              {char}
-            </div>
-          ))}
-        </>}
-      </div>
-
-      {/* ‚îÄ‚îÄ Bottom nav ‚îÄ‚îÄ */}
-      {ph==="open"&&(
-        <div style={{display:"flex",alignItems:"center",gap:12,
-          padding:"8px 0 14px",flexShrink:0,flexWrap:"wrap",justifyContent:"center"}}>
-          <button style={BB} onClick={flipBwd} disabled={sp<=1}
-            onMouseEnter={e=>BBh(e,true)} onMouseLeave={e=>BBh(e,false)}>‚Üí PR√âC.</button>
-          <div style={{textAlign:"center",minWidth:80}}>
-            <div style={{fontSize:10,letterSpacing:2,color:"rgba(201,168,76,.48)"}}>
-              {rp}{lp<=_MUSHAF_PAGES?"‚Äì"+lp:""}
-            </div>
-            <div style={{width:86,height:2,background:"rgba(201,168,76,.10)",
-              borderRadius:2,marginTop:4,overflow:"hidden"}}>
-              <div style={{height:"100%",borderRadius:2,
-                background:"linear-gradient(to right,#7a3c0a,#c9a84c)",
-                width:`${(rp/_MUSHAF_PAGES)*100}%`,transition:"width .5s"}}/>
-            </div>
-          </div>
-          <button style={BB} onClick={flipFwd} disabled={lp>=_MUSHAF_PAGES}
-            onMouseEnter={e=>BBh(e,true)} onMouseLeave={e=>BBh(e,false)}>SUIV. ‚Üê</button>
-        </div>
-      )}
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Amiri+Quran&display=swap');
-        @keyframes q3dpulse{0%,100%{opacity:.48;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
-        input[type=number]::-webkit-inner-spin-button,
-        input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
-        ::-webkit-scrollbar{width:4px}
-        ::-webkit-scrollbar-thumb{background:rgba(201,168,76,.22);border-radius:2px}
-      `}</style>
-    </div>
-  );
-}
-
-
-
-// ‚îÄ‚îÄ‚îÄ UnknownWordQuestion ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Shows full ayat with the unknown word replaced by ‚ñ¢‚ñ¢‚ñ¢ ‚Äî user types the word
-function UnknownWordQuestion({ q, onAnswer }) {
-  const answerWords = React.useMemo(() => (q.answer || '').split('|').filter(Boolean), [q.answer]);
-  const isMulti = answerWords.length > 1;
-  const [vals,      setVals]     = React.useState(() => answerWords.map(() => ''));
-  const [shaken,    setShaken]   = React.useState(false);
-  const [revealed,  setRevealed] = React.useState(false);
-  const [checked,   setChecked]  = React.useState(false);
-  const [correctArr,setCorrectArr] = React.useState([]); // per-word correctness
-
-  const correct = correctArr.length > 0 && correctArr.every(Boolean);
-
-  const _normQ = s => s.trim().replace(/[ÿê-Ÿãÿö-Ÿ∞Ÿü€ñ-€≠\u200c]/g,'').replace(/ÿ£|ÿ•|ÿ¢/g,'ÿß').replace(/ÿ©/g,'Ÿá').replace(/Ÿâ/g,'Ÿä');
-
-  const setValAt = (i, v) => setVals(prev => prev.map((p, pi) => pi === i ? v : p));
-
-  const submit = () => {
-    if (vals.some(v => !v.trim())) return;
-    const results = answerWords.map((w, i) => _normQ(vals[i]) === _normQ(w));
-    if (results.some(r => !r)) { setShaken(true); setTimeout(() => setShaken(false), 500); }
-    setCorrectArr(results);
-    setChecked(true);
-  };
-
-  const reveal = () => { setRevealed(true); setChecked(true); setCorrectArr(answerWords.map(() => false)); };
-
-  const proceed = (removeRevise) => onAnswer(correct, removeRevise);
-
-  return (
-    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:12, alignItems:'center' }}>
-      {/* Ayat with masked word(s) */}
-      <div style={{ fontFamily:"'Amiri Quran',serif", fontSize:20, direction:'rtl',
-        textAlign:'center', color:'var(--text1)', padding:'12px 16px', width:'100%',
-        background:'var(--surface3)', borderRadius:9, border:'1px solid var(--border)', lineHeight:2.4 }}>
-        {q.questionData}
-      </div>
-
-      {!checked ? (
-        <>
-          <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%' }}>
-            {answerWords.map((_, i) => (
-              <input key={i} autoFocus={i === 0} value={vals[i]}
-                onChange={e => setValAt(i, e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && submit()}
-                placeholder={isMulti ? `Mot manquant ${i+1}/${answerWords.length}‚Ä¶` : "√âcris le mot arabe manquant‚Ä¶"}
-                dir="rtl"
-                style={{ width:'100%', padding:'10px 14px', fontSize:18,
-                  fontFamily:"'Amiri Quran',serif", direction:'rtl', textAlign:'center',
-                  background:'var(--surface3)', border:`1px solid ${shaken?'var(--red)':'var(--border2)'}`,
-                  borderRadius:8, color:'var(--text1)', outline:'none',
-                  animation: shaken ? 'qshake .4s' : 'none' }} />
-            ))}
-          </div>
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={submit}
-              style={{ padding:'8px 22px', background:'var(--teal)', border:'none',
-                borderRadius:7, color:'#fff', fontSize:9, letterSpacing:2,
-                fontFamily:"'Cinzel',serif", cursor:'pointer' }}>VALIDER</button>
-            <button onClick={reveal}
-              style={{ padding:'8px 16px', background:'transparent',
-                border:'1px solid var(--border2)', borderRadius:7,
-                color:'var(--text3)', fontSize:9, letterSpacing:1,
-                fontFamily:"'Cinzel',serif", cursor:'pointer' }}>{isMulti ? 'VOIR LES MOTS' : 'VOIR LE MOT'}</button>
-          </div>
-        </>
-      ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:10, width:'100%', alignItems:'center' }}>
-          {/* Feedback */}
-          <div style={{ fontSize:13, fontFamily:"'Cinzel',serif", letterSpacing:1,
-            color: correct ? 'var(--green)' : 'var(--red)' }}>
-            {correct ? '‚úì EXACT !' : revealed ? (isMulti ? 'üìñ R√âPONSES :' : 'üìñ R√âPONSE :') : (isMulti ? '‚úó R√©ponses :' : '‚úó R√©ponse :')}
-          </div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center' }}>
-            {answerWords.map((w, i) => (
-              <div key={i} style={{ fontFamily:"'Amiri Quran',serif", fontSize:24, direction:'rtl', textAlign:'center',
-                padding:'10px 18px', borderRadius:8,
-                background: correctArr[i] ? 'rgba(76,175,129,.08)' : 'rgba(201,168,76,.07)',
-                border: `1px solid ${correctArr[i] ? 'var(--green)' : 'var(--gold)'}`,
-                color: correctArr[i] ? 'var(--green)' : 'var(--gold2)' }}>
-                {w}
-                {isMulti && <span style={{fontSize:11,marginRight:6}}>{correctArr[i] ? ' ‚úì' : (revealed ? '' : ' ‚úó')}</span>}
-              </div>
-            ))}
-          </div>
-
-          {/* If toRevise: ask whether to keep or remove from √†-r√©viser */}
-          {q.toRevise ? (
-            <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'center', width:'100%' }}>
-              <div style={{ fontSize:8, letterSpacing:1.5, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>
-                üîñ RETIRER DE LA LISTE √Ä R√âVISER ?
-              </div>
-              <div style={{ display:'flex', gap:8 }}>
-                <button onClick={() => proceed(true)}
-                  style={{ padding:'7px 16px', background:'rgba(76,175,129,.1)',
-                    border:'1px solid var(--green)', borderRadius:7, color:'var(--green)',
-                    fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-                  ‚úì OUI ‚Äî MA√éTRIS√â
-                </button>
-                <button onClick={() => proceed(false)}
-                  style={{ padding:'7px 16px', background:'rgba(255,80,80,.08)',
-                    border:'1px solid var(--red)', borderRadius:7, color:'var(--red)',
-                    fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-                  üîñ GARDER
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ display:'flex', gap:10 }}>
-              {!correct && (
-                <button onClick={() => onAnswer(false)}
-                  style={{ padding:'7px 18px', background:'rgba(255,80,80,.12)',
-                    border:'1px solid var(--red)', borderRadius:7, color:'var(--red)',
-                    fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-                  ‚úó √Ä REVOIR
-                </button>
-              )}
-              <button onClick={() => onAnswer(correct)}
-                style={{ padding:'7px 18px', background: correct ? 'rgba(76,175,129,.12)' : 'rgba(255,255,255,.05)',
-                  border:`1px solid ${correct ? 'var(--green)' : 'var(--border2)'}`,
-                  borderRadius:7, color: correct ? 'var(--green)' : 'var(--text3)',
-                  fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-                {correct ? '‚úì CONTINUER' : 'CONTINUER ‚Üí'}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-      <style>{`@keyframes qshake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}60%{transform:translateX(6px)}80%{transform:translateX(-3px)}}`}</style>
-    </div>
-  );
-}
-
-// ‚îÄ‚îÄ‚îÄ UnknownPickQuestion ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Shows full ayat ‚Üí user picks which words they don't know (multi-select MCQ)
-// Correct = selecting exactly the unknown words
-function UnknownPickQuestion({ q, onAnswer }) {
-  const [selected, setSelected] = React.useState(new Set());
-  const [checked,  setChecked]  = React.useState(false);
-  const [result,   setResult]   = React.useState(null); // true/false
-
-  const correctSet = new Set((q.answer || '').split('|').filter(Boolean));
-
-  const toggle = (w) => {
-    if (checked) return;
-    setSelected(prev => {
-      const n = new Set(prev);
-      n.has(w) ? n.delete(w) : n.add(w);
-      return n;
-    });
-  };
-
-  const check = () => {
-    // correct if selected set equals correctSet ‚Äî empty selection is a valid
-    // submission (e.g. no unknown/marked words left), not blocked anymore
-    const correct = selected.size === correctSet.size &&
-      [...selected].every(w => correctSet.has(w));
-    setResult(correct);
-    setChecked(true);
-  };
-
-  return (
-    <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:12, alignItems:'center' }}>
-      {/* Full ayat display */}
-      <div style={{ fontFamily:"'Amiri Quran',serif", fontSize:20, direction:'rtl',
-        textAlign:'center', color:'var(--text1)', padding:'12px 16px', width:'100%',
-        background:'var(--surface3)', borderRadius:9, border:'1px solid var(--border)', lineHeight:2.4 }}>
-        {q.questionData}
-      </div>
-
-      {/* Word chips */}
-      <div style={{ display:'flex', flexWrap:'wrap', gap:8, justifyContent:'center',
-        direction:'rtl', width:'100%' }}>
-        {(q.options || []).map((w, i) => {
-          const isSel  = selected.has(w);
-          const isCorr = checked && correctSet.has(w);
-          const isWrong= checked && isSel && !correctSet.has(w);
-          const isMissed=checked && !isSel && correctSet.has(w);
-          return (
-            <button key={i} onClick={() => toggle(w)}
-              style={{
-                fontFamily:"'Amiri Quran',serif", fontSize:18, direction:'rtl',
-                padding:'6px 14px', borderRadius:8, cursor: checked?'default':'pointer',
-                border: isCorr  ? '2px solid var(--green)'
-                      : isWrong ? '2px solid var(--red)'
-                      : isMissed? '2px dashed var(--gold)'
-                      : isSel   ? '2px solid var(--teal)'
-                      :           '1px solid var(--border2)',
-                background: isCorr   ? 'rgba(76,175,129,.15)'
-                           : isWrong  ? 'rgba(255,80,80,.12)'
-                           : isMissed ? 'rgba(201,168,76,.10)'
-                           : isSel    ? 'rgba(62,184,160,.12)'
-                           :            'var(--surface3)',
-                color:'var(--text1)',
-                transition:'all .15s',
-              }}>
-              {w}
-              {isCorr  && <span style={{fontSize:9,marginRight:4,color:'var(--green)'}}> ‚úì</span>}
-              {isWrong && <span style={{fontSize:9,marginRight:4,color:'var(--red)'}}>  ‚úó</span>}
-              {isMissed&& <span style={{fontSize:9,marginRight:4,color:'var(--gold)'}}>  !</span>}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Hint */}
-      <div style={{ fontSize:8, color:'var(--text3)', letterSpacing:.5 }}>
-        {checked ? '' : q.toRevise
-          ? `S√©lectionne ${correctSet.size} mot${correctSet.size>1?'s':''} marqu√©${correctSet.size>1?'s':''} √† r√©viser`
-          : `S√©lectionne ${correctSet.size} mot${correctSet.size>1?'s':''} inconnu${correctSet.size>1?'s':''}`}
-      </div>
-
-      {/* Actions */}
-      {!checked ? (
-        <button onClick={check}
-          style={{ padding:'8px 24px', background:'var(--teal)',
-            border:'none', borderRadius:7, color:'#fff',
-            fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-            cursor:'pointer', transition:'all .2s' }}>
-          VALIDER
-        </button>
-      ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'center' }}>
-          <div style={{ fontSize:11, letterSpacing:1,
-            color: result?'var(--green)':'var(--red)',
-            fontFamily:"'Cinzel',serif" }}>
-            {result ? '‚úì EXACT !' : '‚úó PAS TOUT √Ä FAIT'}
-          </div>
-          {!result && (
-            <div style={{ color:'var(--text3)', textAlign:'center', direction:'rtl',
-              fontFamily:"'Amiri Quran',serif", fontSize:14 }}>
-              {correctSet.size === 0
-                ? (q.toRevise ? 'Aucun mot marqu√© √† r√©viser' : 'Aucun mot inconnu')
-                : `${q.toRevise ? 'Mots √† r√©viser' : 'Mots inconnus'} : ${[...correctSet].join('  ¬∑  ')}`}
-            </div>
-          )}
-          {/* If toRevise: ask whether to keep or remove from √†-r√©viser */}
-          {q.toRevise ? (
-            <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'center', width:'100%' }}>
-              <div style={{ fontSize:8, letterSpacing:1.5, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>
-                üîñ RETIRER DE LA LISTE √Ä R√âVISER ?
-              </div>
-              <div style={{ display:'flex', gap:8 }}>
-                <button onClick={() => onAnswer(result, true)}
-                  style={{ padding:'7px 16px', background:'rgba(76,175,129,.1)',
-                    border:'1px solid var(--green)', borderRadius:7, color:'var(--green)',
-                    fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-                  ‚úì OUI ‚Äî MA√éTRIS√â
-                </button>
-                <button onClick={() => onAnswer(result, false)}
-                  style={{ padding:'7px 16px', background:'rgba(255,80,80,.08)',
-                    border:'1px solid var(--red)', borderRadius:7, color:'var(--red)',
-                    fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-                  üîñ GARDER
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => onAnswer(result)}
-              style={{ padding:'7px 22px', background:'var(--surface3)',
-                border:'1px solid var(--border2)', borderRadius:7, color:'var(--text3)',
-                fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-              CONTINUER ‚Üí
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ‚îÄ‚îÄ‚îÄ RevisePartQuestion ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function RevisePartQuestion({ q, onAnswer }) {
-  const [revealed, setRevealed] = React.useState(false);
-  const audioRef = React.useRef(null);
-
-  const partWords = q.partText ? q.partText.split(' ').filter(Boolean) : [];
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:12, alignItems:'center', width:'100%' }}>
-      {/* Context: full ayat text with part highlighted */}
-      {q.questionData && (
-        <div style={{ direction:'rtl', fontFamily:"'Amiri Quran',serif", fontSize:17,
-          textAlign:'center', lineHeight:1.9, color:'var(--text3)',
-          background:'var(--surface3)', borderRadius:8, padding:'10px 14px', width:'100%' }}>
-          {q.questionData.split(' ').filter(Boolean).map((w, i) => {
-            const partWs = q.partText?.split(' ').filter(Boolean) || [];
-            const startIdx = q.questionData.split(' ').filter(Boolean).findIndex((_, si) =>
-              q.questionData.split(' ').filter(Boolean).slice(si, si + partWs.length).join(' ') === q.partText
-            );
-            const inPart = startIdx >= 0 && i >= startIdx && i < startIdx + partWs.length;
-            return (
-              <span key={i} style={{ color: inPart ? '#c878ff' : 'var(--text3)',
-                background: inPart ? 'rgba(200,120,255,.08)' : 'transparent',
-                borderRadius:3, padding:'0 2px', marginLeft:4 }}>{w}</span>
-            );
-          })}
-        </div>
-      )}
-
-      {!revealed ? (
-        <>
-          <div style={{ fontSize:9, letterSpacing:1.5, color:'#c878ff', fontFamily:"'Cinzel',serif" }}>
-            PARTIE {q.partIdx + 1} ¬∑ {partWords.length} MOTS
-          </div>
-          <div style={{ fontSize:9, color:'var(--text3)', textAlign:'center', lineHeight:1.6 }}>
-            R√©cite cette partie de m√©moire, puis r√©v√®le pour v√©rifier
-          </div>
-          <button onClick={() => setRevealed(true)}
-            style={{ padding:'8px 28px', background:'rgba(200,120,255,.12)',
-              border:'1px solid #c878ff', borderRadius:7, color:'#c878ff',
-              fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-            R√âV√âLER
-          </button>
-        </>
-      ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:10, alignItems:'center', width:'100%' }}>
-          <div style={{ direction:'rtl', fontFamily:"'Amiri Quran',serif", fontSize:22,
-            textAlign:'center', lineHeight:2, color:'var(--text1)',
-            background:'rgba(200,120,255,.06)', borderRadius:8, padding:'12px 16px', width:'100%',
-            border:'1px solid rgba(200,120,255,.2)' }}>
-            {q.partText}
-          </div>
-          <div style={{ display:'flex', gap:10 }}>
-            <button onClick={() => onAnswer(false)}
-              style={{ padding:'7px 20px', background:'rgba(229,115,115,.1)',
-                border:'1px solid var(--red)', borderRadius:7, color:'var(--red)',
-                fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-              ‚úó √Ä REVOIR
-            </button>
-            <button onClick={() => onAnswer(true)}
-              style={{ padding:'7px 20px', background:'rgba(76,175,129,.1)',
-                border:'1px solid var(--green)', borderRadius:7, color:'var(--green)',
-                fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-              ‚úì SU
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ‚îÄ‚îÄ‚îÄ PageStructureQuestion ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-function PageStructureQuestion({ q, onAnswer, ayatTexts, globalNums, timestamps, sn }) {
-  const [input, setInput]   = React.useState('');
-  const [checked, setChecked] = React.useState(false);
-  const [correct, setCorrect] = React.useState(false);
-  const audioRefs = React.useRef({});
-
-  const check = () => {
-    const ok = input.trim() === q.answer.trim();
-    setCorrect(ok); setChecked(true);
-  };
-
-  // Determine which ayat numbers are relevant for this question
-  const relevantAyatNums = React.useMemo(() => {
-    if (!checked) return [];
-    const { subtype, first, last, multi10, multi5 } = q;
-    if (subtype === 'first')    return [first];
-    if (subtype === 'last')     return [last];
-    if (subtype === 'findpage') {
-      const m = q.id?.match(/:findpage:(\d+)$/);
-      return m ? [parseInt(m[1])] : [];
-    }
-    if (subtype === 'multi10')  return multi10 || [];
-    if (subtype === 'multi5')   return (multi5 || []).filter(n => n % 10 !== 0);
-    if (subtype === 'count')    return [first, last].filter(Boolean);
-    return [];
-  }, [checked, q]);
-
-  const playAyat = (ayatNum) => {
-    const globalNum = globalNums?.[`${sn}:${ayatNum}`];
-    if (!globalNum) return;
-    const url = `${getAudioBase()}/${globalNum}.mp3`;
-    let audio = audioRefs.current[ayatNum];
-    if (!audio) { audio = new Audio(url); audioRefs.current[ayatNum] = audio; }
-    else audio.src = url;
-    audio.currentTime = 0; audio.play().catch(() => {});
-  };
-
-  // Page summary card
-  const Summary = () => (
-    <div style={{ display:'flex', flexWrap:'wrap', gap:6, justifyContent:'center', marginTop:4 }}>
-      {[
-        { label:'PAGE',    val: q.page,    color:'#c878ff' },
-        { label:'PREMIER', val: q.first,   color:'var(--gold2)' },
-        { label:'DERNIER', val: q.last,    color:'var(--gold2)' },
-        { label:'NB AYATS',val: q.count,   color:'#5bc8f5' },
-        q.hizb != null && { label:'HIZB',  val: q.hizb,    color:'#ffd166' },
-        q.juz  != null && { label:'JUZ',   val: q.juz,     color:'#a8edea' },
-        q.multi10?.length && { label:'√ó 10', val: q.multi10.join(', '), color:'#ff9f43' },
-        q.multi5?.filter(n=>n%10!==0).length && { label:'√ó 5', val: q.multi5.filter(n=>n%10!==0).join(', '), color:'#ffeaa7' },
-      ].filter(Boolean).map(({ label, val, color }) => (
-        <div key={label} style={{ display:'flex', flexDirection:'column', alignItems:'center',
-          background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.08)',
-          borderRadius:7, padding:'5px 12px', minWidth:52 }}>
-          <div style={{ fontSize:13, fontWeight:700, color, fontFamily:"'Cinzel',serif", lineHeight:1 }}>{val}</div>
-          <div style={{ fontSize:7, letterSpacing:1.5, color:'var(--text3)', marginTop:3 }}>{label}</div>
-        </div>
-      ))}
-    </div>
-  );
-
-  // Ayat card with text + audio
-  const AyatCard = ({ ayatNum }) => {
-    const text = ayatTexts?.[`${sn}:${ayatNum}`] || '';
-    if (!text) return null;
+  if (!user) {
     return (
-      <div style={{ width:'100%', background:'var(--surface3)', border:'1px solid var(--border)',
-        borderRadius:9, padding:'10px 14px', display:'flex', flexDirection:'column', gap:6 }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <div style={{ fontSize:8, letterSpacing:1.5, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>
-            VERSET {ayatNum}
-          </div>
-          <button onClick={() => playAyat(ayatNum)}
-            style={{ width:30, height:30, borderRadius:'50%', border:'none',
-              background:'rgba(62,184,160,.15)', color:'var(--teal2)',
-              fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-            ‚ñ∂
-          </button>
-        </div>
-        <div style={{ fontFamily:"'Amiri Quran',serif", fontSize:20, direction:'rtl',
-          textAlign:'right', color:'var(--text1)', lineHeight:2 }}>
-          {text}
-        </div>
-      </div>
+      <>
+        <style dangerouslySetInnerHTML={{ __html:
+          `:root{--bg:#0c0e14;--surface:#13161f;--surface2:#1a1e2a;--border:#2a2f40;--border2:#363c52;--gold:#c9a84c;--gold2:#e8c96e;--text:#e8e4d8;--text2:#a89f8c;--text3:#6e6659;--red:#e05a5a;}*{box-sizing:border-box;margin:0;padding:0;}` }}
+        />
+        <LoginScreen onLoggedIn={setUser} />
+      </>
     );
-  };
+  }
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:12, alignItems:'center', width:'100%' }}>
-      {!checked ? (
-        <>
-          <input value={input} onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && input.trim() && check()}
-            placeholder="Votre r√©ponse‚Ä¶"
-            style={{ width:'100%', maxWidth:220, textAlign:'center', padding:'9px 12px',
-              background:'var(--surface3)', border:'1px solid var(--border2)',
-              borderRadius:8, color:'var(--text1)', fontSize:15, outline:'none',
-              fontFamily:"'Cinzel',serif" }} />
-          <button onClick={check} disabled={!input.trim()}
-            style={{ padding:'8px 28px', background: input.trim() ? 'var(--teal)' : 'var(--surface3)',
-              border:'none', borderRadius:7, color: input.trim() ? '#fff' : 'var(--text3)',
-              fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-              cursor: input.trim() ? 'pointer' : 'default', transition:'all .2s' }}>
-            VALIDER
-          </button>
-        </>
-      ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:10, alignItems:'center', width:'100%' }}>
-          <div style={{ fontSize:13, letterSpacing:1, fontFamily:"'Cinzel',serif",
-            color: correct ? 'var(--green)' : 'var(--red)' }}>
-            {correct ? '‚úì EXACT !' : `‚úó R√©ponse : ${q.answer}`}
-          </div>
-          <Summary />
-          {/* Show relevant ayats */}
-          {relevantAyatNums.length > 0 && (
-            <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:8, marginTop:4 }}>
-              <div style={{ fontSize:8, letterSpacing:2, color:'var(--text3)', textAlign:'center' }}>VERSETS</div>
-              {relevantAyatNums.map(n => <AyatCard key={n} ayatNum={n} />)}
-            </div>
-          )}
-          <button onClick={() => onAnswer(correct)}
-            style={{ padding:'7px 22px', background:'var(--surface3)',
-              border:'1px solid var(--border2)', borderRadius:7, color:'var(--text3)',
-              fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer', marginTop:4 }}>
-            CONTINUER ‚Üí
-          </button>
-        </div>
-      )}
-    </div>
+    <Provider store={store}>
+      <HashRouter>
+        <CloudSyncManager uid={user.uid} />
+        <SyncConsole />
+        <AppInner currentUser={user} onSignOut={() => signOut(firebaseAuth).then(() => setUser(null))} />
+      </HashRouter>
+    </Provider>
   );
 }
-
-// ‚îÄ‚îÄ‚îÄ QuestionsMode ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-// Per-ayat questions to test real mastery. Called from MemoriseMode after session
-// or standalone. Persists answers in learnData[key].questionScores[questionId][].
-function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLData, ayatTexts, randomize, selectedQTypes, initialQIdx, onQIdxChange, onDone, multiItems, skipCorrect }) {
-  // ‚îÄ‚îÄ Session persistence ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-  const _items = multiItems || (ayatList||[]).map(n => ({ sn: selectedSn, ayatNum: n }));
-  const Q_KEY = multiItems ? `quran_questions_multi_${_items.length}` : `quran_questions_${selectedSn}_${ayatList[0]}_${ayatList[ayatList.length-1]}`;
-  const loadQSession  = () => { try { return JSON.parse(localStorage.getItem(Q_KEY)) || null; } catch { return null; } };
-  const saveQSession  = (data) => { try { localStorage.setItem(Q_KEY, JSON.stringify(data)); } catch {} };
-  const clearQSession = () => { try { localStorage.removeItem(Q_KEY); } catch {} };
-
-  const saved = React.useMemo(() => loadQSession(), []);
-
-  const [results,   setResults]   = React.useState(() => saved?.results ?? []);
-  const [revealed,  setRevealed]  = React.useState(false);
-  const [done,      setDone]      = React.useState(false);
-  const [isPlaying, setIsPlaying] = React.useState(false);
-  const [emptyTimeout, setEmptyTimeout] = React.useState(false);
-  const [globalNums, setGlobalNums] = React.useState({}); // numberInSurah -> globalNumber
-  const [timestamps, setTimestamps] = React.useState(null); // {ayatNum: tsData}
-  const [pageAyatData, setPageAyatData] = React.useState({}); // { sn: [{numberInSurah, page, hizbQuarter}] }
-  // Persist the shuffled question order so resume gives same sequence
-  const [savedOrder, setSavedOrder] = React.useState(() => saved?.questionOrder ?? null);
-  const [currentQId, setCurrentQId] = React.useState(() => saved?.currentQId ?? null);
-  const audioRef = React.useRef(null);
-
-  // Load global ayat numbers + timestamps once (mono + multi)
-  React.useEffect(() => {
-    const sns = multiItems ? [...new Set(multiItems.map(i => i.sn))] : (selectedSn ? [selectedSn] : []);
-    sns.forEach(sn => {
-      fetchAyats(sn).then(data => {
-        const m = {};
-        (data?.ayahs || []).forEach(a => { m[`${sn}:${a.numberInSurah}`] = a.number; });
-        setGlobalNums(p => ({ ...p, ...m }));
-      }).catch(() => {});
-      loadTimestampsForSurah(sn, getGlobalRecitator()).then(ts => { if (ts) setTimestamps(p => ({ ...p, [sn]: ts })); }).catch(() => {});
-      fetchSurahDefault(sn).then(ayahs => {
-        setPageAyatData(p => ({ ...p, [sn]: ayahs.map(a => ({ numberInSurah: a.numberInSurah, page: a.page, hizbQuarter: a.hizbQuarter, juz: a.juz })) }));
-      }).catch(() => {});
-    });
-  }, [selectedSn, multiItems?.length]);
-
-  React.useEffect(() => {
-    setRevealed(false);
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
-    setIsPlaying(false);
-  }, [currentQId]);
-
-  // Cleanup on unmount
-  React.useEffect(() => () => { audioRef.current?.pause(); }, []);
-
-  const surahInfo  = surahs.find(s => s.number === selectedSn);
-  const maxAyat    = surahInfo?.numberOfAyahs ?? 1;
-
-  // Build question list: 2 questions per ayat
-    const questions = React.useMemo(() => {        const qs = [];
-
-        _items.forEach(({ sn: itemSn, ayatNum }) => {
-            const effectiveSn = itemSn ?? selectedSn;
-            const rawText = ayatTexts[`${effectiveSn}:${ayatNum}`] || "";
-            const text = (() => {
-              if (ayatNum === 1 && effectiveSn !== 1 && effectiveSn !== 9 && rawText) {
-                const ws = rawText.trim().split(' ');
-                const stripD = s => s.replace(/[ÿê-Ÿãÿö-Ÿ∞Ÿü€ñ-€≠]/g, '');
-                if (ws.length > 4 && stripD(ws[0]) === 'ÿ®ÿ≥ŸÖ') return ws.slice(4).join(' ');
-              }
-              return rawText;
-            })();
-            const words = text.split(/\s+/).filter(Boolean);
-            const surahObj  = surahs.find(s => s.number === effectiveSn);
-            const surahLabel = surahObj ? `${surahObj.englishName} ¬∑ ${surahObj.name}` : `S.${effectiveSn}`;
-            const vLabel = `verset ${ayatNum} ¬∑ ${surahLabel}`;
-
-            // 1. Premier mot
-            if (words.length > 0) {
-                qs.push({
-                    id: `${effectiveSn}:${ayatNum}:first_word`,
-                    sn: effectiveSn, type: "first_word",
-                    ayatNum,
-                    question: `Quel est le premier mot du ${vLabel} ?`,
-                    answer: words[0],
-                    hint:
-                        words.length > 1
-                            ? words.slice(1, 4).join(" ") + (words.length > 4 ? "..." : "")
-                            : ""
-                });
-            }
-
-            // 2. Dernier mot
-            if (words.length > 1) {
-                qs.push({
-                    id: `${effectiveSn}:${ayatNum}:last_word`,
-                    sn: effectiveSn, type: "last_word",
-                    ayatNum,
-                    question: `Quel est le dernier mot du ${vLabel} ?`,
-                    answer: words[words.length - 1],
-                    hint: words.slice(Math.max(0, words.length - 4), -1).join(" ")
-                });
-            }
-
-            // 3. Mot manquant
-            if (words.length >= 4) {
-                const idx = Math.floor(words.length / 2);
-
-                qs.push({
-                    id: `${effectiveSn}:${ayatNum}:missing_word`,
-                    sn: effectiveSn, type: "missing_word",
-                    ayatNum,
-                    question: `Quel mot manque dans le ${vLabel} ?`,
-                    answer: words[idx],
-                    questionData: words
-                        .map((w, i) => (i === idx ? "____" : w))
-                        .join(" "),
-                    hint: words
-                        .map((w, i) => (i === idx ? "____" : w))
-                        .join(" ")
-                });
-            }
-
-            // 4. Verset suivant
-            if (ayatNum < maxAyat) {
-                const nextText = ayatTexts[`${effectiveSn}:${ayatNum + 1}`] || "";
-                const nextWords = nextText.split(/\s+/).filter(Boolean);
-
-                if (nextWords.length) {
-                    qs.push({
-                        id: `${effectiveSn}:${ayatNum}:next_verse`,
-                        sn: effectiveSn, type: "next_verse",
-                        ayatNum,
-                        question: `Quel verset suit le ${vLabel} ?`,
-                        answer: String(ayatNum + 1),
-                        hint:
-                            nextWords.slice(0, 5).join(" ") +
-                            (nextWords.length > 5 ? "..." : "")
-                    });
-                }
-            }
-
-            // 5. Verset pr√©c√©dent
-            if (ayatNum > 1) {
-                const prevText = ayatTexts[`${effectiveSn}:${ayatNum - 1}`] || "";
-                const prevWords = prevText.split(/\s+/).filter(Boolean);
-
-                if (prevWords.length) {
-                    qs.push({
-                        id: `${effectiveSn}:${ayatNum}:previous_verse`,
-                        sn: effectiveSn, type: "previous_verse",
-                        ayatNum,
-                        question: `Quel verset pr√©c√®de le ${vLabel} ?`,
-                        answer: String(ayatNum - 1),
-                        hint:
-                            prevWords.slice(0, 5).join(" ") +
-                            (prevWords.length > 5 ? "..." : "")
-                    });
-                }
-            }
-
-            // 6. Num√©ro du verset
-            if (words.length) {
-                qs.push({
-                    id: `${effectiveSn}:${ayatNum}:verse_number`,
-                    sn: effectiveSn, type: "verse_number",
-                    ayatNum,
-                    question: `Quel est le num√©ro du ${vLabel.replace(`verset ${ayatNum}`, "verset ci-dessous")} ?`,
-                    answer: String(ayatNum),
-                    hint: words.slice(0, 6).join(" ")
-                });
-            }
-
-            // 7. Reconstituer le verset
-            if (words.length >= 3) {
-                const splitWords = splitArabicWordxúÏΩmoYñ&¯=EòìU$À%J∂”Iß,(me•™m…ÂÃmhÖTHYQ¶Ç4#hßãÊ"w—[ÿ‹Ã‘T™ãZTc?4:?,–ÿÃ`É]†ı'∫1ﬂ¸∫~¬ûsÓ˚Kºêí\Y’•ÆNì¡à{o‹{ÓπÁı9i#ãæŒö˜>¨øìaíf¡8Ç7ìÙu4÷Ét4à≥/á„~⁄˛È0Nı†ÓyÚe⁄M“≥∆‘˘ˇ‚~78˙pùûF'Y¸*Í%≥Óá”MòÌLŒg]Í0Õ∆ììÏ®Âm M∫Åˆt+»ﬁå¢nP”û¨˘ü‰ù¯|9â“,B„G{¨•8õD¡ 
->úæzGÉY–ìØì faÂ1§	ÎÍ≥ÁøÒ5ŒeWõW˜∂ô5√≥åØÀÀ¡›v∞?N^¡¡ÿí…˘≈w„a–üp%ç≤†<„/ù«É8ö4ç&‚”†Ai¢‰yv‹_÷öÅª|å$“,g@è√Ï¨}~›Ë¥ÿÁ”¡p86[ZÜÜri+J˙Y4‰ƒZæ‹nz+˘|}çG8v{:àO"÷J[o^ïû∆Iˇ+¸6ç÷ÂsıÀQË”I4‡õ¡av≤(	¯·,±’ﬂ(!÷^6éìÁ>ÑfÒÜYÿ‡øı,N≤nÄ‹eN¢íû$/í·Î‰+\WÌ∂ÏÉ˛vù√™¢pL#9»_™£√‡Ì€`:ªÁ4}l'}†òöj∞F€ºc⁄ã¯‡¡°1R‹*Í9π_Çï‡á?Ã=¨ÿ[H{t8ﬁ
-OŒØ„`˝æ≥”hC∆∏çm Ï$õåõîÂ€‡†≈^8x˙o<”Q?êõÊ<5Ø[A‹ƒ°¿x÷·ó8ÿÍÔ~Û≤ˇ’Én∫`3…≠Ñ€¶`◊Ë´
-◊_«≥£nwß‘ı[Î≠¸}!˜ƒ—É·˘hpÒw±ÏÛaƒ	ºp2ëL[±Ò.tÀ©ûO[À$l6GnoD“GOÜiå∑¯
-7;≥ ùåÒ≥∂V¯b¯÷;˙∫”Èºı›XƒWGßñxêE„Fº~?˛ƒ†Z<∏Ãñ<>Ù6™¥Xsﬁ`„´V‹\øCÎ
-&m0ÈGi#∂˘6k¨'⁄lHµ⁄Ná„¨—ÄÜàëè√§?<o4ó⁄∑õú#Ø¥‰Y±⁄∫µ$ﬁRºÖ∑£p0ÿeÿ”Aª›è¥‡3¬aA∑f{ÛRÁ(>yQJóxS>]*™DFù"9¶A·´%aú.eì`¶pDù«ëá@]Vmí´øﬁ÷õ≠`8¬Æ“.ü1ãî}¸óëÒáSk!f8NÁÍ˝ŒF=≠wÎıôÿQ∑YÑmÛıwø˛˛\|Ï]|˚≈vokOé6Â?~˛ÁúŸp/zß:Ï†WÏ”AﬁY·@"ˆ+±;Hd√SŸ‚˙¯ß@ÑulO\nS√Mv>˘64˘Ñ†yö·˝≈Mnr&5pTÄºô˜„,àw*xy—´p˜∑˚_ÛùûDØÉ^î…öáÇ[±≥˛˚ây,rF∂éÅÑK«ŒÒÑΩ»:"≠Y•lF„ì⁄AŸ-:&%k£Ω,÷\6â›w'xëÿZ¬Õ∆¥Dt~Ê23Ìû¢3Vó<›yÏxÖøç‡Ë˜ø˚ıo∏b‹-Eˆf><c|Ò<øú\|óå/æ√!çΩá∂∑£Æ›ù˝ºÕ“&}/ÀY≠∂J:∑≠$'(Î{eÁ™∆b˘¿ãnÒJû!p˘èıÆh≠%7o7Æ#Ü «Œˇ∆w6±ñ¬ç$§ib*oﬂÇ-%ﬁ)èÆÃÀZø!õóh«˝Ê€∑7Ë#ô+rDa±√F±&“kÉàQ€=•6/ø∑∞∏Ãò/Àj∑W‹få§˜.æ;âQû|6F“ë¿…©$∫}À…Ù	í~È.çí6¯∫ø}[ﬂ®≥ÏÌü€áñÙn#–`wW CGA¥IÖHŒ1Îµ]0≤@Ó™õ*¡ÒGÖ&á≤É!Ü≥u\˘(òì“@¥ª,∑hÎAî—ΩdDqÀwﬂ¸^⁄R©Œ√‰ÂÌ
-> ‚t%/?ØÃ—°ñãıß2Ç—…C}∆ª‰%}>û≤x)N∆auÉÁpråh2R† °4<'´ 1LCx2¶)Ú‹LH®≤I$√sl˘Lä§®æÂÚGFI«o6ŸJ1ô∆	≠	¡3ÅL–†î ÂÌ¬d√€π|îx®l˚ LõÅÒ•,Kæ3~gdôöBºÒmóÑ«vîd„ÿ≥|Z±¯4‘À∆H∞ÈaŒ ·'1Cü´~~.§%3∞é4⁄N≤µl->¨Ïn2xúå#XP¢⁄‘*A}ÿl ±Üg!à	»êÇ¡0ÏG}Oó¸›–‡ù∞]û&æ3ãK∆·Î}∏ó9^ä∆®îm„ÑõüÍu??°a¿I’Ãíò)|ê≥;H^0å÷ÁèÒ3¡'ŒJ∆áÔÇ7µ·≈Ä◊µ…‡ú#§*;Ô8=ƒI¿¡•Ìq4Ñ†Õ/¸„/ñ˛È_ˇ„ˇæÙOˇOø˚oøY˙oˇ◊·ÚÛº§∑12fi€·û⁄ÜÎ+H!ı¸ª¸ˇÙ?◊)¿òπı‡V°H=sÆÁÒu›S•ë√Ÿ‹ÛÎúF⁄h¶m§´Ùﬁ´mŒ
-pîi“‹ “>à”≥|d›^õ¸»nô7oãŸAY73ãw5ÖÜaáQ€„ê¡I‰TY∫mÚ€d“ÊõÉg«ÕÌ7bí[ı¶+NrÎ5¯+23;lç7Ÿ?˜Jp±Ì_à€ıíî~œ5£G_0À6õŒ¶0Má' ùúÖpM/âCipŒÓºü¿”äµ◊Ÿ&>“¶•e≠Zãú˘Œ2¸uI´yÓÁøÑEÅQ≈ßoÂÒ„DúM¡ÿZÛ
-O`Éè˘Ñ[Í∂÷Ÿ…‹ro^Ÿ·T¿.π%Sà≈Â9,n˘øOo.ÀˆÈp8à¬ƒ≥π^k˚j≠®ü2ÔWëÎ´Ç€+G 5ÂEçò¥π°˙µN2£∂2ÓŒTb·≈7¯e íû†æpƒ‘◊è$ˆw•é≥»ê¸^õû9”1«B\9√î)ÈtŒçˆdÛ«[AoÔŸÉ˝g{[ﬂÎ¢>Ãk“ÊÒlûG¡$ÖY§è(K·úµÇÁQ—*0è6¨»@{ôúGxølôg{Ÿ⁄Ÿ_≈ÓÆ∆c+ç «E˝ûπ«©	ππ]πá3í7pL>é≤êd35ÓÉ41¯m]u3ln˘EÏ<VW|;&k°†pÇˆW>eqdg0)Qö¢h õ6	rÿØ@Ò»¨âŒ|±Üg2ƒ9Øœòâ§hÙ≈ÁBΩÔ&$Bçß}¶çêã€I∑©Ÿ,º6”H8uxTá'H4∂ﬁ†D._ò£!ÑmlŸœÊ∏
-Å}∞˚Há–ø{ï˝∆¨¬-ÇOæ>+ÆRˆr4öÆû‡IA§ÎUS∏)âÕµT@¯≥ñi∆hl—ZÈ`)8∂÷ﬁwBú∆„4”v
-NÊcæß!¸«xJçäÌµ•NÖfNÜìƒËú?Ïª˜,˛Ÿq`/>ù ßáuª€o∫◊;ÌN¢x–»Ωy9∏’∫ÙÄØ≥üN~8ù·E†ÉºgH^πm<eÏL{}~‹Êâ∂øÔÔäQ?ùï9˙¡õËË8$'”)∞Ø£ñ-ã≠^ã¶Ö3÷‚S–ClÈõnvœ	&z⁄È£qt√Çpí>7Aº»ñIFiW®Ωx'Ü»¿∞§PÇ◊æGYÑÇ…‰Xà+pü£LòTÍ“Ò*‡=Ä|7@sΩ®"‘Ö∫	NKöW√^$Êcµ}çìKœÆOÖÈ¿€*ŒFÓ∞üÏΩlB÷`ãœè—q]gá2z$ò¢’
-SB˜Ã…H©æ·,>‘iŸT‹Í2òCxî“Ôú6ÀfoÆ0!x[¡|pIûM‚/='ÿ`Ÿî‹ÓrzL«°ÎÊ¯]ôHÖ∂≥bËØ%ì≈©0_¸ŒímïÊ<
-2r/&Ÿ%âKº&7*ê˛S8ùwr¶Ûv–HÜ…R¶)oZı	pl∞/‚d"Ÿ>ag—:ã\IP=>˜“‹Æ∫2∑[}
-ÆvÅÿ˚V^£è∫‘)◊û©c9†`íH˛ˇ,åP´ﬂÖŸ0W€~£3∆âÌ¨‰9µÇfõM'*∞ÙO˙¯	/@ü≥J':{ƒ„™∂ó;cpÂï∞ˆQó∏ÿ∆zCY-^E
-éπp˙›Ü√H∑)X.£œh´†.&TDz˝‘RºCr Ì„/®…[ü≤†ıöÚÈ B&g¢˛Æﬂü/I(T?íÓ¯≤ç˝7QP~ô™&_JªÏ„{≤u©ÙP[b©_6ı∑do∞ˇóO∂æ⁄›{∏µá⁄]çD#r*÷Z5î
-ƒÁÛ8EkÖ¯öD_gÃ_FËãNRyÅ˛˝äIµUF?√g#ZøfXñ≈ù¥‚Eè’æ"m`ßRÀ“!™æ·!X;‘ﬁö\»¥K‚üEÊ.Éeﬂ2≈–º4|KîûMNOÅ,°E†‚•¯ˆCå]…NŒÇËkX•¡ÀÓAœÓ“#ËÒêﬂt√«K‹ÎS>È!f“V’éW?xôö∑ødñ∂¸F·W_Ë5÷eÌ&ÖP~Öó@ªí∏Á∞¡jΩiƒ}FZx®€q6Ï!èôøŸÓ3{QøN≤S˙Ò áéfáó˜<±"@çñávî6Ÿd≈°!RC–Lâ5ÿŸK≤·ÇÕ§?>‡»äúWeT≈(…˙	⁄»0>AıætÓ¡•˚8àxi)?^Ìßap4‚‡f–ÒÂaºƒ®·Ùy”C2Î–'∫:GE~lê˜ù}≠KΩ‘\Øî6‡æ,^/Ç„*…‚p «˝påT+ÏÍAòûDIÿb≠ì	˛Ñ\ö1≠ôó >Áöú¬‰a|zä~·PX—∆≤¿R–86/π;ç?}C7´Ú&Õõ˘OäÒÀ®êù1–ùÁ«cˆc£<Ô@S≥Vp¿l∞-Õﬁ⁄Rû†°Ø—v“
-$gnYáiKsAqS¸+AZÜ5˙ês∞xO‡\âïµ6x´ÑÏ+xâëß@ß„(ÖvSt'2ãÚ^<Ω=I£-
-π1\Ùd"ï∆xozÁ∆¸v
-¨+æ≈îÔ©f5˛£ÕzÚk√hå?Çw?Ì±ó	Ód2ç>›Ó∑ƒµ¨A∞µ¬µ(º9•πcì∑9¡âóæàGÜ»â^Çπ.ê≈x)ãœ—oƒ‰ {ìß–‚ßëãÛÅ)-=ïﬁåu5€è£Û°;◊Zﬂí§ÂHŸLÿW!JÏ2ë?dÁΩt‹ ( ø[ÕI"‚ß3FÔßﬁ˝ˆË⁄FõùX‚~ˆÏvhà}Ú8ÚY45Œ˘ã(·cßf^f@ï¡*Ã7ê˝(¬'2%ò)ê†cÑå¿´\N¯f+B/'l˙>0∂Êç Å9"‡–áZ–âˇñU~ßDEWr	Z:ÕõTÕ≥⁄¢˚„TNî*xXÈˆ√ ]á« ÅÒp,õÄPò<M≤êæ6YÉΩ7…â∂#–áƒÎ≤ÌariN5:û Ÿ¿·r$C!˝±Ì’¨¬¥Ó`Êla*t∞ª»€ÂÓÜS*âÒîyäú	y¸·ê~R∑¨*Æ1≥ßùw¶fˆa4ÜŸb¨Ót<<◊'whúÿ*wÍKò_≤=U{íêWt6S#V‰Ë°¯>≈â¢¥÷å≠ç≠‹áCt$¸ÿe}‡´[-∑¥&¯,∑qGqÄox®\äGâúÁ∆â ‡1º¸´H&ÇúÜ %8ßÇÔsã=®l£—¬&$øi·ºwiFZb„ä®!†ö=∆¨®na˜(ï„g°»Äª·Vk¯:‘˙Èª‹Ò%˙ﬁ`∏–h√Êkå6USöÕ"|Ê†>ÅµÑ5ç˙u…˜∫›qîuÅÂVÚ¿Ä•[Mı¢¿v`qMf;‚*
-LÀ◊cÎ“∞g:ø’WKó1©°∂ñ–CÎ®·ŸJÖ#fÅ)ëü«®æ·C?¥é¢Ñm|X#o
-Î∫µ·®Ñ5—E'ßx∂•é)cC¸ÜCÒÚ∆E s~Hq¨®Ú·ßFﬁnª∑À!M3ﬁåΩæ˘Blƒ∫g˛À7 =™s{n!I˙ö‰íhîè◊∑ìM⁄s9õ≈¯C% ÈO‰ÒJ˝≈‡Á»4ê∑ƒ∆[å“ÎaËŒ"8rÿ…	º˘?PM8yÆù¿è‰∑#ﬂLPÿ~:I≥%∆(‡ú‡Ù+Ì B-Æ{Ñìó¶ÄR2B˙ «»â%˘0Ç≈¿π(êwrû|âßöÃc=éÿs√!Lô«VÚÂ
-Ä˜+ÕÉoy6◊Fl	ÎZó ’Ñ]=&Q«–ºú‡,IyZ∂Ì(Ñ(]d1∆œuö9û …—∆{äÚ±fHu¢®≈>¸8oÁÍîW˙ Å¸l¯;Eëä›¿à1Nf0æç•Êå˜¡o–ªÇ(cü÷∆åQÚhü`√cõ…öÌÉf0úàˆ·¬W\•Wok++JïÂ¿†Iëw˚w≤›(;òMÈ»ˇ:-Û5î»¥9f!•)Ã+Æ3ü√n¢ÔÇû»YGòº¡PÏ≥0Eâë=Û& öRê†Kè¯¨ªÛÜìyÉ_Err*y0Âç3h“›¿j˜2√à5ñˆ-}}PN5Mç∫ÃY0B¿Ç_÷O˙Ò+ò˛7Éh}:Ö√ßè3ÿ≠ØÆåæÆ≥xÍÕA¸<È÷O`èEc∏v:L≤^¸≥®˚1JÉ·∏[éKKxÛZ≥é:®P„ﬁ(<¡∂:¡lv_n«ÕgûÌõππl>y≤∑›nÓÙÇGõ¡ìGTxÒÌ£≠˚€ª;;ﬂn…«>ÅMüë2Ò dôÎ”aÇªz¶Üﬁè”lÿn˝x0§¨ÒÛp¸<ÜÅwÓåæ¬	lÃkÙÊ8WuoﬁˆYxﬁtkıqÚ≥hPo• ‚ü÷Zjñ>Çñ;wi¶é…
-Ω¡•t8Ä3ÖM
-ªæ⁄4‹4«†Ña¯Y“Ô÷≥1-hñGÔ{ŒÑ≤FˆÄ∫'i˜Iﬁ)ﬁ6∆¥(8√Ô~˛ã`ok˜Ÿﬁ'Àl≤ƒ§≤kÃæË6êH€ÕU…bÌÍ»bµU4…Õº˚wˇ!x˘Êﬁè∑oÌÏ∑z¡˛÷∑ø’{˜Õﬂç©AÊ3¬ÿ
-¶<@ÌEÙ&U€Lö•_¨ﬂ°“Î›z≥)[†0˜¥ô;}x8ƒ·ÛdÏÒıŸGQéSv\Ë Y˙xò˚(†›–À·ÿtÀi´Í∫›ÇÈ7¬˘u` [9á˙£¿3ÒAäÙÕqù≈p_Z˙Ω¸µÖ#¬∏U∏#(π‘îöÃLÿãe8<PF‰3–πdéÓé◊ã8w/U‰c∑`?03…5NﬁÉˇ<åQÄAˇ)ÃÎ`rû`∆>Gk§=¸<u;∑Rù.ˇ(xÄÆ–Nóπ0	Œ'ãè—£æäNXû_ˇáŸèñïM|™ë	ÃÇªtÚ}ÈùÔk_Ï)ê˚±”±6‰Û·†è©ò…1qˆáfÎ`{Á¡Ó„'õ˚€ü>⁄2G£∂M… ÔVcÌ€d∫˛2Ógg›’ª+;Ë¡üGÒÛ≥¨€i‰·#ò2∂
-ü§Ÿx¢ÅË›7!ºD¯í˘-ü,≥'ÔQVµïl7éE©j$π¯ÓeœåBÖ86õE·Ä5kd≠®6€÷Kr<^æﬂª¯n¿à8°≤I6ñs1ú˝åì4é‡0ë#móÆaÈA\t¬íúıÛú≤8ItPjÎ¯˘qÿ∏≥⁄Í‹Ω’Í‹YiµWÓ6ù`	ﬂTW?o·P⁄˘Ò÷^O$ÿ=˚Ëeì®æa@Å∆∑≥d%´ÙånBå£∞ˇF⁄rÆ◊ #(Œ¢s|∞i∞òÇ}∏∫JÔı€_Uﬂ∫.oGQrºe˜úÔ4±OümıPÏè7/˛Ì>àå ˆﬁ'ØπSï◊LÌÛl¶≠lÙÏvÜ‚¿àÇãÔ≤ãÔ0|4L˙p£X—ËŸC8ˆ gs∞
-„è+lM„ïÌì´ªÏÄ˚rüÎØ·øıY7‚”7Õ.ìßõÁù≠üóPÀrJ¢Ã [n€Dw5P&ê5ImŒ≥"DÊΩπioæ¨7ˆ'≤©c˛M∏∂ëg⁄úŒ@+Û•æ∫®	ïò]ihvg3º;Ö/√[]È ∑ª€˙Ëéü·9≤@ñÁ4ı˚ﬂ˝˙Øcj{g{{Û!M·ñÌ=ÿ›≥∂(R¨ÀÈ˙{;QÊõb•πÂÎk≈ì{E˙õò>k√€ÁJï£d≠Àç'…PdÊ£_û{U=(R¸˘Ht`#®oNN&âÜ"¸‚;ë∆à∫2ëÑsÃTJ3mDI¨ÔìÇÜF@%?G\#4¸·si∆Ìmíp’&k◊g•‹Û{)ÿ,@Ñ◊EÇΩâÈ¥ï„ô∞Q°Vÿ¢D P÷EÑP≈«»ó«maÄ72°∏[ÍD&”oa∞,€‚‚èÇé4rjàóW¸Ó∂LªS3öw˜è$ëÕÛxOAÍNî\§D±[ù≠I˙™‚8PoSÕö∞ÅıEÁÎ˜yæπPÑ‰tY§œvr:‹h#Ü¬Ã⁄&ØcKxÚMnIâÎ<Laˆ@–Ä/X—¶ΩãñH˛ú¬O≥îˆúª}‰OÌröô-OMöôpZÌm=ÿGÒΩ†Wü@u´∫@%í˚CxÃ‚årDÑu4n1îÿÜÀã_Do÷ß±∆ì^3	∆q∆ÑS¸hÏı€Æë√K”y√∂∏ãÀ®Í7rÛnòjÄXPGö6¥É`Tïû5Õã%vCgCåÅ‰76Íu4®èïÛ^}sNÑfSs”≈]}µÔZ´ù'G;æ)+4çíõÓÂF¥®u£b@Äeˆ˝Ë∏Q_xo§wL|üôÁ§kPª´Œ¨´:Û≠·e“ØóEV;È˛útümnÔmyè∫Y‡èan4â·í¿oÏoÌ=ﬁﬁŸÚ»∆vJ ¸ÿa3ß©',I3˜nË;E,Á›ŒNwîƒ#iz]ır√Òµ´[ÑıﬂDyÈè@d»(¬´ˇîΩ¶Ì€/
-^oΩ"Âí¸¯OÇUf˘)#©ß7‘Á˘IÂökπ‹|B6'˝x¯låŸ˛œ√„pÄêyÉ&˘< Ë°OAGh4&ÆÙ¡Y˚|¥v‰tûü?D‘Fuiö:_
-\¸u/:msœΩÊì"äÚÃ0/º#Nü ØÖ}≤eÄ81Ò±mÒìbfÙÛb√ÕÈ¯)E4~üá'0íÁ,JîÔ\5DéÛf˚CrÑÔ~∆fqÜåπòÑ…ºö0IÀ]íD˝ÌÛ∏ﬂè6yNÃD§∂Oÿ„Ët}*&xl+MK1ûYÚyP1∏ªñı‡YrGJé\à±, õ0DÜ	+ltjCú≤–ÌÉª\xÂQS¿çäÁkÆD~◊ˆÃÆ"+Œqª˙≠√efΩ1ùçﬁm&FKv81ôôm© X{¢…∏≤LÉ~˜õˇÙ∂zΩÌ›8≥–eæE≥/Ï¢¡TÑ`ÅhÎgú ›`ÎÏBH·+]ó~E”™Ûè:˚¥-TiÊÚü›y:
-h!ªèoÌ<(=uõ2∑Êq–j¸`±=‘Y1ÿKEÙ5π•÷§¢Ûá|~˛œÃõ⁄'ÌL©p›2-3¨OP§O√ì»Ì§ø·´h|:æFÑdÈ#0z„Ω‘A˘4∆Ù=!X›¨ˇ†ÓÎ^∫√¨Æi"cv˛PKA{-59}â≤3∑êù{Ω38^tâ∏à]›,dV~ÒRÿ1«}õŒI-∆f}ßŸ‚û˝ñG¿d{93πÀæZtí∞ÎŒÍtVù8L∞π7n>ÅOÏ§◊mµãnˆ’B“´h‡Ya_ædÑ˙— äˇ∏3]håÚµÔ≈E)€∂rYW ™f”¿±6⁄ŸŸhç0¡ŸgV~Ã÷Ì”∞ˇ<BCÊ˙îe—D¸áËMczÃ”S%‘ííóGk2∏ç€jŸçn)ª—-€nTøMGê1…ÑÆøC€ÅîÕ—∞Ô»W´∑õdªw~Ëî:©$)øÛ«Âáyp•v/¯ÄçÖ}`‹ÊõÆ¯(u8Ø∂∆^9gÓtnåû“ˆjÍs≥Mçﬁﬁ˝ÊÖˇQ≥ :n◊ñëo∆B#òo;q√¶Jπ∆\∆Ya*˚tC?Ôﬁ¡÷Öl[¬å8Ñb°ªJ–gJBöımgØÎà≥ÎqxüH‹YttK(ñ=àRª
-€„Yù)¶s'@on~9$4?êEÈ¡•Ø⁄?ıΩÚ~§"Kˆè:ﬁ}ŒoTi¡eG˛U™Í˜Xu\æ∫æH>á¥êØhJı™Ù¯zúCÇ˚ÿ˚|ÈaØ~´ÌU!»1±ŒÎ[w÷›≈‡ˆí¢∂ﬂôj¿–B∏£åp`ÕòC›ÓÑÎKPÇ÷≤ñ°Z≈f¸2±1dwø˝U æB∆vÒw„à"b¸Ì_€…IÓ=≥¸s’ö*…â‘Ò†l8c≤¯> ,u3Ë÷Ê‚AÄ©-[~	b*ZeXµ“ı)À*öiv∫uÕÙfHÑE£ıÆo{´kL#pC´_ñ»øŒÑô‘7éÇ˛4(ß√=ıõË“XUÍﬁ∏"Ì∞ÎS˘—“˙•!wùÏè∆èŒ»µ_ﬁ¡‰áoﬂZ/®±<Îü©ÇïrNô“Å5iróµ¬P˜ıw˜~ª¢ÓûÌ¨˛ÜÅÊÈÃªÇπÑå–iûè‡∫˙$…W∑hÏñ=¸'+ñ˝:«î”cﬁ€OŒ˚fX|âÃ_ˆ{`ülà€	Ë%hò03⁄˙¥Åπ-2Îélxî$§ÆJ∂NFsÍ¬xËûÃı2Ãs<cnf⁄„ä¢éåSB?·™⁄{åP¯ß	XînGòTs
-b5Ì˜Ô2’ø:Au»£-”Pü¢vçrµ£ìÇ¢˚‰ı/9ztz…!9v∏^{h?I#^üÇ ∑¡*fŸ7Ñ\Õ[Wü}ãÙCQ;ÊØÀûYc)ˆg zP¸(	ÚRÜ¥tn1;jaî·Géåt∑<j¿ÙŸñÍÓ@Á÷„-=ÉÏ{ﬂ>Ÿ›Èm˘%˝E•ÿé=$©|¯¬wÄZCÚk/€$≤Å@6Ø%NE ‹q•Í“˜·c√Œ˘»JCËê‹z—‡t)L—˚CñŒq‹Gº‘J”“ÛR îÚ5‘∏ﬂ√¡˘˜~92µcÊï‚„+uÏ”Æp∂’Í≠÷«+¯øwó¶çug◊rïÂ©Ú;¸ˇöRy(™r§Æ1£t\|œ&¯SÁ£€≠ŒÍ«≠vß–,+ºÈœÍØÇ¬9ıı˙5Ì∫¸ÿº˜¡ÏÉ>êU9∞0á4¶cU0¯Éó˘-©⁄AY˛a“Ë∆∫’	"	J«Ël˛˘/Y
-˝	à⁄w„’?8ù$ƒÓ‹¡ll—L§¥éD
-¡∑{8Äœ∆CÎ ˛P~'0°ãze·Oø¬J)_˝≈÷_ »æD˛˙ïtñ~≈[Êi’cNÜaü˚_UEêçﬂ¿yº¡Ozª;m™ñ–O`∞ŸpçµüG⁄7™ﬂfì«•ÄGq™vQãXAˇº÷qﬂËŸË'u˙i±1•á‹∫Å ï™O£r1ìÿûÛñF_b∆~-ªmŸ¯Ê£G_=˝ä≤±˛‘1V5¯“¯(ãñAÂÄŸÍÍ÷h∂gGkÔ@œõ!e=%Fó¥ﬁzâ—p:⁄`„j´∆TPÄÍj¨ˆîËJn3÷SnWÚ>’◊XøTÎ‘úûpØfO˚√Cq©∞ß˝°’ªP3:±Qµô„˘”n'6$à9mÏ1ôûo‡”⁄7QÔ‚Nm;∞<kR §6)ÏRﬁÙÀ)`∑·$((1:"ß uÈ∞†]=ìZf*®jÕËÃ\!IsW^ !M÷∞z“;b“üúÖZ√‰•úÜkÛÎè˘nÏs6®e√öjVﬁdÕäí[ÇÏr∆+ûƒ—ÍC•_à&”ñﬁ&ªT4π⁄ìÿ,Ö≤¡ÿ:…îPÎ∞,
-Vw9TÔé.ÂÃÃ‘†2zT¥∞).ÂQôŸ¬K<,ÿÈ,Zx*.µÄoó&¡“˝‡`jT}a¶≥CçdœÜØ7_!
-÷±≠k\Úl]õ:±ç'*#«Ÿ◊Ú∆…ë≠DIäv,Òz˙¬¡ E‹F#MŒÑÏô‚1,fFOûFpX“À?åNCXAlÑE>R=-=ßRüﬂ∆H•Mé‡¨ÄÜª¨ó™©ø”€µ´Ï∞˘Ó¨r&Z™dÀô`˘[îk,!É“å⁄©±˜—'}"∂Ãˆ ÚC˙ƒ•+ˆ;0jªìcKùÒä[%ÃŸ>Ê@+∑è#…´eﬂ˜ÚW∑≤°KtëÌ”‡uƒjË⁄·î0Ù”¯9(«C‹©ÏïÇÙıîú#§Gîa≥ñ.ØË S⁄¿ÿúGü|Á4°¬ÉX|öM(~ˆLÈçïfQk¯ÂN¯*~é¿[Î4#æ5Ù]æ
-„ÇóˆX˝aØ8D/!†QÓëΩé#UÇ&√nzÅ7ºh”ª•_∆ŸY#mÀòúZ∑÷ƒ—´–òX_@¯19≈ ¥*eîs‡(%ÜT&PÏn¨l∞^¡MUŸSs»1üâÈY^ÙÿÓÈ&q 8:˙ú¬èBcr∞Vÿè…ÅBCÄ®f9OYÎm¨v–i«¿é7äxJËjÛÈ˝!=À5—g∆cVHœJ«!>˙'Î–|∏y≥â∑2∞˘ÿ•‡∫‡H∫h,÷Kìa˘`åÖ”íë Ê—ﬁä&bó™n¡!Öxõb¶Â”˛≤íúå‚r˙QX˝ív°ÿO.˙ùcQ,Ö	zùJÉ∆"È√°Öˆ©"PT¨ˆ99®«Idí∞¯«lÇÔNh%g◊|(wﬂ'∞„(*w«ãû¯wπ/Lº⁄IUÈÂ¿_àj·–¡AÁP∂≈Ò:·Ê˚åj±w¸Jî€dT jÀ§:–mB8s6Ü„Ã§mz\P∑íV3è1ï‚4ªlAß_¨¨#J€ö,ã£‹…TùÂ¢åj G§Q5R7ºPÚíÿçíüLŒ…)ÙyNò}&\ü)ˆ`ÇÕ:p|4…ﬂ”üÉª∫üe](N]ä∂d4¯/0#ò∂.)PUD-+ºhq+q}yGëlŒø≤Ûâ©UV’øÆ%++÷∂˙öÍ´Z}5MtC≥™∫§yã™c≈ãı™∞¥ö	˘âv‹π«\+»cÜ]¢Î√ë3ãOËÊMQ˜ëgŸ@lLy7Jπ‡6Ù=]®Vu·I≤Œ®P-úíB261‚îVPÉ¶X≠3?)É≠Œ+œ)»cÏ_îıÂsí†§>k2”ﬂ˘∆÷ÅGj†1ÅfUõÒV4<ÄUI§‘¥∫ÆGC[¡–Ó¯·T.◊Ï›œ…øÓ©@Éj≈,‰ £N≠VAÎ—Êß[èz_ı>ﬂ›√*˜b„*So∑ÜELœáYçïlÂÚZûÏ› ‹≠=¢§ìºúÑI&ùK (‹≠}¡ ••ì¯UA@±¸y4æ¯Ó§-–Ì∆›⁄Œ?¸=Ø∫ÜÓbaCÓ÷Ïú¸M≥)wk<∫*Œ&h{ñLV≥3wkrN¥ÀÍ÷ÀÜ˘“ÀßuC4{uÑ)Lí	<Ø[•È∑T¸ò÷òØå‘›öåº°_döÈ∫[˚˝Ô~˝õ j§Õ‡‚o•”{Jõ6øÌ	’—4ocÏÃ¬î§˝-¨´Dﬁ´‘‰hÕj åT	©°Ô≤f≠‘X–Jç{™Ô(◊fmS¡WL”º®ÍÛg◊ZsuwßZ∂ì)∑&<ú5=ZÄF*íüÏ]|˚‡‚€á[;˚n`ƒTÁ;n.¬	$
-CÆ¶GK¯a‚ÙÓ=ò∫˚y*òq…(ÌY∑q=jËì¨9ajŸTÇùOC√ê‹Õe¶§§˛—Œ‘üÄsè≠ò2˘¬î[J!q ù,”rÀ≥JÕöNÛ@ÚwF_{ÛÜkæÊ*´π˘y‹U_SÆzÁ¡UFπ”4Ä5vû+'o≈sîëJÇZLä≤ÉÑÌàì∞¥î˘ˆˆ-#UE⁄yM9yÓñgn“á[
-d—÷„p[ó  b≥jZb¢ª≥K≥2ˆwüı@vô¯¨È∞óËí{ﬁ∞?ıù@∏Á3ÃáèImÀÃóR˚QAJ-m∑è™o7+’ΩÊ€^∆yõus’Ÿ∏ùïÍ¿ﬁ∆Ù9í›AF%ÉúKö∫ºçÓD ˘Ë£ '`R¶]îfË?¶ö„4®ÌÓ=‹€—‰‚€Õ˝›ÌΩ-¿Ÿ≈ﬁ≈∑∞'wˆ∑∑’f¡?¸Á`j∏FÉ⁄ˆèwv˜∂ˆx=Ï√M≠Õ¶∫˜3®as$l¡Aˇ≈6û˘\Úœü˚k9(∫1qç «†~e„xƒŸfv&r¢@B|Åµ_8∏1E˝p_áJä>?–˝U\πVòµ&›[•ÉSòÅP6‚Ÿ◊‹JH[˚ÜÍöj≥fM_mVﬁÆ*˙∫“}µaO7ÍJ{©3œe8xçE˛®H]HñK¨î∏≠ç¶o¨€¯ÓtΩÈ#àÁÃ*ì⁄gÂ«±‡¬U÷êŒ-„asï§ﬂ¶q¥LÇ>‹ø,£üñ˚◊≤Æ(.jbCÈâ>ts∂ºrdåÇBŸUÁ5OÁ˙∞u8W…];k£ØÒgeÒËƒB—ß≥ZƒãÖêÂïèı.Ã5åX„¡à6◊EHëΩ≠Gõ4Å•7∏‰ØÌv°|√€Q]cQå "EDz¸∞£≈Â4j¸ªàòhÊ5…	⁄Ù"€dl◊®[£ì9596Kic≈§çKÆÍ§°°\PÑ@π∞âBGã≈?ˇ◊ÏÏ>˚bÎ—£≠Rä¢~)ZœàﬁÃ±†ÒŸ6h¢b\è
-ñÍHñºcÓµÅI«ëÓ∏ëCºπq–
-^ôæ⁄ê•Ë¥˚lëL–pãﬂ≥rÿtf:πùp≠”ÏQ™ÓÍ
-´∫¥∑RfP∞õ∂EW ≠ìhÈ8 ^GvQÆaTÕÎ.0)<¯|‰ãΩ‡Ÿê‘Ó≥ΩMèE!â»ﬁ˙⁄FeAóÖ
-™›‚(QµE1˘î≠˝Jëâ÷≤R∫aŸñ}¸Ï—˛∂ò\sªA±ò’f≥ÍØ4*¨è9Ò⁄ZiÕZrDôÓ,@ó.…ÅXVWñã§>¡ó»#<R⁄ò=m˙tO'ø{ l($FSŒUƒü‚./${±‹ƒ7ÖìÿÀvdCÿOÿèËPg:¿s¥®íı˚·“±cbU µ:Ä“%O%.—ï‹∫êêªö¸g\Sœ/¡Pk™md|3ëEfÿ†∂0y2eœúÕl≥6Î*Âw÷Ï®√\‡¯ÙX{ñrÇ<£÷|í]â•gûCdUœ≠´¢”ÃßÅ€ÿsJ6ÿ≤¶WÚb è7˜û>ª¯∂ÁWŸÛ∫ˆŸ>¸˙˜º∆QÏU8òDæ–èWÎ˜ıù+˝gX¥n¡áÔw6Í=ÿ“u¶ ªåw&8∏Á7ı∞c⁄pg‘Aî3≈ùªÒÏót@ÁÏ–±¨`;ßje‰àŒJEs
-ë	‡N¨ ç∆0AÌ|4á≈˜ãÉÃmø+Ò›„‰“¡EÉ
-ﬂï¯≥DN9¸‡fvﬁ¡Ã+gi™ô∏±≤zfÒsõã„ﬂU
-©>√§°öQ“rÕHZÆYl•˙ïﬂ˛ôìÚßéá*ºˆR‹<«zZô/ DÅ|Ú˝y∂Xo>sŸÎ{œˆPÄ‚óœÛ=îΩ*ﬂj3ŒgÚﬁŒ€Ò‹	‚Ü3çœt°'+ì ó\j Vy8`%ö¸cÕ.[¢œs•Ã–Á˘d2uﬁÊ•Z∂©›_q$ˆ⁄l3CDPÆä–AdhXu&ŸœY¥›Sﬂ˛l8&–Ò≈[&M7¯Õ-Œ£¬ßÊ7èq˜V˚ˆ›…@3+UÚ6Ïﬂªπya™É1<Ú*L≤øÄE∞N≤ó©yÑŸ1≠êc=–ïò{D&Ùãò›OÇ5´Ã∫lGÑ\´ó$ì:{<Ös+j¨6€?ÜÀj∂∫që¨DπzÖ≤`j~Ω'ÍÆ‡ëˇÇÉ#k1Â/1|Òûhps<ﬂ¥„î˛m¿DéR.H
-øh®Œ:BŸ[ÉW·≈VY Ω@G•ftrû°Ω‚d•}[<$ÆPAÉ÷≈/(¸4é}PvÅ}™ùj){•,¬7ë*DËw“=â¢1ÁîZÖﬂ°ŸÄó^˚^Ÿœ™D9«¨</jrM†&[¬H1Jı%, ñDÎìr0îïC˘JÃâ¶≠´ƒEYÍwB®r◊Qö∂‘q¶)07/eã\ìã]n\∑<◊Y¡úÈë£xTÜ◊¢¬D˛ëÕñÊw…ﬂbytKEÔKÌ±ã≥:*7Ù5áó¨›YyuVS8„Ÿ≠!ÿó≠ãL}¥ÏSj	üA±…*ﬂJOÙ<ÉôX(ùò˛ZﬂùN ƒííåGNwrs…Ù¸!Ô≥ôzñÁìÂdmzüˇûi¯¸\©˜íÄk¶K⁄5L÷w#0˜vW|⁄∞SªÀD~fM∏Ã„ñﬁñÆ}K¸√¿œ±‘aŸì(Ñ„·k2Ó5¯¿*õ<'üÁ—Bßñöh˙ãaÎOX(áÿfÀ£`¢ï‹% ^[	„∫'Ga^LÓ±ÀòÂ5»pˇ0öCãwÓXL˙ñY¿jÊ£0õHÓõ◊ ¢TøÍ%{ˆ∑êG¢Ä¬/ﬂ6 w7∞ëø˚ÌØx–VéôÖfnªê3—´˙ƒ\´π(◊`t˚á≤] jtga´Qæ1Œôê££1∑˚0Ë≠õ¡Û1Ïû€√¢O¬∏‡Vòß6Äî–êW%\4’Ä+ks√‹….ıÈ$ÙÉ„7KÑ$íKn√«o Õı≥?2KÙUﬁ†oÑ¿˚˚Z-rÂ"a	1A~Ir—”6öº˝∞Ëﬂ¥n˜Oøë•˘Üæ ¸s+ï”UÌÍ}Ñ∑^˜Õﬂ÷qÃäÅ2º,õò.Êf≠†ÒU+`ïIc¨6ÂÔÕs-GxaÊ÷fúCgÛÛ∂Ôñ«sYÚL…¯G5f0NÙì¢∂ù—=Gú}é–˙œù–ˇ¸wÚçÃ2Á~⁄*!ˇ∆@vñ¯Û#¯ˇ™ÌÒá@
-hu‚[Ãó\a˛]≈F2Üä∑£Ñ$FÅ‡∆F6<ÜwÎ¥ZuŸ¸=}‘xÌûófçﬁ‹FO¢b®#˜o:ıW¸ªƒ]Æ∫Ònvö*iôƒƒí—5ãﬂOá`)¯QtWºÑhwkP›l≤õ≈[^˝i	G£ß‘3-¡óŸëœ`v'ø–«ø:π˚—›”S/Zß˘Whê¯§T‘•Bkå3=äN≥.pFV“¥Ó$-≠¥:´+≠’€∑1k©®,å˝«“	ÃÊ◊–plï®Sq*dO¥y,Dƒ_	ã0)L2∆v√§ ˝)/|Í˙M§~BÆì*m≈â0G√(ÓØì˛è∂ı10@°Ø“∆Òs4G∞Aâñf∫F¢.ª	∫ÈHùVGë]ªmﬁµ“æ-Ô”£Xc¸:<ÿÈ‹¶ˇ«îµJ&¢z0å[âŒ®uZﬂhÒQJ˜ \2∂™˚Z⁄%¬§åªztdûà1…µΩ}ãÿ•Ú∂œ™å4„¿%fz˚∂ÉÓß∆qÂÌ[¸îõS·‰P‰X«Í-˛¨”sS6¨∑ÍıÊΩ1nh;L>·C®ÿ(=Èªõ6nÙõÃø,ŒêCëoÒ√)≠4úäH(˙vΩ≥QP_Ï≤Ô+ı®uÒ⁄_◊ö]Ã¯/Ô«VÔÔ*ı˛Æ•ﬁØ˘"#4^⁄W	ÉæÂ[ˇ3jöqﬁ≥§=é†ﬂì®·∞çñ'˙¯⁄léüWÍí)é‘© Îz√möÓJ˛0;™÷Å*^&_©∆JóuDÈ2;≥8ûQï&çõ¥∆ÕêFŒÑ÷iÍ6f%Áø±Ê2∞˚ÎÂÏ´ Pµ∫k5™ª÷Iã%mÒWÅõcƒ_±@XÎ¨Ÿ‡´WËó™7”≤ƒXYdq’eK5ö„Y9·Vô,Û	Ωâ¿Î5é‘ú«…z≠SCQz}äÚÙ,†–Õı);–ÿ0†ç}çÒ˛ÇÇ”ÍÁr}qßñ≈«ŒÛÉ®ùÅËÒ`—‹•√?O]∆‹µµÚ57+˜∂ÂVæÕlÿˆÏ7k0C!#ˆaX'J•]∆9¨“≤ó$å‹p’KB6Ùë¡îü≈‰*Zº
-ÅG˚üÈ°úä«V¨âìı)wåÄPÿèÄyDA¢ŸeÃœ=Ô!g÷´e‡Øâ¸˘Ãø˜Ôêﬁ€ÍmÂñ˘ê´Q‡X»˚…s|˘é-_R~•hEOeÓî%'X9'¡00^U0˛ΩáL`Ífæƒœ Ë=€˛bsgü h4¶*8íUyKı‰•ÇÃÄíH“=ÓEÿ◊Ív4NÜÁ«1∫ΩÛq÷ÿRÕ≥FwZ!¨B–Â›êœ”XF“«A6ﬁõûÄH«EÄ„&/Ö¿&” …LP≤'„Ë<æ`≤\h2∫©úÏ‚ªæÈ/µ0 &ÁﬂçáARU6à‰œ≤°‘≤<º2ë‘ëjÕ¯ Ã°¬0+¿ ÎGxßÅDvXd¯ó°¶-ñÖ•∂çü∆4}).∂≠∆[∂¬}Y1o≈Ã$3ìﬁÂq(á∆èE¨ìßP,6UÓàºj ]"â˚à¿K_Ÿë⁄–Í“e≠»¥e·	Öã9Aù¥¨ÌΩn¿´†∫0ïHO∆√4Eh7ÈX‰XX∆ÑpêgﬁòÑô.‘V)öñS¬
-âf\„≥πA¨ÕÁ˜˝`÷ÏMä!≠Ÿ=∆lˆﬁ$'v&≠Œ›åÑ£—‡çú≤∆)»jMÕx”jK‡^ç•©Ç_VÑ#MÑTê©™O˛i”ÃX5!°ë¶µó≠˙Ugrñ=°ˇ‚‹ÒÖ˛/¸?O¯ˇ{H êÿΩÛÑ˛K?æ?øB–~ÿQ»øπ¶‰c°‚˝Ωë˛z¨?é÷›_€œ"˚µ∏˛ÉPeI€˝*>øZ4øvø/íﬂ oÛªÏfª‡nG˝	Ãm#<9i©üîÁ$¨_•2Ä%ø·ÓÃ≠P‘íÜÔI>9¡1hqâOvòµÇ≈á»•+`B∫ùÆpïôs•
-œÂ∫™îÖ˜ï¥pi’rpÁÕPwÅõEjxnsœEoÀØ,©]A≥∞.ìÇY^2õ÷5ë\Gœ b>y¥˘„≠†°·Ëât“‰öÀØ”H^Õ"*ÂLeïêl•rÀ:5ì«-”Á=] mH.m›ıˆ-p!:ó$ñ3;ÈÌ’´∑ìzå\íto»€2ÀÈ⁄ıXNØ“~~)ŸÊ€Œï˙‚Æ_.’ÏãiFid⁄)Ô–è•=˝ôÇ\
-* ﬂ*√~–◊É`O´O∂N©Ü=˝Ó‚ˆÙ2Ài∞¿µßß¬Ö∞Âº<9ﬂ°l«^ìiçì)’S¿EˇÃ´UTØîCˆ¬.üGe0üπºÍ`∂w*ÑŸ‚®O-U›{óóŸ≤äEÕi¨0úΩJÓ\∏’Ç÷s¬”ΩaÅËU√–´F°;)Q>¬sŸSAtõñióT Çö7çEy~:qÓ†›\RN¨êºªpëÙùú—UÕn±ÛæﬂÓ+Ü5Œjà%	/≈˛À˜°_ü_=:ûÿ¸9#ÛØ..ˇ}FÂ_"&ø0ƒ™,ˇZ√Ò∆øl(˛&ˇ*√Ø5øj˛ùÖB©uæ{3`^FÃã∫ë,d>ñ71Ëo%Ÿ¯M0á'#w4)Gu]n‹‡ÌJÄƒ¢«´QÆj>OÚöì,5å>´:XHz© ‰ybFÏ?#:9UE‹xíªûÏ˚µÚYo,≤÷ë}´E¸≤!¿ÊˇﬂÓ‹ˆ°	îá,ãh‚J›*y«õ¨\Å	}…hDÔÔ£ïhÍ÷Jnv∫ö.Y≠´o˚´◊¥¿Í
-Q«•1«•«Ö≈yøÂ«Á'i˚p∫(≠π‰∑TÔó÷[˙˛ô®mÑ°Ö∆si>Ñ»˜U'™Rë%?"fæ;™BÅù.ZLi~4!ˆ˜=C`ZpZjFòVÌèxrØ∞âO´«4Øk»´b˙6áQÛLVÀ3¬VìU˝áxπåæ»⁄°#gd0ãIÉF˝'ƒ¸˛0=˝∂∞ÁúLpá:+ÛI>◊SÊrnyÚên$"yAvVï|ªÍëoˇ≤cˇÂ"Ω\9∆é√€∑í˚Á¿Â°°kq»Ÿa!"LﬁπqU"€Óàäm%<
-'……Y°Ùv9_≈'*HªÄ+æ^‡’¬iπ^OŒ¢ì†T‘˙ı◊UÕ¿ô?◊àW∂íÓO˛†á=À˘	Op¯∞é8kπ•XÀ-ØÎ–.^hQ-»ø†E“ 3˙ñ©ß~æÏB	√x’Öï"1òÂ·≈∑?π¯Fç¸ﬁ/Z`ñÆ¥ìäØwMUﬂæ%›ïøæÔ•ÏÑg;€†ç=ﬁ⁄Ÿ`EE…≥‘ÁQ–¯p⁄P Áoﬂ 8ﬁ∆4MZË_ﬁôúœöÎ˜}Ü>˛Î—°ß JÛ»wÊ£°Ç(É
-&Àã9∫¡@¶à4ãÿ»¡wo2Hp˚¡Îœ3ÖÆ¸·1;≥?Q¨öxÎ3ÂïˆÁœÆó‚öœx«∑ÍMW≥‘Â$≤ïw$„:°i—’r{ò¡ªˇ„W/âY:IG∞≠Ñ“¨n%˝,^ø€'n≥∑Â¬ö]tÜc°ß⁄cF8gΩG~â:ﬂ^REÈô`Û…ìΩm‡·õ;=¨⁄I°äMgˇyòÄ≤π¨7”‡ã vΩy.πÿ∫Ó≈â-Õ¸*òeQµ∏Ç*$˚/¥»Çºgûb<ÏÖ\ÜA^âÖ“⁄¯¸üÎ0,Xá°¨£Ì)ªvÉh≈¨ﬁ BJ=ft‘z6´ø=Å’„I∂Ë ¨ÈaF¯üJ‰´ ı@∂÷®eCU”œâ¯a5	Å$Å√4Ì CªßUÕsŒΩÙ⁄Xäûfoßûüy¶Õüæ{=…ªWï∫{EâªWí∂[ñ¥+óÓzÚfg˙A4Œly∆ÏUÁÀ:Ÿ≤2WˆÍ
-†‹˙û@Ò!6làzQ(‰¸π@
-M„¬±s´6bxQÏú5é>tÛéƒ&GAîñh;9ÊﬁÄçWN`)ú+êsÑ
-!ﬁƒÑ Y≈÷^okøw‰”6T¢ô˛:|'p Ä  B≠ØŸÒ\VÅ∫˜Ï∂≥·ÎÕW(öûE7à√›xïárr%ŒÁ™•Æ<OkÛT’–˙quiY^\ËijÃ*Jì˘√ØLËé™;ıäd»&<B;œP¯√ão?}∂èÛà}u$©ë´∫Ì≥Ì–ëMísuæ-ÀBoÕÈ Öı›o˛oRYﬂ˝Êø÷Ω˛Ü<wA·$7
-VTR›
-ë£;ﬂ⁄ÂÜ‡˙°Á•È	≈•x¯Q~'º\>ÁÔ,Û≠ﬁ[1¨˜Ú·ºÔ#åwÅ›¢îÇ|¯ldÌ◊≤[ñ*‡0ü:2ü∫Ê¯Ø£„øŒœö¡îÍå)’s]¡”9#Ñ/¸˛#ÉØ**¯⁄"Ç+F£ƒ=g4pn8^ı(‡¯mñö„bjﬂ_áC‰á?ìO÷M[ÜÌ¢Væ&@/ª∫º?‰Ûë∑KbàÀ¨u˛Êä#.ßo#~X T—˙˝i‘N≥·Ë…x+¢›hﬁ3≠+4£Ö Õ<≥xáç:˘p®®;mÊ»∏ız˜(¯E¬n6°õπÅõaÔ¬6[°"@‰‹ßü¨jLÛ°^s ≤?¸¯3ÔF‚Û˘ﬁoxrAƒÔoƒÔm>HÛ%¯2«Ÿó
-†ÀñLÎiB¿v”…ﬁCˆÂB∞ãŒã†ûÆÉ≠sÀÚ¯⁄´-ÌAœ,≥E%RyªÓ:ÒÜ~‰¿3Œ©ﬂ∞ «œ} ñ≠J.`¢wÒçBœQ¨®–yã˙q”ya}	ÚL ⁄∑ıÓú¶Èè∑ø3˝Ë‚ª≥¢$ﬂy˚8d≤ÔáÃ»Ì‚åR∫s∂Äæöü&Í\Qa+v,Æa√·˚ÿ0Ω›Ï® ƒ˜í…©Ì€¨öM»‹µÃ‹`Â*ë∫.“¨a“QK” ç˚ÑËﬂ|ÉPﬁñ‘WZ¢˙†l7Í⁄0" î"Ú`]:E®ºkn≈uô°
-QÙ96®k∂B›©fÖ∫:º 2ƒÇ∆∂ÚŸU∏!Öµ0áÂéöµ˘ ÀÆ"ø%ia««ZıTÌ —ª9QÑ≈•	*cÍ¯óÊDTÚ{L”7ÆÚÊNÎ{pSak˙è&%?1:œGN˙c!‘ü<Î=}Vø¯Êä…µ¸©Y@ >òß<Á˝üI˘
-ÚéHl¨¢Ln∑@X]a≤m‚cçD°ƒI*Éë≤Å{â"’,
-„∏Çú¥ú⁄ﬁú¥˘≥6Æ%'Õ”Sx“‘7{ûBÈ9Ÿ°y1H0k”œµ|ﬂ£≈ª1û´Ÿ+D+πd,‘¢9“§4tÆAW0†kÁî#=È<Wù&}çi—ŒÑ6˛˛T2°µ®∏?ÁA_"∫ZÛºÈÀÀÀZƒa&}3R1`EÍá„Aú0»séßàe`º}”Mò“C»òìTıPGøjtT∑&"	£~˙å1™ˆÙ–GΩE=⁄—iﬁîÁ≤à®H^§&>í!√áÑw$I<Ä…w}	ù§ﬁ¡¡Mõ…5∫∂Ò(N3ñDÅÀÃ3ﬁ(Û€m¥ıﬁÿÛ*rÀY5÷øHÕ	=Õ:LG√ò∂˛0∏ad5}Zÿ!ÃÄgEsΩ~%âÌ7d„–yañ;˜Î…˚7Ç˙C`Ú√$∆Öäï <F+øúPÄ⁄u`FßX˚®êµT6°ËH™Â°∞≥?›ÉßΩÅ#WîaüìÓv≠4æLÍ∏¡^?RiCzá…0[
-É·Î®O-sﬁ!≤ÛÏç—D{Ì.<ÿÒ?‡ÕÌ74øAtöÂ…ı^ÛΩûh!∑™‰˙[ô˛∏Ω‹ò'Ì??Èø¨ÌjÀxı˘ˇπ6X#˚ﬂs„y-ÖP›Iëo…qœÖ \@˛"T≈OÑŒ#Õw—"ÄxºèﬁEΩ•Œ‹ÇÓ?{¥øÕmQ˛Ã1SÂ©≤Êq3Û)L÷W√’SWpu`◊óP}Õ9Ô¶‡Í@
-
- 
-<y ≤sï–Wó∆^ñ‡˚∂P◊H˛‡ÆnÁÉ"öÜHpejFπñQ{¿G(9¶L„™aè`@≠'S•YT`4C¡ÀÍë#œ#À∆Ñ¿7Â _ˆáZ>ılyÂ»¨§˚/¥∆mq∂^b \Ezå˙€*FvA≤ÂÂË¡Ç®U?f«owL˚D"¡4co⁄#ÈZ#Ò7xãå˘íZ√|3ÿ˜s}¸HÉXh`8</‡XcÇ-“5,°Œñ1Ø§ ±Qà¯E4 Ç0í·“pfôs@¯c¢Ë%≤˙d˘eä…&SkJL≠ Ù=#ŸGacìÚÈŒjr;¨7{ ¯’\Eë’çÁú˝}8°êƒc0Ùvõ‡*ËßV 
-™≤;g∞$ÚGΩ9F•Qìoí¿¶ÆK3}ﬁ3∂·Î¯±L¥{ÆÜ|„é&˚Ü¢⁄dÉ±Ûuü
-ﬁ˝X7L©7\ü™)Gä¿‰Jı˙ÚÒ∆˙ÌT–∞'\!8K°&N€7ÍÙ∂Ótn∏-ks≠œD”oœbÂ`@ •’u9€ÎS˘Q{* ±≈'sVà◊ß´ﬂ•¢´#Œ"0”Ú˙‘¸ÆÓãì8ã√¡”Ì˛◊0EÍÓ=0hò‡E!á©©î3Å´ıíÂÊ\ı1ˇ·Ùe<;j¡¶G|—Pz1¥ﬁaÚpòD^¥%B1DùqîNŒ£π—ñ4›¬T4¯Àˇﬁw
-™56<éŒácÿS∏MSN+-E-I-± î∆{R^ê˛hÛ
-Ã’å1G≈füD„ˆAîúD –FUÒZ∆Po=˛Í/∂˛∏H˝%fZuŒá¯gædúÁ2¬0Ï˜8À^ƒc∫ÀTpÑüÙvw⁄~”O`ÙŸpS›¡7MÉw◊lÚÏ`±'avr¶Z`g™◊4|iΩˆaråûç~R≥üPJ~˙¯Ù{∫©u;„ò™/Ãè‹ã¬ì¨=ÅÖÇŸ0‰&ò‹g{è9&~êÖ/‡8«0cŸäÂM…£G(Õ\Ã¶ˆ∂:C’f∏¡»ßê°$hßÁ£G¡Áªª—>€ﬁÎÌçΩ	bDOÉœá√i”^c-…≥Ë¿^rËo€vÄ5VÃ9ßój´fºàåº©÷È`¨”SÅNr{ë7©nd;uCQV/˚√ñ`õú¯È{a/òÇbÙA≈…YF\‘ê]pR‹Öö.9Ñ|êO{˚a,HÔ+Ó›|˚Êz(ø;}±·y!tÈ”,mÄíåòˆ=gÏ|2ÿ=¢="8m2¢QK`æñü—rúPy£öƒEçnäÔ^RôŒåù_3ÄNÃÚªèò9”7«]›Ô√øzﬂ«˚8BBàë˜ƒwÔ»’„Fîöÿè”∑√¸áµŒ'«xr(¬dﬂs∑&Xyçy’˜‡≠@"QmZÃÀc˛›?/H#ÿ¶`	Ï(„π◊)©‘†TÍù†h÷“:¡ÔﬁŸùúB8|P∂7•*Ù\N’:RWÔKôËKY	ç1	o~ûú±•zb^Û,∂AìÕœ	GSòt…˝0∏ÇStıÇ8€NÆ8	j>ﬂ›ÓmÔœv∂DÕ]µ$∞\B*Aç3ç§å" ı¶¿˘'#º´œ&Ö˜g„IÄ§4HI©¬ìÒ0ÖìÎ,
-≤◊C¯ﬁø∆)ÖÄî |SúdˇiSéÊπ⁄•˙õ?Äñ±›FÉ÷Ö`∑à‹Â∑KË C∞¶ó’<ìC¥xËÃ¡∫ÒPﬂ·´0†WÜ8oÍ?µi(≤B#)BFçFQs-YÌt8Œç∞uLÁ}( 8.«¸#9ÌXsÊXÑÚQ$:öÇ8@¸π°a(@ %TØ/©·0Ë˙n¯ıNIq…ÚÇíE¿áû¬ë;˘∞á;∆≥√K)"•6Â_ár>±rMA|Ûfì@Ï• nÇ\‚ë<≠u)GH÷öL¬áƒ◊M.”÷È):ÙÖ“$N“µf›ÊZÅÏüéry˛“8ìB‹%Z©0bFZ9Èìé∞x<^’°¬®ì˚ı≈°˘¸ií2m≤áVToÄ´<m‡'	∂qñö6F]WPz„…Ze>È![aõ.œ=6î∂Å˝ÅÃf∂q&Ò∆‰ìp_∑‚”Ï¢z^«‰–%ó∆à¢á»†4bÜ$XˆáRG’"€§|àÙâí˘Ö?ãoÿ"∞»'‚˜∏s9ëüºŸYHQNÜ.9$6üw @„¬à¡da‹?]~8ä@ï·c¸(˘A]'h≥dº08hˆÒtFÈH,XióP,gpI™ÅœÒ“ÅAÂ€(  T4√¿<Ôy¡=WZ¡ã6pÕËÎ›SÇıTK@Tß;·÷Im‚8´NMùYÃÓ3ö~`Z∞ÆpÛ°<L»ÆwCm±≈íÊ!E#xé:m”ÒÜΩ8°Ï.dé'à4êf™¡ô6¬ÙMròV}‚®rV`Ex:¿ÈÕ⁄Üêgù¢·Î0Œ|õﬁ,(Kêöb`ÓûV—»)ﬂÀ˘dü4v8>p`mEm[ê8ÆX÷8¡fNpûA;-åv‰	ÓÆ‰∞K„—€PÜ ±;˘˙7ÃGX;Ùµ¿ç}èô*p˜JZÂbkdòdK<vd	S]†5ÿKg®¶/G_üÖ…Û*ZÍG£¥ÙT“U√ò≈5˚©%ˆEÜä¢Ù89ø¬NŒ»¸ç¥ÑÅ\,§è¢˚ÿπZ·4‚™
-*q]√$i∞Îoñ⁄v≠ƒÿΩJ∫wŒ+Ôâï4ﬂ”≈¶“…>HîzrŸì$–≈°1äÈvåI£qå+JEsÃÉq^ATä°§¢‚qé¶ËIπám2∆¯;zDà’D°¬‰§nÌÉ≤¬&b]»O»s—<r_s`rÊäê»÷%Ó$í€Åh≠¿Q√«g ¯(%Ä‘#ﬁà©4R´ôç¸x0<hK2Ò	-fCÊÙGcô!ÄÉ:…ó7L†I)˙°È∑°É5»ËÖHxi B«@ädÑF)„±õ&Ì<Êwñ+F ∏obØTÇ6Î	h7’]÷2{5⁄IÒAÖv+D¶ñÆÍ6tπ=ëM˘˝8Ñˆ8ÍO@P*‰Õ„{ôF(òãO%C7|⁄8m≥∑øıõv…æÀLlhU· ?âÇÛ—L_≈$˜∂vzÈÿB∑∂wÒ]ä¯…0ºÏÏ‚Ô‡v£,?X„à>\‘8ç«ª˚¢uj¸È$†ˇÑ!ü†/´Q_è#kb7Zü¿Ó~≤π∑øΩUk±FüÅD3	FÉIGìq
-<Á9Fñ€-#r2ÖC®ñI:Œ¢`Pß™[;–Í/µ¸:ø¯Ó|ì]V¬∏/¿U5gËcË[gã@ÃpEL¡„>„Üpüæd∞üêAinfÎm¨åB¶1ì∑≤6Ñ›T˜ÜêáÿK±á´r€Ü≤ã,ÕÏ§˚ÌÑÒ–t€ô£Chgb¯0<BÔ2='‹ÉVIÔJtPú x∂8Pê ◊1\N2%‘ä+∆~Âè∂Ç>;PÂqú4m…È∫$÷74ﬁ'dS¶H,}‹l1xπCy ºw1…cÏ
-õ£üí€)ªj(•n&î w9ÿ“≈“‹‰V›G≈r4>ÕXRpJoâ†/Ä«	„| ÜN4∂É;›ô/ïkŒ‰-
-•goT°(ãå†◊É¸’”nV~å?èrÙuÌèp,+c»·|ÿ
-h;∂ıÿ “‚◊øœˇ˚¿îÔ◊ï|O˙Æ7LáGVıH€∑Ï∂∫Yñœ^éÄí¥H˚¡|jÈóqzÉêBoµnçJ_®s˛≈°H£∆-•éwxExÛÑ)sUxÛeÄÖı•ÿ‚ò √Ô€`Œ€‹P…û–æÌE£//˛iÙdM2Ùø*˘úEéø˚˘/ÇΩ≠˝›g{^zR¥ΩñõÊ.+Dîﬂ±ƒçlvö¥˝ıRê⁄7L{çûÇlã~FE#dﬁ≈ﬂ`Ìà¡Nû>è°w∞ÖeòKµÅ˙ª]¥=´F∑éöüú,¸é≈4Hû74N;7y1∫]Ω4›˙ôc}Áäö˜€_ò˝Ω’£TV$>4¶⁄¨â∞q}⁄}‰_æ 
-}?Ê˚ö˘Ñ—Û√ão{ﬂ>⁄zÄ;{gkØp´Ì¨≥Ä;˛ŸèŒ·Z=†”ÿˇ8Ea÷@\ª%8≠Û8!á‹m`Ø≠Œ)–<ﬂlw¨°N};≈åÚÊ hÓZ§,±–›‰	jQg∑U∞K∑ÀkuªºÛÕ¬cŸ>ùìÃl§2ãÊùåfùrGÏ¬ Ñ∫ë)YR(‰õLµ‰%õ‰≤ü'˚FÓÅªr8õB,oÆÎ`ó¯öÛ@YÚfãƒÍ< `cœ˙2äú,ﬂyÀíÊ$ ﬂQô8wÊO ≥∞:ﬂ,‰T|Ù.í›NY
-Ò•|ıåïú¨]Ò~y∫9Y∫~–‡B_“R‰uXR∆óıGú⁄A‹dƒ¥+/GÉA<Jc¥@Ω>ã≥[$–∞|X_6ÇA¥Ò3pôAúûÌ`!ﬂk‰¶.˚ﬂ/›U•‡¨2`W∆ÁfA8Å(û7˘^@o“ØôÍ‰Bπ ˜˜’≤ 2+%ãÅ∫˙È$ÙÉÙlrzäÆ/ã%Œf¶P3 ,ı(£·p‡©	‚8.≈›“ Zpå´L˙ùâu∂	£s‹ƒ÷≤8ô8	?FlJá¶§±Èº‡a*ˆyëC7¡"6r§h.D-Æk,∏µ?L≤ùŸk‘c´„N™xÍLÄº«
-9¿?KKys¸S‚;q8f†u,« ÂGAÉY®úë`WÒaã˙<¯È!˙Ω¯g~1>¥¿í0µ‡¿>`u2áâ”~ŒÃ|‘7Siﬁ`«ÃtTƒÔ⁄†Ávµãﬂ¸'î~oÓaÆrC1·ﬂ@;&+∞ôÃ-&ï$BÙúRg≈*ådÅyπoè5ˇµå-0b˘SÕ‡å“≥◊'©{%EVwE á4_§sMf¨·»d#NπöD„’[d{ÚmŒe—∫S–ös&¢1,«BÇ
-´H‚ÄÊ@™∏¯.™f©ZKè©€Û í-{¡?¸Á` √Íié◊Ôè€ºÊ»öL≥∆\ÓgΩﬁ∂cΩ© w>áçÆ≤É∆‡·ˆ€-!ø/ô∏`€ÎyL˚G,≠hÑ|ÿR_ÄWØË_[˙çáîõS∆&?R\]yè¨rq£À¸ºÒÁˇ%ÿ€z∞˚¯ÒÊÙ.f[ô◊i˜áûÒÀö]òÂ_ ¯R›Úbü "“XYn¿˘#ß∂:’õ‚ïûíi±z—&˛8èà◊íJ[`≤í]´≥ºm#B—	∏Ê†Äk
-∏Œ¿ÄÎ
-‡¡Ü®Ö„\é˜\´hó&¶\˙æ˘Ø≠@'9È˝.˜zs,D€Á≠GúÂz∫”§»˛ïcƒÚ}Wˆ~ÀR◊WÊ∂3j¬˙<
-ÅEÕUË∫3l~+¬Ú}	áﬁ%<pÒ˝Q:¯z˚ªOÊpÔ˘ïÄ»ß ÷ﬂÏÃñ]Y”8©Ï∞ãë”ùñ^|±Fuo\•äuWÑ0TVgõI“tÂ÷æû’Ø†>ÉÏE∑œë∞núõû“€ÖæU*'$ [Áojn[^´VBAé2|õNIoµŒ  <Mπõ`TX„ª— äk.€‰÷¸¥9˚¡ëèBèÌµ‘Æ®‡ô"‰EÛ3ó‚hk?SvRô0LeÚlÂAØ,fùlz¸x˛ÊsGÒò_∫ıˇçyŒ#Y|è·ôœº≥™jŸ"´œ°¬ÜΩa,[∏a9UÏ2l>ÔÇ≈¥·€øÉçô8÷ß5E{ûê@6Çˆ-ÇjucïVsÍ^a#∑9Yë3P%9ÕIÆ›¶˝Q‘’„’)]
-‡QbØDÆ£«¬¶vh1`:›nuV?fï4ª0cØ»Â#yπÔµºÔ_©û¢õ‚ûR>£4Ü√Ì.ÚU,”W|pﬁµïû•°¯Ä®∫ó[·í·æŒÆc;Ç“6®3Q˙ÇÈÕπ¨¨º ∑V÷iÂ≤e*‰ n( ÜºQ–HÚÀ®l&2≈WI5¬J®à€≠Ö§SıW° CYß@√‹=˙ﬂÔ˜Ôˇ«‡ã›ÌΩ‡È§y3õ[˙ˇºÓºXûZ5fΩ(Z>ÎPêd2ŒIç≠öµ¬WÛƒ*m»◊∑∞Õüô…]5Á¡’æH”ETP7GŒ1ÖÆ∞GS@Å<ˇ¸ˇ?S‘˝Áˇ¯ˇWL/`Wyã~˛®ﬂ>É>ÿÔ˚YnÙ#¯Wßß˝Œù;[–‹–+9é%¨W>nuVVa≈?Ú’-À[q˝…Ú%◊'+oÈÁ_ÑÀDQ˙=µ1ì4Ã‰mÂ·EÑª| ÕüÅB¶ç∂ÍË ÂÑC•∆Õ√Få-\hïÓ,˘.˛
-yw°_†òuœm±∂ˇ.æ›ﬂ|≤Ùûm±π≥øÖÄ0EÛ]» ◊ƒ∞6pMö^›F´˚>√‘QﬁüÁ¿˛€ﬂ⁄{ºΩ≥µl?ÿæ‘|íS˛ˆ;B}Â?WeŸn˝·ˆê≥Éß8Å…›ˆI'Æ^rÌ–eLyæá
-V¶xÌÚ¯qÆ:ìSjªB•Ìj±Y%Ω=∂/¿9å¥fOÙ∫öÙ"ö9,’ |õ—˛≈∂ÓÀ'\xMl{`•ÙÜKpœvøÁ≥πvÙ˜ ]'\uÂ‰›ˇˆ˜V^ãF÷Ê÷3…¸
-É‡ÔÿA¶b:µ]ßﬁ8xïar6¶¢mé«·õ6∆-b‚äM]l÷
-_µòÈœV·DK>«f+&üãÿ‘¢‘s~èûxÆw<:…$W•$ÙÜñÖŒΩåVΩvS»Ω≈	ΩõLÂö©¸Çíz™µöÎÕïœúì˛V!≠Yº›ëØbÎ%Åö*[d˙Ω|a“ªn˚U¢ısäwÕg¬®ÍÜí‚∑
-üˇ*%«Öê$V£éÍˆAWg]Ω∞¸h˛†+E∞Û±k˛´v6|6E„X∏ôÛ:–1ÁüÜc‹ÀÎ”÷™Y®ö˚bzπ}™‚
-‰˙˙<Bñ£‰¬ÙeŒ£¿®ä[ßR–Ïúú`Dœv$ä`5	€∫±UéÀŒ¡fÂ¸¬ñ/t|∫≥`‚8Sè1ºDdÙ˘êâTQ⁄à-¡¸õúìK‡§k'Vu¸¥˘ó#†P†;™''ØG;ä‰hãŒ#uìÁP‚”Ü≥RÙ÷r!ÄdpéóhÅ0td±âÄßo∆¶ÇÓkz+&Cé‹∑√ÊH›ë?Gv+®lï-ú¬-Í	Q˘ALBÖ∑ﬁÁÂ]ë¶±∫r	M£‡ú5µã"…ﬂIÄ◊≈Çö+∞ öäßÉ/h¶„ö&ÂÇGÀx‚(>QVmf-l›ñ˘ò1
-òÔ¨ô[ÑS¡	É/∂ˆz[˚=≥ÛÑZ˛Q 0™Ä›gz4ƒ‹ﬂÿÿóg√«…+¨x5Èo)Éﬂ•J7^æd<W)¥Ú‚Ÿ≥Uıy6˛1àTËD™˘S°ã…ÿﬁ~äÇÔ≤/_2◊‘G+í¢9–ãkà≥Æi8≤:äÆ·∑ŸÊåî™L’è7/˛Ì>¶˘ó∆ByDK9º ≈B1µ¡Ûö)iVÚNX.m„ß∆W∏Â1∂ù Zı≥´ƒòyé'&ù8áìﬂÚ®b~ù°<æ¯ˆqª|$ÂÇ“ÜNØô72.cÁåDÆhdœÉCYÅîÌÕ– k¿zæY·ıDÅ]Î˝YÏ◊îÉS¡´ÒÁf@ïEÇdg`aóå,,SÙËπíZ)$ló√+àÀ¿x*ÿä†pT( +	ÉÚD
--´oıáHÌ¶¡÷Ñ‘⁄¸#9Nû<⁄¸ÒVÄ"ÎÏ›7øöÇ–ÔF¸ëú(⁄‘;'ä¯Ì{z¢»·]€ârd?q «m5C0µ/¡ñß∂⁄6„=ñM≈·Ô˘ù}·‡eØúØ_VQ´ÀN…^È®.û.ÁE}G„%Ç…?èì8Ë33æπä˙j` °Æïà>jJË¿√ l%'\<≤8√!âπÈNœg?8“Œ=O9bãGØücˆÒ›â&£˚v◊∞ÑÓ∏Ω‚≈õYΩ-n	‘∫˚i’H≥Ê§)=ÉŒõÓCóäõuZsë;ÏÃØ«Ó*%Ä⁄ı©ädâYΩ5˜Ÿﬁ1À™n›“£˝·ñR‹ÁH¡Œ7'hÃÛ ∑ ì„©É+»åyË9ñ≥^:Ûó‘ê’≠◊:5¥ Ø+„!∫Øke5=‘ï3N÷Oß«Ú´ß3ûtÁVµîôBñm´2¢ Ô9:ì”4N§[%góa8…P÷‚9iNyw˜î)8@=¡ﬁT1˛˛ªüˇ“#T˝1ê›Oûıû>´_|sÖƒ∑?úTØı‰çhº>Â%Ñó#ó0˜á&K?YŒçMqß,˝tz r¡JkuÂPE0Ñ$Ïﬁ¥ƒπœ]z¿íñts5ÓóKTı‚Sœ,WÖfr-˘≈Ù+ËõsbºéXSæ(pÄîØè\ìÎ æÙÇî!}g
-‹ıÇÅ∞5Ÿﬂ}÷+≈ˆ$Õ‰X‡	qÃ›
-Iî"D¡gfXÕŸ¿±ö∑øBπmOLıUî/ØÔÂ◊çXX®äÓ¢ùdXÌKY∏ßãd!`¢õÄ|8DƒÃÈÖ√°N∑Z‡¡]T…ï∞«Ó⁄ä@£)Q™˙mõ÷|˛≈*SkwJNlûäàSøææ.¶ûM∞ùÜà7›7oY^’”WUÆ‚8Íª∆π%fh¡vfÀS≥•ä/4è“≈u-IÊﬂ⁄z◊‘(Â£W‚0¿$π^^`ñFSuFSu)±0°ÆéôÛu:ø‰Òb.iYvf]Ì∫3;Ü9–Gõ)£ïlt’Ï¡yE>ØMEø¸
-Z~›ﬁΩÆ=ÒDÆ1÷l®Y5·ﬂ1”˙rîrl0eGØâ„ÀVπ{xVDW‰bÖUè¨0–¡*AÇ·0øGspU&b˚Ã	ävŸ ù?çÈ˚7ˇS†jH,Ü5_dœæcÌËjXûD®éÛ∞<$séh;[≠ ‚N‹kŒñ~®^lÉ¡ö_≥∆ÔT≤ccÕ"â"yÀñ‰/´~l:ˇ+ÿæ+úûó±âÀË™Kæâøã‹Ì5ÚêÛ˙8ÑàgP◊¿Îºûc{ókÍ:˙MàTŸIxktY«Ö¶D%“RN3¸wLD†I<ûC-qºá•}◊1ﬁ–†Æ)[Ï)è÷N¬qﬂ.ﬂ9Hn9L'1ÜÇe˚>Ñy˘KÜùE:UqG{«˜[≤r%˙™R’Óñ[∫ˇ@Ÿ	˝ßË íñæ∞·‰/8'ê7Öoúä&XÖÄÂ òNã±qAÁ7k?®˘∫˜ p´ã·f]¶ÿD8"ô_¿…Y[oV’3xiı›ÿV´ö‰tµ>«’{@µ,PGs≠$	54W›,qVSÛ>ZÕ˚±ÅáùpQ…∑b(”¬jµõ•4 >&¬†NiÚ˜K∏"Jr÷sQ-3‚¨◊jˆ‹†%vü™aåCÕeÁwä qÂ#qLeIŒÜB◊iµﬂˇÓWø·ûÏ«ÿ|ËGØ“çW¶ﬂjã&c–Ë_ˇ2ÿ‹~∏≈Ï5€{Çk6Kñ´4J‚·È⁄ªø˙ÇÌùœv%∞3TVLæJ£‹”¢ë˛ªüè∑∂=⁄z∂Áü Vçﬁ”™cÄ ≈öÚ¡Ãâ√¡èÏW˝pÚb9á∞Éí£π˜H™Ù à
-·»7.ìÜ·3ÒY¨Ü%ZäŒs2ªÛ&aPF˛∫it˘›7À€ùπÔ¨Jõ{@àr¡áôπ}(fs‚~N˙Ò–#‚ì¬h’ëéO(tuUlËS&*-h=⁄>≠˘¿™3„· ıµù#X≠≠ÍÂò‡çO=¯lU¥JΩì3Xên≠é_‘\ˇjPMG)à\“~õ
-ı}‹ûóÅªõ,‰¨Käÿ¡Ô˜Î_óÈÇ4îÁı˙"˙¯≈Ü˜Å‚çÈÑ‡€|/∫öWûN¿£∑ÏÖ?ƒﬂG·ÛË	W‘ØlñıW%¡;<kÅÕí>W ü∑6Ö‹–fíΩÜ◊„Yœ…03Ûú+ÌT:Õi èπØ<	ìh¿íOÄw≠Î¶:o!ECî	≠FYI˜?Ó˝_1Œ™‘øoU—"∏Á(öGi∆¶N8÷FΩëá÷∂ê+J 	ÅÏ⁄cÔ”~+t^“ˆ9®Ω˚Ê◊µVçïì®Q’áˇ  ˇˇÏΩ{w[…u/¯äjt€, ¿á(®!DB-vÛeÇÍvGãK:I¥@ ∆(—f˘fíx:≥ñùÿéìπ+kí{◊‰:≤;æ˜èºf2kÖ_¢ıÁÌOêè0{Ôz◊©s Rjwú{e∑ÑsNΩk◊Æ]ªˆ˛Ì|F∆h»¨ÔnÔmÅ|¯HïJ°ì‘SÎÎÖIÊé‚f≥é—DRpü‚o´ob©Ó{4≈√ÀóÁùËÚ•g…Œ&¨7p÷{}¢±Ùûˆ91gd”Ó0Áô÷Ù[◊≈ë·π;ù„:’=˙^˘BU‚™«}Ê:ê¶3-<uüáA"ƒ9Áª´Jî\u8)«ﬁN∂¡aÿ∫ıT¯[‚g∂›ã:ßèÄ`‰ÃΩZπ~≈ﬁ∏Æ±´ñtt{≤SN¶ˆú∆;ÁsãõK≈’#s8Î–˙‡ú|H–g÷èq}}8Î%ø”Ω[ØFªæﬁÕ•ÑPzSÊÚñôˇ	Ç±1SÂúq ”	ú”;,ÏF°ÇnÃ.Õö´ÚÂC˚Í §q˜·¶≈ÁæÒW)Ü9)»¸ot,+ï•¸Ì˛ˆ∑0›≤Rºª∆0˛)€πJ†≥Ÿcj∂5∞ÒaΩ5œ∞^cÙKä◊g◊1€™xéÿ_¸«ˇƒ>h∞mí¸hX4ˇ:ÿ}x`åº;§Xí◊9Ó‹úqï∞∫9Ã´.¯fﬁäxKÒâﬂF]¡ÈÕ1obÎçÊ ‘œû’„öæı÷[«„∑¢éG10≤8ê™∏bl b˘]Ù£≥p‰	¬~`§·˝0hçä„(lé–jàAzıæq|Bt÷vç6[êó ˘Ω¸q8jù"$ñõçµ"WùÜΩl[Ô*o∑ê⁄9Ÿñ,n”\±@A≤6◊Yﬁàã]	ÎFCÓ;<÷Ÿ4œ≈j‰Å”®&Ï≥Ä}ÌI˚XÓb/Œü∂ˆüE*˙‡£ÃáÙ˝ÿ ‚ß„ÔÊ≈áΩ˙˚t]AP)¢æ<ÿ¸ù{¯ÖZaßõ•4ßùÔ}såvÓCvì-ÂT˙Ì˙ŒÔlneÚîÍ,Ë}ß”•oá3¨ÏÆ&ò;&cIt°ô‡pŸ¸Q7~ËHÁ∂Eí±ö'Œ¡—¯úçîy%≤ˆıO€ìπ§Õ9¸Õ}1*æ–*Á©Ç¶ñﬁ'D-Qi;àk·fMFÇ+…º3"˜µ9¶cŒ9ê%z¶†Yˇ`£Œ·*±ö}Éû((L¯∑≤F‚xäÉAÿÖ˛ú K˝‚ª?fCz¡Œ˚≠†ÀNËjR4
-z#ùÔÕ˛õToµ–µ‚®≤v8w"÷[Ëú˙¿Lÿ∑«aﬁ#bÁùÄ·rå[v#|¬„)Ñ,Í≠…ÏÏJ∏µ˜·4`ÔEºØª=>ù´¯Û!>◊ò⁄ì≤≠õÒ["T™Ã¯- gf\,≈s}‚‰˙$ñka!ûk+Ëù‰ç\¯|hÁ
-ÜÖf›ìuVƒ(Ø≥“Û°ô’lÂ®s$<e√/Ω%õÒﬂ0âJ!Ë-Zµ?‡µaxTcÁVôãBucÔ‚-¥>=Ä&¿ÙfeSd“úëf„y–Õ>√¨P*sÕIÈ¿jF<·gù^ªˇ¨¬∞u⁄ºËÅ|u"("Ëµ@íETaêÌ˙ÆhbYﬂéı3gåI%êH?å∫ `{CÏ’ﬁ ÎëÏàé6√ñ5‰iuÅhŒò¶%Lß	dhﬁîf"sLYúåYÜΩﬁ;Õ4Çﬁã£aÁ,õì–ùD: âäg∑:m$èßΩVü’w\Çxw„Id´‚≥ÃÙÏ◊¥dhôp
-‰ΩG! OEF4Î(“ß∑0·¬¯‡*´˜⁄√>Ï;Îß√˛Ú8Îà4Ypår‘ˇZ^é†ñ—)¨êŸYòÕQQÊ<ÉÑ ‹ryXzî®H≈£Ãã(¶º$"≈ÂR…Ì]Î4lèª·òmN.K$qsÜΩÀö&W∑]‚ºe2÷Ó7a4´Ïq°˘	ÙB∆∞%ïÿËû(Âö=É·≥ŸÑ,NS»d¬g¨iSƒC‹ı1K÷!IU d-"E”ÇsH€LC∞…ò¶T\]6?ú„b ñÕ∑p¥ÏµôÓ'ı–«ùå˘&¢p
-˚√◊(F,¢iÉ‚¨¯‘∆˙jˆØH˙-{ qıwÜHü4}ù≥≥∞›ÅÈ^∞,H,›∞ÕqXòò¡^zŒ¿ÜÏ$å`CTÉÂﬁí•ãÂ|±Ë¢◊¢ıF £!»`CÃü¢N;Ñ˚ ·áQÚu6Û"ﬁ/”Œ∫1g18£íRKraå•}r»YAÚ¡LÃü6÷?Ó<€⁄Rü≠*}Üó´ﬂ°∞ÍU∂XRQBa}¡1V]Pr˘BÇ±ÍÇ#…ãÜÙ_e˚ƒ!ao´Tå^l‰ﬁ<⁄ËπPBú∂à◊⁄tl(ÂÒ≈e]–UpÎÀ"Vûq⁄ÙE,øÜ·´s–]à‡é¬—≥–uºò˚ÊB›JYxmAÄ[à]ÍÕØ|˙◊ø¯ÒèŸ~}oØ±≈>⁄]ØoMdÒlç=¡Ä—ÔN·tz˘ßOXï-,$_‹∏*:!–˚˝ÀvúÊCÁfPÍ‹íÆ/Ö&nAh‚¯—ÍO®”åÜz&‰{X$ThàZaàJÌÆ>ƒ Tò€55ÜzîLúñØ˚Ú/Y(ì._;˝vŒNBî!≈Om≤àeBz4:R%˘Ä´ç∆ÃuYI_òÖËL/)k}Æ
-˜ﬂÑH SvS3Õ¨åÄSc∂ÖÛp8Í¿˛∞†°[$Ë#˛q¨Ì§÷D©∏¢5o‹√Y\;s/eÆn8˜2G~±l(™PQÂ_˛6tı#X…ã•¸J)_Æ‡/ÅsÓﬁ2[(0Á
-åAuﬂ ûœ 4ãDLù•ö¬%=ÖI™~µúÆ b≈Úõg≠V;_[0Ù+äg)zåGå6‹*&~ÒQ¡Ú,Ó·erŒî∆(∂‚°´eOÂ…˘{+•µ'Ô¬ÑEO™¯ÔÕï“Ù¨”{bç≈t˜Ê≈w¯ì≈ãæïƒãæï5¬f®¿zÒ¢l€óßSë£Ÿ]vXıóÕpòMØ+ÛpúR*ÀPõs‚‹j„Ñ¯vÅr€¯äÏ¬aèƒ?øPﬂ_8Ã?Z8ÓÔ√„}˛ˆ
-õÿÿY8<î*oT&ë•Å´˘v8&Lbÿˆ,&xm÷±¯õgÿxX∞ÿ|xñèZ´«À◊bVAƒBnóÛ0+KÀxwzí⁄¶+Ûêﬁuø2‹S«†Ã ÑñËm_’T
-ôÑ·hÉ»÷6N,1˝>äÓrº˛U∑i$•^u∏\∫Eˇ	÷ÔªC∞f0ôæÑΩr¥r§¶êo
-6M	”ŒYô‚ï&≥ª¯í12KÍqïs_ˇ∫öåP‘íCQñ¯˛≈˛Å’˜˜/ˇ†±Ob;¢.m\~∂/˚ö¶LzKΩÉÿ›=`çoÌÌÓ–
-A´õΩúô‡Pæ∂«œŸﬁ∞ﬁi´∏Oo¯B∑g´“È5[hfÛe›x|Ÿˇ◊!FgËûO€ΩñÔ∑C~-?Ωóô.ñî·:Ò¿^∞Ã0<È†ıeFûù.ï÷¿_áû¬2Ê=≈ à¢g@÷îeO<&ßG'CJã–˛∆ZÈIy≈€Éø<ÌqÆ8u˚≤ ≥≈2Ôùê TªRá—ÅüÙH¶nQ÷ÆÎ⁄F-Ñ”x[éCé√´‰ô}åªŸâ¢;l‘„uWƒZß¡Ÿ *‚lÕ$õ ZD{MEˆhxai8	m1ıÏÂU¨ÄÜà\<:Ù Ω~,ı„ŒËîzYÔµÂ\eè·»âÿ¸ı1ÜõÛØ∫£ï∑XyèÇÓâ;^˙x–Ü“a}w∫a+FLôíÅp¶´Ã» ¶F±ö¨uf≠ÊÜÄ©›ãº’{≠Æ•∑Å´Ñó∞l®G[‡∞D'xõ†€ò	†∫õXF°◊éqœ TÂGr'!8ÒÁaãµ¬o[—ÿx!œÜ˝ﬁIA∂X≤›±vH]Aıf´?DÖV<?[∫@ÌãBßWÄVA)NÍÌÀóü^˛%è:]2ïèWO„µ;’èÜ˝Ùg<±Ï
-ÇcÒ∞íãó÷È¡π£”.P£å“xcƒ◊09NbùÄg˘˙cv6c4¶Ü“ö/Lú≥Ga±EñoX<£(8ëãn é;Ω†€Ω‡´Y.K°X©†M˛Ò~øèr◊dŒ•æŸ|\ﬂŸÿﬂ›‹0W8∞ıÄdÅ˛¶∏Ç™íûªG».L¥£	Î¢ õﬁ∫ˇ/-ô£ ◊ƒM[N†kÿlÃ‚N;ê&îˇÙ.ÿ«·—Gù∞+Ó˜∆n≤.⁄úˆq-¬0°l∆ÄÕç√»Y©vﬂXÉ∫:aπ~π•@63ªçc…
-s(JRE˘Î*j¡á&kî››ÍÙû ±”4[ï«>h≤Ê∆á (2(k±˛1˝· ,+ãY@¶F«Ï~€A[?£√&éZ≈ÉÂÙ4bΩ˛i,6dºïòYäMUˆ~}/o∞∫u›Œ¯HZ√4£è5,∑®_d˘ÄoäùˆAˇiÿÛñ‚·¡∫a˜’E~9ÃØ?ú:Oh Â æ>√«E…π7I%ˆ4¿äxπ∂G»bqKVK^Òd4˚7Ã]ï—Ãº–û˚@#∂úüz-‹éN¥mÔõà˙ê:eÜ=»∏7+æ>0«jPQ.ÆñÙÆêh∏7Tä.∆ÇL1ÅYÔ®≤jÖê÷wNôÅ∂0åîÓ\:È«âU‘÷ÆIëHí=ïºkd$vèﬂÕ-VRl-åU+€*^Å¸Ÿˇõn+®èÈ1∞iüõtê ,+•TÚÕá˚ı∏€üøöò›ª.ŸÁSïhiXúj÷Xf}wgßÒ≠Õ›ÚKZﬂø¸¨±œÓ0té<hdfG±¶NÏ¶÷§π˙sˇ7'‚(2ç”πKÈ~]'êH\}1/RzR(¶«HÑÿØƒØÕÃ1ª˜7LFz%YîåjE”’Äw∑@] ü]ÇÂ/‘Ôm√Ò+‹=«†aÌn(/”∏BúÊß»K#áÀöEÍæ¢∆£´ï§fFfø8?·4QÀîW3¬êˇ>·Î^ˇy8Oâ-≠¬ˇ3éoÂ ù¬N“Ì÷2Ô‹øø^.› ∞v-≥Ω¥X\nU,?X™|T)=®,ùØûñÀ≈≈ı≈≈‚-∂XÅø*∑ããlí-¡ﬂ≠¬
-‰( ï¬rq	ˇ)W"˛ã—Ck±XÜV,WY~›*ﬁfã›Â‚-H~k}q	^≠óyôKX‰d+ﬁ^fÊØ R¥äø*%ıˇÇxQ®îZP{q±P,*≈ïTΩXº˝ùÃÕ‘/nîJº«+Pqy©x´ã˝X*ÆÆ√√2,(VæıcãÆ’á˙}Ükµ∏ƒd%ÈÕZZØﬂ_Õ¬RñZÀ≈
-‘{ªxª £π]É]qÏ :üLSYÅ¶È)YÜ˜•TC±X¿È+¨>Ä6¨c{a‰D˚xcó“[Uæ}ke£2É<Zh@Ö¶†¬`¸Kõ
--≈◊q|ñ êf	[»kûcﬁﬁª	Tnæ V}∞πÛ¯s˝£∆:{w˜˝≠Ü¡é•“‚»ÆJL‹GØÄG„/i¨ç„ç)≈åÈ‘Ó∏Öéqeph‘Ó√anÆ›:ﬂ¶á*ñï
-&‡y›ãú5ﬁè*ÊõE˜òˆûiÙ∞7º|ŸÎü±lÄ‹ºvs+µ∏Î$xyÎC<ä68=Ñç'jSõüç·»MÌ°‡Zã÷‹~ÒõZÆ÷0^[ùm∏_EÁ(óΩø∏}£¨iùÎ˜>/6˙œz"Oàh˘‰4zrfg÷Á¶ËòõYH≈⁄<√°‘FI#b*ë<#ÛßèçRı}Ÿ√3a≈bQèë√7Â'éÌı√ç2”0\,ÍMÛûMrDv”≈¿ \è+»àÙÃ1¢Rz}p≠≠A¡3ïãUd&Gá"◊©»]ÇÕÒ—úıÁ¡i˛^W_ºí.@Õ	BÉÉ`X8¡´=ÿn≤Â≈Âvxí7$J„w%Á«ﬂ9(,/πCÏt@0SEÛÿÏÃyı*oôM8dÅ‹Pee[…br∏≠°ã»ê][ï˘épÕ£S‹˙Acﬂ<≈m5‚ß∏)!v>«a;Ì™:qg6{ÁÎãJÉF»\ÒøFΩ⁄
-¯û~=ùdò}D≈]ﬂ›˝bp˛∑»Wªﬁù´L_∫˙ËpÔ©¶´≥UÿÁıÊBßµÜùaHçl‚ Å4–¬¬Ì√∫- ÕƒÔ´•/éd›‚Æ&ı¸Ωî¥˙ﬂ¿π{∆y{—]ßtﬁ∂É÷qËŒw®≈‚oÃíNÔñÚà*çÛaT+ZWÁMº¥ÄYaŸË4@ÎŸxÑ\ÕÎÛ¨◊áÅÂ˜PÚnı£QÓç›Øã¬Kì≠˛	l…√NHNŒát_}<«∏π!S5éNoFßùcúT.RË+sò∆&/'ãbHoÁÃÀr,a‘'L}Œì≥Kï<?6z8Wı∑~#D°±ÕêmVØ5O˚còøJ°›9¡—EÕÎxöo¢jkÎ7xaOóPvã„ı#K≠R>ÁN"#ø\ πàoXs√hı˙®Xaà¡Ä±ΩÓ√F„#\bG·0zK˘œ=~,äC,Ï∞ﬂ÷ä«˝a#hùfè).·q/˚‰ª÷√_Xj–çä≤ñePS$Ó·O"`ÄØl„&ø?{î}~x≤˜¯~¨∫£OÏl.y§#P8íwEâIã@rY—E‚@r∆v´2¥Ú
-œB}≥HÃÇÆóYúëΩ≥Ü∑énëâ{&xu{±µ|‹ÜW$M¡ã„V∞,g–πÍ∏èœÌpe5@¬|⁄`Ü•`Òh53ÛjA{âd»K$£ºDVîìû°Öè»m¯c≥†≥~ØOÆˆÊj^$x‡§+ƒbè gÚŸwJ«Â[ï¿+ø≥∏∏T^^÷H'≤˚	W´˛ÿ˛HäRZH∏'‡qL›[}I≈ü˝6A2'yË'ˇÃöüÏ¨≥≠›˜i'¸‚'Ø_LQv:âÃ®ËYo)ÑI'Z}èJákEduá/^ £ƒÚ≈ü˛@ªñÖº1÷±$ÈPb·T]y2bít|ÙW•’˛bÖÙ¿œ≈˝÷‚í%Á ®üTÒ>Æü…€s∞$@ˆ≠I∏ehÆ±⁄’[[n<ÆÑÌÜût’@íón-/Ø‹N«B\ê≠›áäºQÉ„=%Ï•;í9g…°yÍ='πãMâ 6é€õîs€*ù;Ë∞ı≠F›»ÀΩP≤
-ì•»D ÿjHWrÇÏå._∆1"ydr›6ö
-ÿô&å¿‘WãIEû s}î√ Ì≈#_‡Z?¬ÆÓ°¬∂®,qpê" 5	–„ﬁ¬„‡Ô´9œ0
-/˚°.'<LF˜©ÃZÊã?¯„LUøª}¯ë˘Åˆ,|˝Ábæ∆ù
-ﬂ~˜«ôjÊ_˛.3u;0∑2Ô¥é⁄Àa∫Å™¢{√0x
-b3˛S 9I‡AÙVå¸A
-s≥1;vI’¡q-Ë˛ˆ®öΩIBÍ¿AÜdÄπ!û≤ÜúˆòÅ≤v4B”H>ò‹^ìÄë1~cÿ-∫ÈbElœºw¡ˇM.¬N+¶ﬁÎúë·–åñËt±"Ñ¡9Ï™)≠3ùQÇ<3Ë~;Ë!∆1“9π∑Å·ÿK√ü”9Y7ø«ø9≤R:7o˚‰48õ#/•s2Ô√Q4G≈îŒÃ;ª›ı”∞ıtF^ïŒDDÈı`WkÖàvññŸHg Á˚˝gËYèÓﬁG!ÏÌ0j°Â˛«5PbgÑT.∫±©\#û÷QD∞$[•õ∂Ûÿ7Dâ±æúÄ‘˚‚p=fhöy∞WΩX´˝‘˜9 Wc÷ÿB3Ñá€ßöå˝x‹(√„ô”ÇGº‚ÓRE]‹Uñb—úº≤î€ kµ√°Ç”^*,pB®E_v∫Ø>" –Ç§nì•N$ÛæHï-#
-bŸ0Mã"ú Ôd•M¥¬ÚQ-Îòìe7Êdà96t\Ù—ùó‘bﬁt›ƒˆƒTﬂ1BÎß…Hö"∫=1n'ñÃ LäûÎY≠W
-Í¢RyÌM4MµNù÷≈ï…~¸íÁƒîù30íäPTJ^0âåyD[ÒÖ09!æ*ÑΩ∂ﬂ≤PµR\˘°ü€ﬁ∞?NhÀŒŒ“($JÍ)ì€;˛UBÆÍ,g√~Q⁄dÆ.ìIfÏ∞ÍWñ¸®≥Wœõ‹<h2’¢“B!2ﬂFí˜.g®ΩıÙB,ÊRäŒG^çÎ(ô;)æÕ∏ÅÌ¸Q_‚ªÃˇÒˇdª{ †È1æòk1˜°ŸY´ñ)¶7¶dœbÊ∑öFaºä¥Úñ<àA-≥◊ÿøøªø]ﬂYo∏ò¸(ˆ–\Àln7öıÌΩfÜ§üZ’¡ß√~ØqS
- EﬁÅÌÀóGbP•Àó›ÀøÜÿR†ßQXµé¨?UÚî‘j»sEv‹©S≥£"è÷p≤f·º∆∫ÊH`â}⁄jÏ7ÿ^oÒßÍ⁄xàÀ	çπê˛/_≤p ÑWÏ"¥aã0ä®øf7ÏÛ∆ïªbg7ª#<çSzRﬂŸ‹¶`jv‘û—m«fåÃˆÍÉÕï€™≥∆á])HlÏz}k˝·Vì’?öª¸L5y;∏¸Â¡ä°©C¬ËÕ¬SgåòZ—Í¬k´±ŸCÛ‹uÂ>öô≠Ÿh≠ﬁZEë·f⁄™:®q£±ë2ﬂ¨o¡ˇÎÏ’Ôæ˙=¸ÔÛóºÈ∆iÔ
-m9ÆF6€ıçˆÍ˜_}ˇÛ_Ω˙c];ûØP5&∑Í=.›ná•îz7Á¨πœˇÍÛøıΩœ˙˘Øu’t⁄ºB›îﬁ™|©Øñ”*ﬂxˇA}kˇ’Áˇ¯˘O_˝æQ;ùWØR=e∞;O–L3®£~ˇ˛Ê˙oNn'èˆ£VG˝¯∏”:öGÁRX≠˛xÄøB¸â@æπÛîÍùüØ–ó¶Ãsç%Ωª`˜˝˝˙ﬁ≈C?Bt£cÈˆD®|Ä∆; ‰Û¶™„˙U⁄™2]£±;∑/?€ﬂ’#g~8ÚÛëÌça8á}ÿ‰@ºçÜV‡
-ç¨Î\smNs:XäFêE∆tæ‡v5$â"'›#ﬁÍX¶‹’ﬁ§2íZÚ›ˇ“Ï π"⁄ˇÿÂO˚ùëÙÇÓÒ∑!ÚÈ BJª~at¥Üaß+oáG4àl)¢¬˝1∫∫e££‚¯9;«K]’Y≠¡tá	_cêa-&b÷ˆ6Çë‘≈≈ïC*Ö°XÇIÌÚµ%‰2R¿~vt·\–¯ˆ8àˆ¢QUb›2ÖëÈ§tMEZ<•0Ah˚˝¡Ωã&‚‡'uQß∞¿k#
-Ç!ÛzÚŸ);:9–ëÓ≠íËN∏(El¨úÑÅ<Ó'HC÷#ãR ÚÒyx†∞-E¥õxËAáÕ·Â_GÔê ∏ˇ´0äê:î◊∞90¡íïÍ÷“ÅÅ∫l%vÄ	∆Ωh|§{˝iyoƒ>ª$€Ø\·ˇ∫Ï@Û`–Ω†G´…Çu·DúÕ∂‰g◊å√¯`∫ö”Â≈#6,Ç‘%Tûe6˙Ωpõàò“òˆK‚:CÜy<éƒ&ÖÓZ,⁄Pª0ı'·áhNÃ≤O√ã<πüü¸∫°∆iÂg&"™–ò˙éëPô(ÒÒ+ì…âE-ÚQ∂‰◊,y+øx¡&S›î\Jπí{®b≠rÎ‚Îïã5Xõ(Ÿ,v]U%?:úØdáü®k|(¬M©9ñ›2Â6∫îÀs€n13
--@$W0é¢ö%âoã≥Y	Ω}Å^·ıÉ˙„ü4]†=˜LÛ#»tx'ï@0Äqß7V‘!¯eC!#ﬁ0ö™5Ådaˇ*ûÑ#‘ı‡®©Qƒà+&yÃ Ω!(Y^Œ˚†πªS$¨∏¨xôcU∫Æú°U6Ò⁄jÕ-∫fÀE·]™Uf≥#›Ï<oHDfwù„ã,/V9L+$Ó=jáÍ†&Ñ
-‡ï±:10.Ã<;>í`∫‘y1µFó˝£òÀ·¨ô# ÚÚóÇXàcï¿«≠—‡¶∂Ó˚gƒ˝2FÏw¸3.–,∫äÌÕ∆|ITA¶$’d¨∏î˙|5ôkïÃœf÷E“É¨EÚàXmæ∫ªôØS®»á≤¶-Ω†≠ º√g,˛˘Í¢|™*¡eÊÍîÀíÊ´O 2È‘·´OÊ|,§ ß¬Gôv–È^`ã`B˘ﬂ‡·Y>’ü∏«åh¥xBÿÃ°2}jn`|Qù√í¬÷<·≠Abx¸Ó‰ÈÙIûHúõù≥∑%s∆ÅhHã`˘øﬂ'` UÎïºx™P◊T-|πÒ&lËúú¡~˘óÏSø¯ÛIB˘8ÇÛÊ∏∏(AT>^¥(t	◊q9œ§hD oMY≤¿¡∞?¢ƒ D>Õ1t¸$—ÑáÃ»˝~´O4q>Ë5x•§8¿âHprq"5CEf90NM’C÷qµKXﬂÊB€DmêsÌ}∆Ü5œf≈ªâsäY∑Â>	˘ÌM*gÚe3|#Ó,oKƒø3®ºﬂ ∂·?	≤q#É¿Ç„‚HÊç.`Ÿ˙&á≤]Uôm3æŸ‹∆‚∆ıhk+‹‰+xC<ò	däw"å)«zèÂõ@å©&ÒÚ%Fm”3)gOã	^bñ≈çÆ†∞P%‰◊$é˜ùx˝õÄZb≈LËw√‚3ÿ¶≤ôGÍ}HƒDﬁÈ“’üBTt#{Ëtîq:bÓ√†[@À5Å,ˆ’ùﬁJ5+è-6úBƒzôE^f&:B≠0…ÚrÚ,¡õxò|[üw"“ îjŒ2Z„$sG¡Ø∏…π\K:$ô(Avº[∆„À,Ø»:/¡Q´0ÅFXÇYﬁ<ÈıáÔ|Üzæàeœ.v*›NŒË¢¨ÅDzkÌ$uóLë√I•S+ÜíÌıÈûÉÍÊUÁfwÿøœ<Q•”¡Qﬂù®ˆ¢’‰Zf ≤ÔNƒÿ¨£.|ÀñÚÂï‹ã¯5˜DØqÎTúmK5≠ó¨}ÑÙÆa’"ÓS˙⁄8≤ 3◊∞¯Wj2åMç^yºË}VÌr@¯yß√1n {mŒI‡¯MõÜ–Í}EÏ‡äºÄNrûÌﬂœç·j.,HóúµíJÌ”˘ö’r“µqô*'nçèU¨+’)^%å†∑∞~PbÏ∏m…î|ïÿÉâ&œñtdãXÊkx<ÍÜ‚•–[∏y¥FÖ”~ˇit3|~†ô√yXÄEô®Wyf)aÂÒ$œU®yS/öwïùyWgô7Â6;]ÊÍËÎÉ¡W∂π}YÎ$|é:{Xƒ«"Û)E;Ù’ˆ„ °@"LÍÇ˜†ò’6«≠Uè®?¡XZ∫8Ñb€GîK*≥.ü,$⁄ô˛bÓnÏ‚˜9rŸ±≈úE_‡Ì˝FµƒztB”*Êix0+ôYÚÀ+…nÓ Hpoé9°u2<¥éÑZôœ›<—ÆIŸƒ,ïºhf	Xf1[ ü¡)˜„^Pﬂø±›ÿ9PqwÂ0Îæì©	"‹¿Ñπ1⁄FÌBæy¬$D›ã&ÜyÎÖ√€[hûÛ¯ÒÈË¨[U9{Rˆ˚£	NTU`‹QVQ’w ãÂïÚ±~SÅWA9¨w§ÈUıùJP9^*©êdqe±µ\π√ØB´Ô¥n´K-Òü√’÷Ìï|ó⁄´‚>´∑èW[‚y±˙ŒJ∏≤≤|˚A@Í“r∞‹ô~cr‘^à∏s≤ˆMæ√ml´•;“©tg˙ƒÕPf¬xk¨∆⁄D,1ÀÆ“ù€bQèì %‡?⁄TAùÓ√vç⁄cwß∞i‘&8◊E¯5µZj:ŸöÔ∫ÿ∫∞Ÿºº(FlVBﬁé¸—b/"Íµrá$÷B™îú’}∑Ô›î]N∏~∑æ’d{ıù∆÷oÎÓ£ÔoQm…¯Âb”ı€¡EΩ5 3ÆÓ:ËèÑ4°«ﬂ⁄I∂áIâ¥c{:˝ÑI‚Z©<èã9®Îaª3˙0‰€MÉˇ∂6ñ”tUz¯áIW…)&SKÁAW√=à
-πÊƒ(1+}Håäk(SÚìó“=†±3Y∞#«ä.ÒKCH…ÒoÚjEÓ<jƒ≤jlDß± C7Ë ªÚ¶°È≥éT√ÛY∫ƒ∑;—N∞ìÌQ¸âª[c•úØŒ^ŒÜç¡R-òÂˆÏÏÜ	€≥C≈5â∆‹†0-ê#D®™ëÍº¿)1„l^˛TÑÖúπ˚ØÒ„øÚÏxâû´NÃ˝
-Àº+1’î∂Ù∆gôª˛=ûûóll2w?ÿ}∏/JxªV+ØeöôjNÀ÷|∏y–à£áŒ'∫ö˜⁄“∆›hõóüÌo6XÒ@Ó7”‚ô«C´‘«®Yn/úé;≥&ô∏°rÃògûÌ3±n˙”¬ÍÜiêlÆàÊHäâ/^î¬˚ÀSRˇ§~–d[õÔoﬁ≠?ƒ)⁄Xxp3mlæ‘Œ–}v¯Z˝·}Ÿ€€ﬂLù‚/´‹R^Ø¬ÃœËH„ä‘∫{Ù)2≠„àÛ˝‡◊GhïNπQ·dÿi˝û<2⁄ÕØh¨+&`œ-dåˇ˙?˙	¢aÛ´ô›{4÷6Ô≥o>‹=ÿ‹ÿlÏã≠qØgöÊõ∏ò¯[æ*U^‘%„’^kTµ˜kWzáM"Á¶Ñä{/Ÿ¬/˛¸wÒA¥P0ª…ê‚ıµo!Œ`'‘mtZH%-‘2Ñ+Ÿ€BÎ2Nè·Ô{∆A„ﬁ∆Óv}£æπﬂ@˝±1Ü"í3Ån°QrûZh»5¯«n!JŸªç<⁄ÿI,¿òÚy?AΩiåÄá˝g.4≠èŒ±Ø∞ZNä¯cÓçÑtT1èo_J±Ç†Øü†òS§°˛∞5««_Uê∞≠rÔ~œaŸÁ"/ë=˝Ç∑_ºøíä˜'"◊ûˇqc Ja0Sg÷ËàµªìŒqñ—ü£#Ê°1õªc%àZ¡ Ã‰bB÷‘_⁄üﬁÔ∑∆ªÈ˘Ÿ Ï|·hD&Ã¬Ÿ∆h∫√¸»áqçbEî<´3	Ó6™tm°ÂL)π≠†π!ZÖ_”d§XØxcjT¢†Ñ6≈{PcÂ#◊ê˛V«@L⁄◊N≤+˘ÒRjÖpm¨˙÷ÅÁ≠ß±≈ùò±å3™e‹ÈÓ…ª
-zIjÆÏI¯ﬁ7 •Rn˙µ'yCˇuR§ët zSÊ2°	P<ÃZBçﬁÇ||.˛J±•∑[rPB)„iZ'≥T"{ë⁄à¥øÔ'Ìúçºg„s∆ :πkué|êã≥vâî=‚_ˇ‚˚øöOvÚÏi{C∂¸˙AÉ≠oﬁ€ä:ú›¡:zvâkÌy:8ÉQÛº{∆{Y@ªª¿Îp|ŸÃTò¬$òCÅi˘¬Æ‰-∏,
-õ·ÛÈ7ï≤ú!Hÿ49:¥ÇLÊ.ﬁFâm¯˘ﬁM˛›óu¬7$ÀDµª≤$`¢"ﬂißrl’ãª˙gä(ÜΩìn':Eö™⁄<Cúï&À3ã_∆æˆeÓjûı‡€—“ˆ≥X{'\45V.$1C«`†0Er‰a—Ì–èl,W.∑fN	™ñûH˛ÛnºíÈìA©}˜«°x/S∏û√ömûÄ†◊e…∂ãu·≈ãL∆a’1 "ã£“éu;gù—õe∆_¸‡ø})ºxÒ÷Ê∂O˝„Áƒ\-˘Ü±óÒö1∏€T€ˇ <ÿ”‹ﬂ‹!ıÄ?Ÿ(sÿ(.œ(ÆiªD7µ∆∂≈'€v“∆’≠L˛àÂ¥öÈˆ{'ô¸Eı∑iŒSmõı¥Ÿ'—“H|áü<?∏l!^å˜@Ç≤\íoÖùn6õ<zmôªôYøÙç˙e	ØÂ>ıã©Œw⁄z˚Áåo`;¢ÇÏ›_Õ≥≈“UÎÎõm|¬Ó’˜ﬁ¡¸v‹JÍ;HÈq/¬é0e'“Tùö8 < d.éÊ*’X)/' ØQp€õÌÁÚñënº∞Åsô≥MâîœM¸#ä„H‰OŸ2y3QNî{€§√ká¸~ á¶ÅmÓ∞JöiaòÇ<y(´º8bCçLT€≤m	≠Èãè o(S~«…ßot¸£ú7≈¿∏iDˆ=Jjóòß5≈ÙêIõû)îG:ÆiÇæ¥3˛ì'ÔN⁄B-YÅï⁄;}ãoc∏ä«µb∂ìgm\çÃv™mæÊÅPJ2“q≠{x%˝G “»V!Rñ¬¶Å-@X~!‰T,Ü:Q+B w4†k™pÁ«#P0M]Rp’0ËYY”M>Õ9T’†n(∆òπdÖä.íΩ⁄At h*•ræº≤öøµí/..;‡DÆÃ‚Lî›|(JÃôTa·:ÆêÊ^i∞¸)ÑÜ™ƒ–ßD˚$3æÓ÷4ÁÅÅ5«<÷{òŒX¸í’íøÑ_‰M¥'n˛©öÎfç9U—ÌÇä8bÇ0o•‚≠e_°ÓãÂÂ(>
-QÀiÜ—[ëÿZÊî.Ò¶ë@õPW	¶Ï≈ÁÄ}Uõ‹z}´±≥;›Wæ]{õ[·±◊*!n/´†j‰+,,gp'¥ÕgË¶S†ÏsyÍé˝DS‚Ê”v≠—∂Ù%”`ÊIƒíËÜƒÙèƒ3ôñöv9≤F^6à5˜aG˝$D¥a;Ñ/∑Q¯≈7Âúi≈#˘ˇF¿-ö˙Ÿo˝Éé™ ñˆ€bÎ W¸äõ	tàÏ/(Nû-‡=›{¡‡|kAW<†B∂)Ô‡ûzsËÙê«t¡`Xœã¥báxÇm¢Ï'ã›WoãÖŸ@	'd‹I◊)≠—kã´TYº·æ)ÊQºe{2Î•°]7ﬂ¯Ïx±)≠.ˇŒ‡∏a`rzÉößâ/Xª§{÷i
-'›I'A'¢ö6lÍ≈
-Ú<;RLëÑÂ3Lr¥Ÿ€¯2ﬁÄΩª$≤⁄b0œ)'î%VkÁUô[a∑Ò—€œ˙{Á`8‰—Våwtÿ=>é∏µÍÛ∂íc_c∑xZr D˜ÚìÔ∞˜Ãú‚∆çñ_DÀxíãÅß€›)Xu›Ä2n``)ê2™‹URYK´⁄P+ﬂÅﬁ´ô„
-o∞∫ò”b»y	lÆ8^”¬ª¡Kƒ∞Áä ¨≈√¶õ)¡ÒF'i«?>±ÒÅ
-⁄ñ‹ë®Ûê√ÿ…˘Üå…≥ÅcªC"n∑Å…Ÿ%t¢¡<Uﬂj5≈4Ì¥»ñ∑i
-]„
-)oYÇô¿.à¨!H$[ñ©3≥íù¯xL8xâî⁄ŒAj∞ÚÅrH§- mÊÛ≤ü‰üëÁïÊÂ0‰eÛ≤çyYˇ‘2î03h-¡Añ*@|X3?ayH∫L$]”π(∫„•Wq Äƒ“∂ﬂπ¶Ú&ÁÌ’sI±Ãc‰ú[æ√T:û˜i€Õ|ÙÄõ3˘Ã˝ÀóÁC˛s;¢ˇwûªÙÿÅø?wz¸ü.Ù?˜/ˇ	ˇmÜ8Ì°˚[f∑5ÍÛ_;˝s˘r„Úeãˇ>txÈÅ8«*w∫`ÿ™›m°Gœ◊øﬁBÙ¢Ò⁄cÿ“≥QæÖöàŸVë&i?_r—êB¡À§ºwÅÍy’´Å2≥¥ÏÇûtˆ∑LÔ4⁄–~K°y‘@–ÓJfÈÉd‡XæiÆ^Ihñ”jõCü∑’fß7/†·Z…›QÃB—≠á^¢˚?£70XôPæUùÃ‚)î
-Å™^†.õ$|‘L—F§K,ù< ¿d±ñ9“k©,À≈.˝…h()ÊíÆ°≤ö3D•ÿ‘èv–Œî≈»;m±y–©úÈ¿õ“√ù˘ç¶”4g‡Ñò˙¶Üé«]Gd@“X¿ËµbR∏¸q√n˘ˆwË‘"8Ì∏≤ï∏Z“kŒv’÷"∂È∏l`´(ˆ8}™¥m‰’Ï∏ÅÃá{ì 
-'[„KUpZaj˙w’Hu'÷pZπ¯{Aˆó‰˘”˛÷qGV‡"MuDÚ–â·R`◊.é*fSÌ¥&…êÜîªôõ„@g'ccT’Å=õÔ»E"á™åa“z[ûèî2ócÅò“Çl¿]kéÄƒ‰á˜ƒ(F∑»›ü¢ÒŸY0º‡zËØ|ﬂôsW¢n	ÂÅÔ¥2◊àJı∏yÓäùn¨ÕÕXü<Õ≥”ê\6Ö›õì†5V≈≈¬Ÿ;§ˆm{7 ô‰<!0bÓTâòûr˜∞Yu¯xz∏fü*Ë0^≤ˆ (Q/ÆT¢q$…«Kî·[Ê,—±êèïh…zT¢ê’í(•ø3ZnÜ^—–{VZ{£ç®πu»F°äÛé‰~ºvéÉ“Fê3":£ŸÚSMÿ˙Eî‘¨F$‰&û}î??§	9/ä‹@wåı$¶4óÅ¨á.v=ïµLîÊ¨ózáµß≈h–≈[∆j&GiπùpkÖŒG)ÛÁyR‚I¶öl%ıls†/û4ﬂùD=t-Ω√‘5u1Í√∂êÚGp¿»ç—ÖÊ›l{∑∆ ’BŸ¢ID©	E‘Ä@dtødP¿ãÆ¿bAOù#>]ÒÛ€úØ∂å&˛˚ ˛˚e®é{Ãè¥\~àHAªÍÍÚÚ:¨ÍQ:Hd;Á0K^:zO ¨$Øò@ﬁXºyµ¥ÚíZÛ∆8NÂ—ÿTDj5¢>˝êú‚‚íàX;A∫Î[°πB´7x£SvCCù∏:ƒôkèÇj~ñb≤ÁÍ∏„ v1ƒ¸ÏÑ!?AÃh4œõ]êÌ¨ÏF^´…íC1…¢úJ4√bÖN‰Yo99Â"Ò¥Z €yæ@=û∑Å˜Ìπ∑ ≈'=U…>9í2g†|ƒz>ãJŒD´´_£≤‘‚‰VDH÷tI÷ÕéRf´ç,Ÿ‚·ÿ|°àÖÄô2w¸ŸÔ„»Õ~4;ªî⁄èäRbXà`2]ê≥{dÆ»„3\ëù®/pè—∑πØ0‘"õUS[&P{d;-B˘ƒâOÓÜ'üJópÉ©ìbU±glübÃ÷çó¡Ö5kÊ3n)!èFΩ&a^‘Ñêƒa¨≤°cM
-_Uˆ«^∂Óæ1p,ö*7	_DFﬁy¢Õ)ﬂù¶≠YÆzU7÷ô\∆µ∫Ãª@.c~∫úF*ËçTàüxM]ïY,Òj{öêÀ∞B[ÖB+∂3◊qf_≤ùŸ˘eU/8Oq,ê¶∑ ÈLOÁ∏ı&ÖD€≥ây_õµÔx·0¬9~†è+{( “wˇ¡)±≠däìπ;—∫ÚGÙÛp ¯ëÎg˚F{scFoæ!Æ⁄5j0Pœ•ı◊øN•ö≈ù•Yí$iYqùÚ÷J≈%r”¯‚ªˇËw‹˚ÿ∫ˆÓ]"Jµ“v\cfYm'ÿçÆ∫Óˇ^;R(h1v7¨Ík ôeKæ&TXSœÃ«ÙS>’T\3ï§$CÍ˛ ∫áºö¶’î0ÖBm4‘÷˝OÔ6πˇ¸Â{ªnjß≥∑r”ª∑>}ì%.ñ†»≈“ ¥5≤ÊJHù2≠zæÊ¥qîØDFe¥cb5ùÙh-m¸ˆÑ&ê£`üêOÌÀó–ﬂπ¥@´£~ØK#∫|ô1çp›1ö%øx°Wéçù3îìb±ËLëΩ~Ü°ˆCXè}ò&ö4äQüot}À)q°xmÒ’‰[L}b´8‰†ÿc2'‘7aãCçòì≠´õR∏öâ¨q ˛ÂÔƒ
-VkER,pe–ÙScVÌ@„£ïYqfÏ’1háÂB>≥ë9îF∫TöòÑböµ: Ä ˜∞ª∂›m‘ú>·˜ØTCãj0{ºÄoëÑ
-≈¥ñË≠ØlT‹
-J2∞˛Ë4Úù>ñ©Uv9'Ìuû‰Ú6ÿIŒ]ß¬†u∂≠\tk√≥
-{ÑúìKºN %oØuÆ” *(‡|3WÃ>ØµÈØ§‘]Üs,ˆî Ó1èQÇ∫‡\Oô’ÛE€¶ãï9k◊o´Ì=ﬂê!ôÖ{¨©	oCÂ:S8&‘Œ`∂ÛæÑ›ˆŒ™koÀ+¬D”ÁX¶IÆm»??p„Xu/Izmô”#jŒ\Ò˙åÕU27ƒ™≤B≈M˜ùÒq\´•FîsKµÚú„ñÃ5[*´™ñ"xÃEåáAÒ …Ô`îÿ‹vîÒ9Â©Âøf·ÕT’⁄ûutåÉ∏F·nóåE0uw.ÉÁoÖ'x›üŒÏªî(J'*t@∏Œ‹MIê4F÷»`áÏ–†•7X9~™|è`{∫›7Wª5›“L˙ÚÂp&y_[ﬂyø¡6ıM	«hÃ™ñîêrë≈Òd∆g6ÉW\`è4mA…âÏïïnÁ›¯‰ﬁHÃ)ö®eˇÚ≥&ÜfDê∏≠:ìßµtd8œπru‰ÇÖtE/SIÕAQ›z0"µı∞ôÒÄ*	°pÍÚ–xÅÍˆD»°æ21)tªò´@âLÂ¿\π—¶≈–œ*–º…"ZÔtÏ8=GÅ˙:àπ0WM«iŸﬂg!ñF1±TëÄî5rœ®≥NÔcÚ∫Y.iwirïNÙ√^å;Zc7Î®éH˜˜√Ø§Q∫Ë|$jà1Å“PibU‹öWÁÖßÄc˘|Qg8£Í)V◊{ÚN˚Ω[,«˜‰˜\œI≤W©˘Jö
-©⁄‰Vi™òj‹≥xÕ∏D∞=€o«j∂Q∂PwÀ6z•Ük¬Ç.ÂœÇÁÉªR*Â˚Á·∏€ˆI5ÉÓäI:i:ìY\NöN‚x∞_ˇ6í-`ò,õÿ◊iŒ/I≈””Jõƒ.‰ßûïgÆΩ't{T}wÙ¶O¶Iòà•WÁ≤∫∏¬M¿ëIÿüºÆÂ‹;ØRÚ¨ˆ{v9a¡∫m‡\)¡4ÆV(.”“UëX’ƒ{MZF”◊∏√üÓΩö)`$hXoÈ©BcÖf úåUk‚ËºÁúÚ≠Â|πrŒ;ËCÈ„˘…ËbO∞§≠ı!I$q«$nòd„í»}Ω j3•˚_y[°#Õ6wﬁﬂŸ∞˛I≤|hﬁñìë†4xsB·“õ
-ÁX˛Æ2Lo+,Ö£g0Î1∂ôà˘ˇdNsdΩïBYÍÍ¨cjﬂ©èÈòã¬∫.îdœ1Yºº…Ω˚‰zOvø±ø›ÿ˜Aë¸¶‰dE|≈∏•ãÃÛÀÀûÇµ°R\pû_n∂v,Û1z˘˘⁄¬ÈW$êÆ˛;HıÏzD=;ÍMHzKÛHzûfq)qcíV^X€Ãí∏ç˜˙r÷ ø9Î
-õXH–|B∫OFØ
-ü-∑]„v<©π)B ZŒ⁄í√øMèq¶n.ö„≥Q÷ËVnö"ä1KvÒ1H≠∑øÃ—Z©‰À´K˘ÚJâÃá¸wãIÉ%µÆwø¯Éb€óﬂ˝ >R™Û3F*y1%1o¢qóÜZπı≥Œ∞√æâ±Ç’æ¢˜ü•¯¶
-›mÎÖ9uı“©KÀ˙Êµ‰Ò€ïÿóª≥y∏òπØ≥ío?»&ÀMπæèñ3ﬁˆ(ï3{√§ç(t •ÇCc,?,ÉÆ©xj†rµB
-ò\Ãºë”u/ÿQ0‰ÜﬁIñ?W÷Nœ6Ø¬D`¬›„Ë@∏ì	ÑT2?d€ªÒ®ÆÆ ÆµÚ:s{ax JÛ|a≠I7Z9aôO~–k	∆˘ÊG”>ﬂ&Óıò£32È√K'ﬂ&ªçQÛ˜ÁQÁZ¨‚◊Ø˝m¸G:Læé˘ìká^¿†©xqWºÜ)´Ê
-ˇlŸô\5Û∑ñ09h•L N¸ù(◊ﬁrU¨ÿßl∆V]Æò<„X5yDgC·nÍ€	BË~ŒÁ¡L£UË"ÅvøóIHCòô¶úPÊRûØ¯Ñµ9öIgå‘Ω@ M…«é/Ò–ÁI0Í–Å⁄®7‹€≠Ôo∞Ω˙˚çﬂ_èwäÜÉ⁄Ë˜∆#âw8@˚q‚<ã`Xç≠ñ(‰Zˇ)=ÿËO«í•të·˜*©°’∂ MÖ}ÉÓm¬Ø°â¶!å%IÄ@≥‘å≤–0:?·àk¿†Z}õ¿üÔÁ^X∆Ñ{Wºˇ
-lR’˜ág óÙ	ä®p°—r∆x’YÎ9/˝fe Z˙˜∞6N0®	†1>µåΩıâ◊ãV”É6'∏v-‹cÍ-]7ﬁÄAÜ√Ä+Ùq»qL∞b>&ò∑ôV0®eH§Õ%#&¨ŸyéB[Àä´É(‘v °ûüh5El€ù^«Å◊Ù√À\õ	òi¢e
-®L?’Ã©º‘Hâ»ÛÛÃo—8 òóÁyyÈhgÿÆq\8ø[Z≥∏X“¡<–É2∏îœû# bNJÒÏÇ˛h°ºVÆWÚÊÑ
-h”‚RdZ∫‰Ê¿√˚p–“;	Gøï\–‚àäFUüÄ@……Ùã∫ ]2Ë~≥âﬂ‚∂^ìZOM·Ë»E˘LN‡ˇœ<ÌŸÔÌÁùÑf≥¯Ì”AáºIi^§ ö˘®±ﬂl4ô∂8†Rv€ΩF2Tî*jÑèá˚ç¶¢•ãR^ço¨®Ì]h“ˆÂg€ª–®Àœúvâ°sscXM‹_Î˚óü]~÷pJS¶^KÜƒ¬d46sÀûª˘z)¬è4ô  ≠r&>yÏ˝‹ Î
-§ˆ_
- '¿©E{6˚ü
-±…Wû∂ï ®|ÍF¶˙TÈë„RßØY<§ﬁ”$Ÿ/1üå˛ı4I¥K4KNÜ¨÷b‘r‘áa›NB<‘≈˝íı*T∏ò⁄YŒ+€ÔÌá-†gy≤|„ôLBdjóhÙOr#"˚gfß‡hOàÿKÃˇ8—/8œ©À–d)å≈
-%˘ 
-ƒÇêËíΩ<Y≠AÃÜ'I™D„R®j¢Ÿs¬ô^áçv$¡(ÚâïH§ã´WBWLRBQ•t ‰-◊ØOÏ†vw‡é®nDbwâÁ^ΩªÇLÄ]D–ígXàR_L¶9Ö§Qªk}ÙÙPO∑€0NÃËı
-|6(`0€6zA˜b‘iE˙Ñ‚…¥{°aNº-ß•ûBwıwEN»èÚ¡!tÒàß ﬁ¡wY`<q¨‚B9'≥ÀπÔè›‡á ˝~Vµb7µâ⁄£õ®üõ∏®Ü˘cä…√>ÏØQCàéJ#9¯z¥{˝g∑lVEØ¬=òPb∑‚$~p⁄â›l~P'”Uü9_–M¨.é˛'∫>_=zúÏzÙ†«ÍQ—>∞'-y5N27˘V≠ÈAÎ!
-(Ó∑R ¡	v∆gM^$Ç'b¿s‰ò¸Ö+cI£ùé
-…ív»ó∏q˝çfπö?Îd‚çN®æ`…Ë—bÛZ/ÃH4êÓÁæµbII≥∂'k6r∆\∑˘¿™  “Pø@Áî6Ô∑ÊHè¨≠vôr˙’ö≈ó ¶ËçœÚ¨Ìõı≥êêgf∆ÃÇgç3•|¸·m’H¿√D∞≤óp¬TΩø)ﬁ!MP≈
-∆d7à®É=‚≥[ É?\û≤ösŒ0Ííˆ#h≠9æá§œ∆^,¯∑à◊ZyÃ∫N√`´®é™â"JFŸ	üÛÍ“Ìi>˚ÿpRJ®ä√Û⁄çÈU±¯]viµ–…Y »Ä U
-∂πNÿhB&lã<(a/êTç
-fèH)Q¥fàSÑÔ´R°CÒΩ`›ög‰n˘Œ∑–Ï
-¸Âõ∆sNYKÅøÒa3+¿õ;v…]Rπ=∏K,xây.ıÙF‚4ùÖ≠V–c
-qZ∑‰lAÌnPƒª+ÒúoÙ{«¨VÀlSﬁL|s<€ùñz≠B)ØßT¢!bVc+ï≈˝Ij1®F:nõcnöﬂ´1r©…†⁄´HyÆ–èu[å´∞í£Ó#†GìEœÿò·º7˜ˆ<'g«b„,]W∆Iç∫R5∫•)Mm’y/àÒ)ç„ßAâÑ†&8æﬁáΩlª5Œ4¸RÜÜV ≈9ÅÍ†ÙÌ1];≥lËçn´€· Ω⁄‡ò-)¯°sÓ·TÅ+±I◊ú%ôA@á›ÛtùÖ]ñb™:Œ8òZŒ∏=öÜÉ¯l.h•åï¨Aª+fÃ˜±F$¿™[èr^u@≥ò∑õ±úhÓ Ì{$ì˚1‘ÃF…∞ˆiç‚á”îFô„c∑ä≤¶∂äRX‘çÄºü&»’Ë8Q0Ç‰˝ÜæêOÇkp÷”y6óÑ≠Ÿí∫§ï˘vfæTrÑ≈7K>z˜FÑ%U®}-π¡¿ßép»ÓHPa˘$⁄JÔ"-∞'ViÙÁ{qeYñÃ˘Ñ%¡Kﬁªá=£ì•DáüGå`$G§¢îßHùú#-Õ3lÜAN§üî∂C æ¡ç#°®0˚jw5y	ÒÔI€®õÒrÈ…ÚÒT4ÙVZL_.˙„À∂á¡…MÃÒ˛0h∑·ÁYQªæƒõ9Bı≠≠«onºèw˙í¢”ÆfP≠Æ‰≠≈√€XhÏ4€˜∂∆ÖÓ˜d P—w,®/7L˜:dŒ≥§≤]Rã¿6xYÍ¥øŸÿáñ)C"^lJQèZÃ{Ëﬁ\~vpcS]YÃj÷0$ètÀ2“‡cˇÚ3∫±8ÿ‹›q˚òRé;Ë∑ÿFc:ÿd⁄˚sfI‚àï1Õˇ4Í€ı=vã¡÷7wå˛•ÃóÛ"´$m±]oÏ4Êk2uBQ÷¡ÓìCÔUZIù≥!Ã	<ÿ‹nlA∑‚Dï÷øVgπ”%≠o‘}Só^R¯| ÁbëGî‘¯÷ﬁÓ˛èÕm¸1cÕööñ~–ﬁ‚¬1^8ª&Ó∫ÑÅÿıÅóPÏ$º œfæç∂üèÒzÊ1Á6{+Q7ı4wwPX q[‚«OY+µN·®fÚoÉcêL˝åÉ‚ ∞g≈»∏Áù®s‘edk¯…Ë.–πêÓèx˚d(,ﬁs7Ä=2Y+@ÜWQ∫D¨`°+øJgBÊªŸ~ûÁ’n'o¯-;œ.úMÚ*>˙Úh—)8ıtvç˘TΩÕJî|öa{F£‰ÕÛ…„¡:«PYÁ≥7µ=''›#>IÿñNõﬂ®fy¡zzq^y»Må·7AÌ’3cûﬂ~Vø°VòÍú%ﬁcm4È4¶◊ÆMí7q™°ÅW£W‚ï‚ˆ˘p ◊U˙<'?ÈI
-y"Å\r5TuÒˆﬁí|IÂ√<˝8<¨Ò7‚>@"≥#›S∑#w'∑‚nMÙ]⁄yÃ’ Q˝ç≤j–›ƒ¥Åà!Iç7»ùâ7µ∂M∫Ô˜p}póW>
-ºVµ÷≤cÊxjälÓIç´Ãõº-áÿiãõÇ4SP	‘1ãÇb/eBô¿=õ†∏lMá‡àaÇ
-á.©@:U,è
-÷[Œ4@jƒ<ä€3f»Û∆ iS]5Nº-anåﬂì{‰oô°èÊ≥gº#¢Õ'‹vﬂz¢?™åpBÏvûù7ıÜHÑØX¥Œ≥‰˘iFµ∞ÇñµyT=ä]vóáÂ+baÒÆxpö_˝ å#2 ©°∏FŒ‹}8iÍ+º˜tª ñOØœ˙É∞,V8úH√(Bãã‡¢H(
-∆æ™[&ØØÙπ_âòB°Æc˝„d€36è ∑Ux’Ø
-è/Ûù‡íéz¥öcﬂrX«®”áv!o[7ôÒ4ŒúsWŸxËz|sl6NÀiÿzäπù¡~D|‡˜Ë¥Ò8üŸ6yaEGL|nqw–âP¶@’#ñ˜ ˚CpW4j¶∆vq‹ë¯1k1ÍüÖŸ0éÔm«¨dƒA¬5/¡ôôd8¨fª=+ã‘ZHTÑHÜFíä˛Ùocë–%¸ÁÆZŒ∑1£∫Ø9ª’—è‰ø|mÎËÇ£∞™„ ªˇΩ¡ø‡
-\ ¯ÔÖ<—P]pﬂ"ﬁ`u!:ÖÉ¡isï*XƒR§;@û&TdvöÌ⁄Zxˆ4Y#ΩÉ`Q!ÔÄ‘˛ÊQ±E`ﬂj8_IG=>õqﬁãƒ~àº¨é≤¶—â^‹⁄öçNõΩQˆ©±®ïA^8î7˜˙}»⁄ÀY7åA·»π¢Ó≈;ÈXtÙ⁄·Pòπj°S»€œ: ”;≈òXá\ÂQïïºßåJm 4áµâ˘4’wv‚˛úF<‚5˝û⁄%íûU|ßﬂSÀˆ®61ü¶ˆº˙»u…ÊURmb>M’Pm"MÂıAm"~L≈mCçªˇ%kª⁄DˇñﬂoﬁΩc™VˇT„¿íÔ°5^¥Ù¬.Wù	∑©©R`„∞_SS!WõS°ó&cz¯◊ÙJ2µ˚ºp˘4µîÏ¸õ|öj’°¨	ﬂÂ*[BÒ36d⁄_)gä°…ÚçäÓ[iπ≈D¬Ø©3^jÇ‡¿MÛ∂G©√|≠ôi‹ä,
-≥Ó†Ä•yãÒﬁ™p
-+sW∏Eäf∞Àó£qªs˘“ƒ–ˆV=t%Ãrßrk¶—(C=^s6¿Îø‹L–M£8Ñ›º;°|)ﬁR	y9hØºÊuÓ≈†º+
-rÂ‚°£∫ïö…\°©¬h¥û∆ë’wtw—∆«[@:;Õå,D§´˙,\≠êzëPﬁkyê9k¡TÁ^{9xSµ—m´@Óá)`:ÛÅ%Ã@Â˜î;ËKﬂë!úábµ$˝fVK^¸ÌoÜ[áπkêUyÕı@µ@mÖ)œß€q4÷ƒÊGtrÕÎÙ∑‰‚GÃÉ^$ﬂ«*MUbzD‚Ôè˘∏‹*ï<H
-ï\˛ÉI¶r¨•∆aNƒïöB˘SZ›ìóÈ<K·⁄ê+‹ç÷á“É%ÇWÚ≤`0äª§∏èãT„”&kÙ ÀChSa^3“⁄]}ñ˚˙◊]SÑpNTN]˘úÃ∫cÍ
-VÆ<πJy4∞)ò=+ºVÀrN”4Ã≠€8·R‹ıÇÕÿ-^{	n.oW:öx÷ªrw“Uﬁ!vƒ'°*ü#lÖ«#Ì3rRW#'uÖãø≤Î°W∏)
-]Í]'I ÍT∂Ä⁄°v˘júimñ◊áovî•:àf‚µˆ—¥P´X>0˜à[õôì∆Ω˝˘Õ•|9ß#yÍ?ÚXó∂"DKx–É•x»]µËniÌâã)ÛÓ§T,ﬂPIæQ*ﬁZûÊûx|H=+¿åÌa÷GÆYt—œc@≈]"o‚s<-¥6"ÂûLıÅçˇô¶C{]Vêo|îH)∂W+'ﬁ˘@=`ù@(k{ws«∑N¡®UÚ≈•|ÒVæ|h“›\∞q\j*+©	~ŸQ“RÉú'ì y
-âƒaàbÑ‡CΩè1≤◊“Ω≠áÒΩ/î∆◊?g⁄fßbøÑÉÊUŒô~«ÌÒ6ù Æw‹îGv«◊3•◊*G“.´¸ù÷…)‡€Ü”+ƒô˜»ˆvÏÉçöK®æM‡qEe[ı¿Â¥ÚM‹°'å”ìô‚.∆ ?›∆‹DJ%Ã V¸Çº›HñÄ€5øÄÆá∂#˘JÊõ^˛Èõ<∏¢qÕı◊ïˆˇ∏Œö¢[&ê§ÔYGF·_â ∆·‹´äsØ:ÀË>c
-lVå0_„Ù:◊™Zı‚∏aeÕS8>≠‚°~“πQ~√z©ﬂúBÍjXF	Gıÿà(~1Ω9	∏√’ÎAπÎQö®ÈEi^£PBk?q∂\*ÂŸt’0WqÂL˜ÕŒ%çNtÛ&˚Ñµ˚IêµáùÛ∞«é.ÿËî∂πq–•ÛèX¬0@!“V¸2ëWu±Ö‘¥4],°vZ≥∫¬!/Øú€¬ãÌ≤À\Ÿx0¶ÀR™>á∑|e´{ÕèﬁgÉ~˜ÇnÏ˘óS“®ˇ-m,íÌ∞õ–”ëRCX9ócﬂ`ªı?¡lÿ8Ã¯ ˝ûI5Â¶h#Ê~k˛∞!∫É©+Vñ·/¸Ô¸%Ñ c,ï∆Ù;Ü"DanAÿØ=iW .;»3ﬁŸ°–πi}íÂ√9}í+~
-π≤l!V$™cUëOPæ|0eO†FÒÛó˘û∞w'O©ú'±ˆ„’¡à∑˝ë=ÓáÒÜ·oë∂˚‹ª@¨hLCe˘dP&¸mD˝ˆ)≥xÖbª∏ÓÚÃVk-pµºÁ·wu„ÖÚ  “[<¿ÿ¨°í[pB$ó+*ﬁÒB¬±ÁÖÿç@,á0‘ƒ#}±[ÁÈ•±ª,]^:€ÀÇÌ.ÜÜ∞ÒP9-∆d5)ËÿµF∏‚)Õ-œÄ¸d.åº–á-ò«Ì˙Â˜Üm‘wöl´¡€{æcﬂ’—pa¶åh…ô∫ï’|zLlﬁ…àÈúü’Düc§∏Rœx≈1üÆÃEQ	_Uw˘e‹Çâıª ¬ŸÇé∫‡”D07P8µÕ.Ûãü¸W*Íãü¸?S°ˇé¢,• MøúîB»^AÁèìÖÓ˛◊´∆V«¨)Ê¿·qäámãc,VVJ~Rçñâ1{47¯@¬Ñ@KL√æÄ@b´»ål≥§Ç∞/à@ﬁyK#?ü¬…àì7®™IcIòÏxËƒeNHF8oã|q‡”´2DZ™ÅWΩºúóˇÀπ%ﬁ˛c/∞9Àè±óÉ›áæ¿ÇìLg,s'⁄p£^‹¬J6T⁄õ>®œ1˘s·Ö „àˆrÆNˇx£u ?íjÈ\ı¶sëoƒ«(>rk|‹™ÿîTÚ∆?ø	óı\ÅÃÒœlRè∞≥\KßH4∆£ß ÌïsOÊ°|™unÍß⁄wÜ´-¸ì∫fV[	µL"~òCû<ô1 ïü*îÑS˛ô∆∆&”bb›ôTŸ'Ö‡y'bŸØ©£HZx∞∏öxEA <cÄ5â*Ëj+äµÆºU%âS3§πÿ	]«Ì/RÅÛLc	/1âr'¸ú#8ö·ïüÑ©iÙè$W}Æ9√ä_¨s˘´ºdî≤ÚID1n·œs…î´"OíG»÷E´˝aYò8µL†árÃ[8îJ_Éì „î@Øπ7≈Û‹◊–[cx÷£P¿>∫®	8YœıΩè»qYG,1åéÕPÁÿz ≤® (’ úÍ	s‘Cçz™gO,≈Âƒ>/◊2•ª(◊Ë 	cÕûWj86ı ;É~7ŒœJÀo¶∏úaûKÂ¯ÏÒÒ∏'`9ˆÙ=‘'úÙ•…lm¢Ãæñò/ﬁù%nï ì©Øy0+±ÜV£6—™Äƒf8ò¬â-≤GØ\¨ƒ/4Â8H¬∆[T®◊	›€Ëè"ÜL·Ç-s/m°b@CHÚ˚‰·fÇIõ~jB°úì ä«˘`8Ã•ãP°>È ™¸ÓqvpyI`;+=ÙÛöTè∆≥° aC’eﬂ®™π≤gGfÙöFÃπÔ	åfÛïﬂ˚ñµ]có√3ëº¥-ÃVàpB{ìÅlÒÓ:ß~¡/›F§os˛≠*â∆nÕEc)¸Œw|ç}å∂•AZ¨≠9∑£§YﬂßKÂü„N˚ƒ¡fL¿˙:Íû•´®{VcT§&)|î7<ª*ØÈºcÎØ∆r ÑÃ? )ÃÌÜ‰ÊéHNÖÍÂ|?=SøÍñj√ûôKWÁtOÿå_6üBëuËSúåõ|ˆIR†.∆®>Ò⁄jtä¶À÷mÕ–¿Ÿ¬∞‡_ƒËRúy⁄!8òI–1Í≠$Ú"ï+’gú¨ìV…ÑÌ=ï&∂üíÂ¶4MºJMI˙t›É[öπë*söÀ∫.∂!È [À(PïXêΩò"´¥îlic)º*.π‚ã@uÀ⁄î‡≠Û«Ù™¯cz…∏≈UOxØœ˘Í˚Ø˛’?ˇı´º˙ﬂ‡øﬂıC}ˇ’¿èœˆÍ˚üˇ<¸¸˜«¯ö}˛Sx¯·´ﬂ}ı»Ú√œˇ3§˚>{ıøªÈ^}Ô’“≠«åı;w¨Ì˘9™¯∑õ[[çá˚ÑFs∞ﬂ`Ì>l≤FÛÄ≠7∂n≤o¬∏14v60˘˙Ó~}á5ÿÅ◊læø”`ˇÚO{Vﬂ*‹{¯·É˙˛Ê¨ò–ávk–ãÕ3¸€ÄnÒ*ùá¡›ˆLPqT @»2A$2¸ﬂO;Ìvÿì.˝ﬁloõ˘ﬁrÅÎÈ÷ÿ∏§«gØ≈ë40¥‚≠◊V	q∆tLæ%åÅÅÿó\<"X≤1Ö≈£’‹ÃivX^—YÃÆ‡!+¬.KígÀ´H&oÌKπºÍ∞mÂˇﬁ,äûm†∞Ëê˚bR•É˙Ω≠F˝!€h∞{ª˚◊\Mï¥0l(›Wb◊ëŸ>∂dhˇ»‰…¸˜êL∑ﬂ;Fá?A¥ÅÆ∂2b;ü.`¨ı∑iŒ1˙Jf˛Ó£ŸŸ∏E¯º4·F…Nà%-—c≤Áh≥ü§ÌN~W—¡I6™ Õœ≠©6àUb⁄¨≈7+åÔÈÑ∞∂KÒËõuqÊw3pT…úÄ|ôõCIXNåd7f∂Q0 )≤P¶àfwç˝ÌÕù∆>ÖK¸‚œ¿ˆ@÷ﬂ›Ÿ©om6·Ì‘ß;÷Ö†Âü;£Ïâ' x,l°3s•Y373û∏üπU‚ÒFÁ>
-8˙èlø—lËã©È\≥)Gt∏Âh”ˇ5¸˜≥Wõ˛ÔΩ˙#øp@B>b∫?Ñˇ«Á?M[ÏˆÈ÷kH6NLMËD‚†:ßÿI˜°7).œ%Œ4oüo¶+È3µÏŒîqì8‡Á˝Íè>ˇo0Qø/ÁåÀmﬂ{ıG≥º≈LCªôﬂ«÷w∑∑;Îçﬂ9•5.öl6õåè€m,ÏÓºø"…j3√∆LµÍÖ|ÛÄƒ!< ùÑ£éßËWûEÊ¿ŒÄ;HDEK-bÒSûJ—ç$à8ïŸµÏ“r®¬/Ûât¢{ŒFKñ:ï≤¯…6√£Ωf∏÷%®I‚En◊õﬂ|x˘Yì‰ËV∑ÛÌ1»ÅDéè;≠”pËÛΩ∞ÜXÉLπÁDÛﬁ°ß¶ˆmÅòe1A⁄ÖÙ<Ã~ÈÍ€4˛I¥N≠ƒ€Ÿ ≤Â‰ˇ¿å‹`∫ãîMﬁi◊j5ù5ÆtD(ßˇ
-6óz˜/:Å≤qÇ˜OûıÂ˜¬‘@ª˜Ax6¿kãu:Gß£,JuÖ„Œ£ü¢M)Å≤	ÁëqÁÚÂ„!HÊRŒ7≈=¬èqºZ,Æ|ÜJè–Ä«3U|d	xVÇ‘—Ë˙0p:"uù`ÿñö¬£r%cTß¬(Û•OPÎiÖMpåR›îs…W7l¿IpÑì&˘cºD⁄MZ„´Y⁄§ÔfÊ†È9⁄à≥!~&•¬Éˆ÷ÓÜ≈ﬁR˜F¸ ûıúbΩÇd……18ò)≥õ¨P&·îü;<˘ÂNlí¿+.A¶≤7˝xÑG“™§ÿmﬁ∂≤RTIœVÅ≠†€¿îRwèè—âû-˙“%YF4õÅ8yKT.˙ÃÄà+˝|3¿.DEwﬂ¿ 0H€kΩÁl»âó1WÙ@\âGO÷ä+?'¡xOÜ¡QJ∞d…∑’VRb§‚√û¡„jW˘,°Ë˛óˇ_ön’í≥∏Vy˛[«“ˆ/<pqØã‘+(jãÔ`¨—<Âû+‹J˘2ÅURYÀÏ_ælèAÖÉaÜÆ“h∆˝œ| -•s”∞/˘Ñµ‰;a%¥÷Ë&Wˇ?ÒSÍ˛_	L3tJbé]JÃı\»ÉÅ˜=√ê∞•Îé‚ W0äÍ<¬õæV\"“/˛‡èØ9(•Í{kó∑∫øΩcÂÔè¿]c }ÚÚõZí¸îSY ﬂ.·ˇãÂ…çÃù1‚ØfØ…/˛¸O“:ûtõÓŸ`ﬁ∂‘E^75~|.wÀ¯x¶ßXtŒ?ƒæ€/¬pû ˜®£«ﬂûÿŒ∞Ÿ„ûø’ß›ı+GrΩ¯´äˆjı%kÜg}ÑT«ëÄÏn“GÏﬁ1®SÏ∂0˜z@…¯ª{2˝á√˛pA?–q“¬ëä6/~¬∞à™¬@•_@π»*™laAÄ4ä`%@·£˝ÿ, πæ”Å≥K›F⁄Ë¢◊≤`çe9EQ$¢"8©Ò»™ÆÊ‘Ÿï˘NπxìvÍ[èõ˜Î0LDπºƒÀDﬂºQ8@Dûﬁ(™
-c÷ÌD£ll9ˆÏ hë>e!'æF∂Ëy´Ç[Ú75∂∏¥h¥B‚Ãñ!≠’¢o∞EﬁÑ¶≈û1˙HeE;HÑ]«l˘0π/16H
-ßS?G+¸MQè	 √R.≤¶Ò[ë]ÿÇ!káëÑªãæ¯Ó—|¡≥ ‰‰„p‘:Â%Ëãoƒ4uß„‘ËI/Aƒ’Å]Å£wg˘¸Û^ÕCxu„ÜâT{ç∫dVóî€øudŸ¢R¡ Uäå«^…A πå€ù>„2ëˆM•q{†ùiõàÆûºì#ÊcGg{6˛ÎÙŒl¯bë`ã‰£HΩVò÷\Ï^ò⁄\öÍfÁl ªÛó‘Ë•¢é›•5V%Jj1∆_–E›Ô©ıŸ^û¡Œ˜~∑ÑËßdü—fs_NoñÅvàZ‡§_h≠”êùw÷áÁùV»>ÓüÜ√4
-¬Ã±{±‡⁄@FüªÊ%._zä?*ÛQ#xì ∆=C{.é`–#ﬁzﬁ¯µ"bP˚›n8tëç!à.T¥DsîX—≥"◊G€¿…x∞Ù—≈ 8˛¬ﬁ~cΩæ˛†Ò∏˛pcsw!œ∆√.pn^™≈·SI|è_”ﬁﬁ˛∞2ß≈≥¡‚ìú∏¨◊ø7ÑÈô3v'⁄|s>æ;A–â‹‹ï@¶ŸÖˇ0∞ï¸lù¬π˛Ú%¸˙‚œ¥ ãËFdçcFı|ÀøR˝¯1¢CÜãg|hqj≈ÂxòÀxÀ∂P*)Zü≥*Ìc7ù9⁄àÎ¿wz¥6§Óë∂JÌˇ´Àöl¶í⁄Òo6=2\õü1mÖMSaª&Î¶DÿÅ§+–]Kñ`A≈ù∏m«MøÒ™,»ß(rMé3ñ…qÜ≈M¥Rn]ÊÒfvNâ≥Z˛ı/~ÙWl{w£¡ÏÓ7Ÿ⁄1Õ∫≠Û%∫µÍ©[Ù[(:ßòΩ·ÂÀ≠ªêV#kJî·NE2	{ls„û› W|≥&–Ôî=ëk¡gÕÏ˜‡ù¯Djorç◊’ƒäòoiZûa—|Ìã%ﬂ	;q›ÚÛ4Ûú±„uÿ7ç,¶óà_5¡)ú5v˜Óè/wƒıŸ∆‘‚à9Kl{®WguÂJm∫ÇJ⁄Ycqê=ÚG™z>î„õ43£8∏;5¯≤íTFljÃ6
-ÎBjV“å©´ùØx+~Åza£d8ê`©Ên¬À¯çåO÷‘˜ﬂóF:ø¯ìœﬁ{Eø©ázûde’∞ï∆Ît^äù;ıJ˛J€F‹ﬁ‹.KxÓ-•lUã±]≤‚Ÿ$gπ–ƒñß®Y‹‹«*0.o2t«œäãæã~ˇO»ñ˘Z:ØÒå5Œ∫¡Fí√4Ω'∫∞à>∆I\∑†ôô;ßW⁄¨„≈Õﬁ˝Œ;R{≈®Uû™Æ8ÇÒ‡¨ﬂÎSè}=EO(Séúﬁúÿr‰¸Fâ/´∑tì‚ßG5iôHÂj∆Îh&π∞ΩQ?®?˛∞Òâåó*Ú©†0O‚Uènƒq"˝R¬“äêy˚˝¡Ω:DÎÑ› "‡pıAßGdﬂ«◊WÁ—(êÖÛ¡àJ+mÑ“‹»iÇÒMÄÕLjzˆX88¬7å]©î∑ò%ƒ≥Ïf[®n)DV{V†J Û∏”Êa*)àèé”BŸa€;úN∆OM PÙœ(‹∏8Ñ-Æ»xXå$å,èícäΩ˛3'≠P¶ÖZTm 3aÍ1’'™N[í˙FÿYàRÒËY_‰`<Jƒ∆Óq„Ü¬\Ü|å˙9 Øch7ÖÈC¸{F=ûTÓñ,2ã‡D–ö^´eö∫qÓ>@ßWLƒ√ˇ≈r]_H.U`Œà°˜6âπQ;#cº©†{Gá…Á^…|ñ)ï¶x'|çÓ?ÎÙx«#˚`»é;a∑ô•5ñ=*Íl d29 BbÃXmPCè
-%≠A√™‘n#Q∑°Ÿçë@≤#’möS
-§^eı≠èÎ∞ˆ«=ú¡£>ÏªQ’π®VÍ°4k˚PÜ¡¥Yÿù‚{"%YÓ}Ë;˘Ècx≈UﬁÜº77=„‘¶PN¬ÂØÜ'8≈>CkLbtâö∫ê¶Fî:Òõçqõ`X)%WNÂÚH34¶Ê€C≠>!bêe?;ÌCSÎdA]árﬁ‚aŒ]ÿ√yvp“[ÿyc àäzæ_º’p!~$ß	Y®ôPΩ≥”«™Ae‹@R¡ h@fºì‹IZi2·‡ôö§*{˚mh≥Ù∆≈e≤)‚]éM’(Ω•ˇVT7D=j‰ê≥RÍõ„0(‹ D†GÏ•1˜ÅHõ8˝Å1˝VÈ/^XDˇ≥mî˛((b’8Å≥Tûaå´-9D®Ö>Î °ÉVò…_ºòLçFƒ>±xáûååbèyJÃÒ⁄=Ö=Î¬?ÚºO%N,∆¸D.AÌ‚LE ≥j¢Èœë9’ÿ~ÏÕN]U≠‘úyÈÎ#ôCQ¨»°ûÒ¸É9Ùã5Ï†~|/ˆŸ¸Zµø¢B— -⁄£»©e%§˘îhê~±f3Óª±œÊ◊™˝U4»‚ÓvŸ Ö¶LR§GVh⁄ÒÏ`2ø‡Î‚è†#H=Ü˝PÆv£2s9⁄âçµ°√◊}'«çE)î„{Ï;¸«+`‰‚≤îT
-À∫=ˆ‚y÷ÂÔßéÿTJrá- H†Ú◊ë∞Å	;ì≈‚R>êl·<Q<P¸\%Oÿ‡∂w≥πHÈJÉÓŸt†kP	à‡œπı &5ûÇÃú∂‹W™,™ ≠,3Å(ÀyïÛ≥]ÑΩhıc¬äï˚õoËaÍß´ﬁ∫>ÍÃ§=¸N7M-}—“í˜&%¬Ò	i–.»#;pá◊^õó◊ívŸê][f° <ÇNeúO¨æO˙1rU;ÕI’ÿu#ÙW≈/Øπ√õC
-,#c™]ü ±ÆŸ$˛¯lZ≈'QﬁÙâºGr∑nÏ„ÜFá¥M+Ç∑e#ãßAî}äö9ç§—	`PT“†›Ü§wA%ç.ÃÛæmΩÉQYÛº-p‘⁄ÖßC˛3∞ë∂1√€Ú'…ÙGÁÏPCHF√Ûù|ÚXıƒ*mu˚„vS‘ô◊ı≥'ª[1œúS’LÁß7^´%ˆCÎ+;∞nΩö£«ùnË±> 9°√O√Ó Føe
-’ÀÆó{Ú⁄f[ÖÑ?ÓCd<ı1∞‡ñN≤VwHZ„Æ˘™ ~Q¡iÿâ+/œX]n¢%W!¢‚ëq<SÒ_⁄BRµı!Ú3á‡¨Y∑c{´¢‡Wyﬁ‡ ∂^ wP⁄)ó;ÉgI∫»jôAR‰‹‚CÙÂñ@ ≈4wwäÕó“ˆﬁ‰êìòÁﬁ¶O£~OQ;«YQDû¶$œ*÷ë˛®€?åı¸Ã>¬212∑o»ÉàTÑrøeîô/`<Ï‚í{∏ø%vJ.„¿sÀ∂“ú≥¥˚≠Ò–ã»–ËÜ¯îÕR	äßCXZ<5T ﬂ∂˚œzÇHûp]*⁄«É«d]°Èa
-/íÊ_…ñKπi{ÙDﬂ¬;5iÜÜÁ˝ßFá†)⁄¯OX>àÅ Ùü‚ÕotRÕ"]æÏ^æÊhL!Gn[Bâ´¨√ÿÍ@nC·øπˆ)¬h≠® ﬂi¬ó9iﬁ#õ©8sèd¢˘¶mé0ËCÛ+eìÒçÅ„,RÉd1°EÔoãdkDµ96:ˆüâ5˛#õπﬂû}$˝N;Ã‰îõpª NcÕ©¨ ’û$"µ£ƒ9WÆ{∆E Rî8ÎK´&∞+:%á8ˆ≈±W¸ -{Ê·	º»=]s∞#^Ç,kÕ·¯rƒ[&!≤â◊oY’√h‹ŸΩ¬Bë.¶j∑çûxVïWñ"ãÊ©•I]É–Ny*R∫˙¥z¨3◊µ™1Ô	“jrÖlÆ°ªbeÓµ‚&1Æ#⁄#T7–≠∞Q¥7çµ√[uamM5ﬂ»•)¬ßó'∂≥iRÕ#|—i”^EgZÿπG‹òÁAò»wo¶
-ΩT8”ﬁ”æ⁄Í+ycãG.êüoOgùà◊ÕµcyµªÎ±s\&{êK8qÒ¬ñLπﬁ∆≠>Ó·nÂ9{ç˙3i+WSdé–=wovÊ»*RoÔz˜NŸºÌö¶l‚™)ﬁúu|1«ñŒdzskWïªi‚˝Ω˙˙á˜i=Êgÿ‰ëDÆµŸÎ™¨MﬂøÌ´fÍ}
-h˛ x3ﬁv⁄¡ì√Ö5@‚ùMióu¢["_Ü˜dÍ!_‰AoB™zár≠·›⁄Ÿ<+áØ2‘ÛVÂæ™i$ÌœimåÉ»∆
-ç\•îÀÈÒKëüÿì˚úsÏ~H7@0À‘,åav˘2›"’v8w"Hë0Sñ’ﬂ4#Y3…B&Õ=1˙ÕC{l8ÉãSœ:=†…"é.& ,«Ø\)ïlŸlà¿∫qYŸS¯,ªöQ6∞x£
-î¨ráàÀq˙$ ¥@H:SºÕÕhS3f:›≤&
-ó_˘Ÿr˛√'éÂÈ>ÙzÔàCHG»ã÷aUÆjíI«tÌÌ®<sB1©°‘,˛ÀóE‚òéOÜ≠r0Âjßt•∫I‹mn?ÒÓP3Eÿ9èüûËúœƒ'sˆ*`˝\?≤R-∞qîgÙ◊c”Åü1`®6 œù7˙G∑≤Í)ÇâüÎ<?S9`(î>¡ZÒ>∫–ß∫f0>OÇas,Y8èë	Ovƒßp[ç‰Xo»Gl¨7mËüƒ0fP®`º˙9XáI¨öyƒè°ÜÏﬂﬁbS∫πkØ∑´“©¬0¶é∆'&Ÿ⁄ß^L…oÆ£lŒ\±≥áAÑ—ç$çI⁄˚„sÿÍ8
-P^˜œ£∞ò±|E‚Cdn¯«‘	∏Îw"Ï ƒJ¢¨QßIFµ}ÂﬁN8œo¿“ÜÃ[-œıQ—8ŸªÁˆk<„ÿ˛ÔÈ∏n÷Ú?OÎˇ£ú÷Uz8±€¥ı%ù÷˘ø≥ˆπ'»DÇÒv9!][]÷`QÌ1HﬁÇkºYëzy¶H˝eÏê>ˆimíÍ<ßn|∂√≥æÉñÛqÖ˜⁄«>Égà"réãåÆ˝}ƒo‹Õt@Kå⁄á˜éŸsBHˆ¬ªZ®yo¬}Lv⁄Æ4Øúéˆw‘IsyëK ÙçK9ó´˜F˚·?≥∆∑ˆv˜ÿM∂π-~¨oÌ>‹pC-%’á”Á7æWﬁÈ!
-D·H=9=¿6|VeHPkôaüÓ;9Ü3Ç—ä¸—ˆíPôY±Q'æ¯…?€m’˛+‚≈´±ΩMíº	:Êj.ãnúåπ#d$œãQC§Õ˙~csã˝Àﬂπì‡≈éJÒ1pÓ¨‚—¥‚1Iî@:]Ì(PI«Ùp`¿ÆÔ ˜ºFƒë¯àﬁﬂ\∞Ÿÿg[ªÎı≠+˚©p◊T#‰(ÓÙ9®¯›Â¯›<Æà∑¨m˙í~=GD◊˚Ìç¯ªÕvFt2‡‚˝≈˜jÏ'A%l ¬Bö¨IΩ™Èñ®LF˛ÌΩ:ú6ÙJ÷ø»Ø<Ùy“P
-zÆ†c|^&f"ÈLò˘‚ v	XJ_g˜67wwví|iÓ:Ω¡«ü'lJ¬S-Éè¥Z·`TÀ˘eÃÒ)XóáÎ =±mDµπú–&¬Ukfx§Tf≠ËdU¡Ã:QoÊÒ +RÁk5îïó*–B˘÷ræ\πM4°úT·ÑIá‘övPÃ˙´JM#è¿\ºpÀÕÌ*e˘ΩŸD9 ,_3†åS‚zÊHÎôﬂ‹N§¶ú ‰d„C¢h˚Âl^_¸Ÿ`Õ˙√èÔ◊˜7\<cŸ˚õ˚çÊ¡Ó~#˜ b—:)ÂÓΩZ.˙:5ıπ¨€Aç—Â_≤Û˛h(UFoB^I∂˘
-œÇA!s˙q∆# \√ıµ∑yuq`ÓAÜı ∂◊∂¸∑≥/¡)	PIÜ"ˆnLÔ¨,›Z=>÷õ“;´«AÈÿ[˛¸˚Q÷°/ÏÒ…•ÌQÊ»öªîµ\“6ßîYJÈﬂ¬âƒ	D¡n5Y∂{Á¶mπdÃ„ÒÒ—Í≠“W9è*©-p|√d‘Ó'O§o«7~ø‚mﬂh…odÔO©Ôz¿5ÙKfaoDxœ∆ÀºiÀ	“" -FÊı%_ÑÃ7≤·?ÿƒç}ÛõB‹ˆ«ú††Ë‚°‘˚41ÍåH®â2Çæ«X KYˆ*(˛(£1u”ï%á”"⁄™J‚üæ√™3i++.tû2ô|Üefñï–rqr-DacíTúwﬁ›≤±DI¥‚}∆√ﬁ˛ÓŒÓŒ˙f˝ évlÉª|ÂÊsôplá˙~˝ﬁÊ˙„≠∆¡òÂ ±¯™ôœˇ»!´ô{x˚ uã’Ã˛Ó E«)ë¨”Îå:Aü^}ı¸aõ_}Wº8ÓÙ‰3ap==üV3[ó}>∫a‘Ú^ß–é g»˙≠VwuŒC`ÿ=ê.äL§e«·Ô3Û,ËQ«6ÓF¸z:o∑ˇg™˝f˚GN˚fµˇgn˚Ê¥ˇgf˚7@»ént·>e'ÍÉN´_h√ËGëQ|sD@e›ÄÒîl‘#Ñcó¨§†çó/áùp<ƒ{ŸXO~Æ{rH-/Ù—+åû¸‹Í…œ›û¸‹È…œgıdΩvÜ≠d£”ü∫AZu„õNÔÈÃ
-Ô:MÚÙ·™\˛ÚLw‚Sg:~au‚n'~·t‚f'ˆl°l>>Ò9hÇ‰∫–˛tÒÅ∂ëS_Äê†‰ûßπ£ö˚ﬂˇ˛ˇ6…Áøˇ˝_9-˛´≈„∂¯oúˇçŸ‚˜˚√5ﬁ˜ád
-4?8ÜΩ\à5◊¶>åa˚NÒÚ˙/`'X¿¨ú˜;œ=}˘•ÍÀá&˘<u»ÁóV?~Èˆ„óN?~ôÿM70‰!pÎìz7éÈUI©€ÖCiØ-hÈ^ /=Ì˛ïj˜F–’Ìn;„ˇ+´›ør€˝+ß›ø∫“VÏáwj°Ω¿é°ó?%Ú¡ø∑4ùˆˇVw‰{";‚L¿ﬂZ˘[∑#Ît‰o_s˝FâÀXÎyÿJ"ß_´ﬁÏõcËLÀØ≠ﬁ¸⁄ÌÕØùﬁ¸⁄⁄¨~Ï˜«∞Ò≥ Ê%Ë˙9ÍyÁà¥)™A˜¸ÚeøÎeßˇıˇgÌÍû⁄:Æ¯ø≤π√Tf"æÏî¶4ÿ#c´≈à ·L‚aÜã$£[ÙÈ
-Ç)lÍèƒÓ¥3}Ik⁄!NÎL˝ÖÅÃ¥ÍS˛xåˇÇ¸	9gøÓÓﬁΩW¬c=Ä§{ÔûÛ€={ŒŸ£≥{$ÄO›ï@ÆÆ ûi ûô û ûué¨ÿE÷ÖL•±∑±íq[$q]-◊œ%◊Ÿˆw’ÄÌ¶¡ˆsçÌÁ&€œ∂üüÑmTE¯lQJ∏ßØ˝ç.=uﬁ&äPcÕ¢ 	e¨D±(∆Ñx°AyaBya@ym∆J-ä"œ&2Í°bUÈq¬ûÄy‚s[l·¸e`πÖ`~<ÿ1∆·•∆¸Kì˘óÛ/;çC"cóRâë0Ô6q:5l∏òÆá&O¶j¿L∂‡ÿSÃ€«˛]«ûÜcœƒ±g‡ÿãû«.ˆ,*’ û-Ñˇ⁄#ÂÑ€pÁŸy<"“c™ gû›Oz•åŒø5£}ƒ@ıJCı Dı @ı™„Ë‰¨£cÕ”≥åö‘~ ÍÅÍ°j_µoÇ⁄7@Ìwu°§£bÂË?ÃÚQ#¡gπ"nx.w¥,p$ú‘ä¢≈~¯üÅÂ@√r`b90∞Dz#S™/%ly”≥ÿ÷˝¿◊bñ∑{*ì— %àKÓJ†¿@Å)5á&ÜC√a$Üô•zPW¬E‘˝í8∏çûÊ·5Ω"P@ZæﬂÇŸfˇ¯Üdˇ¢*P◊Ù!†∑IˆèoÏÛ/$˚Ùvse˜.ï˙@Ã{µ¿±bé≠nØ≈¡„u…˘GÓµ@z>38_◊8_79_78_èÏ¯å\Ü∂ƒæß‡ZW@ÑêXL$Áº‹B∆-86ó\≈±h‡ÿ–plò86—J˚±ŒæﬁÌãÒ›æ)Ÿùpïµ[Ÿ`wScw”dw”`w≥S¡9‰›d∫Ú≈Î8&yºŸ‚¶qY[ÅV757M77-b/`L∫Mƒ0/„&ÑJ|øﬂí,O∂øW¥e’`˘ñ∆Ú-ìÂ[À∑¢;ûs”Î’xñ∑$ÀóT›R28ﬁ“8ﬁ29ﬁ28ﬁäú°ñkæXÂ≥r°÷˙<º@Œ=	†nïè€íÛè›Â†Øó⁄ﬂ´Zùﬁ∞~€d˝∂¡˙Ì˘»+^F„pó*Ì•⁄J«§\£ÓC"3ì"_†i¿y6◊Áx[2ˇâ⁄Ì+ÌÔ4Ê∑5Ê∑MÊ∑Ê∑£5JGﬁ”âÓ|Í›¿#(„Ôvúıˆ£Åˇﬂ–ÃÈÆfNwMs∫kò”›HôπbpöJ ˇ‡ö—4=p<KnÂ∫€O2≠•bó∏>F3ø£à;<#πˇ·øé∂îŸ—xﬂ1yﬂ1xﬂÈ¬"-H…ëáíªÃ∏lÚŒ˚µ©ïﬁ·!<πñÄ/•¶SøKÂÇ–/˙ﬂ^ûFqÔ).Çˇ„˛?©P¡´IKº”ÀX’)tfÙUä›hˇ≥O0œxﬁï=©–¸R1äÕÜAÒÀHäiEëwPÙlÔ;Í2®R1hﬁè§ôô°wÍ(Ò«=JT–¨µlDH¢†±k-™Ã……11∑xlè2`)π®„¥Q¸ 	÷€n°¿Qrä_Y(Ç
-ù/√rƒ“≥º‡	(ZI˛QíÃπ’eX‰&GNíìÖ—‘$ì{‹ Th?Ü˜%í FVJP’Fˆnà,äí$zWMwCTdt*Bd%z'DîIì${GêÕÃÿÈÜÂHSîë›Gx˜gÇA£˙0U‘™l≠ÊñQ„—›ˇN∏öÓï¶ÎJe!9õÛS´Ê=∫%d
--i'ù˘Ó<=≠+ÁŒœ*?πçyLóÉjÕ+S»?ë?Äæm∏ãÆÔ|˜˜À^!h¥IK
-¥Â,ˇ0´6jAÜ?ºz’Ö4{dJ|ä{Übf˚˘Ia¸Ü‡éz—•5ıp¬·…ÿIô¿=›n£/õrîm&t3ﬂ@œÛ•,∂_lzM˝  ˚=˝y,∞Võ˚¯∂Nﬂ'ÏÈwœ†¬‘ì~‡Ó~Œ˛æ§µÈF…`ˇp]›√M,X(è~•ˆŸ)π·o¨Uã’ëÁÉi7*õ;˘≠∏˘∞”≠¢ﬂïR4tlÁ–Å8wÖv 5˝Z=+ÜI{CÁån∂≥®µ_ƒc|Ö<íw¯.FrŒ¯!UäÏ¨ÿ]ﬁÑEM’2¨¯Ÿë?ÑásÊzïBÕZ‚D∞!ì
-NcÍÕ†(0ÀÎGo/¬ÙÑl©·UGì]:≠’√≈åò<”™œ∑¶$µ\Üﬁ§Ñ—´ú÷KÄ´π\©ä◊»G∏K&t…ºã”ß√⁄–Ç‰ìÜ_Í˜ø4¡=‹<zrÙ¸ÛÑ~88z
- {˚Ë±Y±%\ó|mm Üiûùf&ßŸRCÄë±	ÃV˘s>€_åefrÏ˝‘t*G/ÿJ·∆¸ ı7Û»ÙÀ8)ÚZßñ†ØÍ.ıÅ÷o:jF≈Í’´Rœ'ùüæ˛”?ŒåÈÒ¨3õºÍpUó^ˇÂπí˘d|bb<K~A≤X‡ã›√å }˙·_I.ı€è”úŸYñ≠su1IãíŒˆéû5“ìxí"MÿY\S^ù”9ÓYÖ?£££ãÁ0≠„iŒà„¨Õ≠Èu§Wô5√#ÜÎ√’É‘7†B¬â9´¨|≤ë|Œ…ÎÌPY˘ ‘¡+ùØÓ@b]ùwﬁñÌÕÒÀÅ≤
-”Ûók∞‰+;·TakrW∏£‘4é¸È_Kf/åìâDjbÍRÍ¸xé™U[≈∑»∆ 4ñL:]?3)*ÉèH˙“”æ,óâM≤Ún£–≥*t?Ù≠≤%>RÈÍYïÆ	\ûcÍ¢ØhÃ¡≠¸óC+’P)7U(=©òqƒÉ’±È$—h‡éUk˛Xd≤ßù≥´¢E{˘ü.⁄ËC?ï6Ño˙˝⁄LΩ^lå±bõo‹(]j;g†Y˙vm ¶©ËŒ∑eΩjHç[[+AÁa—XÅN6hÚˇpím£NÚZV√z°wÁó∏ª6¨r˘:√≠zóµè9M≈æBÕ'CM‚Uqô ƒ4+§æ¨’Ì£JƒwSß=ú<jüÂ(ÔxÚΩ=q2<pÖ¢ÔzeP[’¢©D,˝›ÖCø	˘ÑÚŒ.` ,?yó‚ÎÁ_« )SÏBd—à´oﬁØFÈ°8∫UD7\Uå◊”àîÎ€Ω]9±TØÔ–2äÄ‡ıü˜Ñ€3Ìÿ±DÌA`◊"∆ ^‡§&PFg|S\ìaC]Üû‹ Ω®k§Ó…ËRŒV∂î;wËœ^ÃL_ìôü»Líâô d”òà˙Ü∞püx”:%ôGóÖGBàMƒ5—WK≥†¶∏¬>·ÖÀ,∑é_`±N¸˛"∆?¯∑4";–ØI‰#ÏŸ(®iÜª◊,x∞Å>–ñsm“¶
-ì~|*9GüÌ°-«|dW“«Y|$?≈ÈåNQ⁄n∫7ò13ƒ¶˙ïﬁæÑ¶ÆåèIˇ≈íØ"%SÑ∞e˙{2ßüî<%
-~â™Y~È[◊s≈@ﬁ%•~å¢˝&ˆ¡:=hkN©j<x_ÚÇÊKÿ^ÅåC36Î!àÜ0’≠Ω¿óe"–˛H"∫∏	–qÿÄ≥`&–6;MÖÆö‰ ∑tB7≤Îˆ1`J€«7'o‹Â^˚ËØΩù)Ë{uX–1+~˙˙¡ﬂ…MÓ]8õj¯^æU¶é%˘`ÄÕ\hÁÆ£}á÷.≤˚~\ƒ>°n‹;ÒΩ®{fêÓ§a©·®ÄK'7≥˚∏”{Ô1•3f∏	cLﬂê£o…—ø‚ï](t44h∆éî0QvföÃLéÛ5Ú	[6ÉRC÷>
-@˝
-OeÄ‚ïLzö‡Í¸B˚ã\*=ë%∞ ~€âƒ£√˛õpùU[4É´˘N—[
-E3ﬁVºBÜ´†#¶sˇ‘—ì„{GOèÔo¿ˇ›£om;Ã£¶çW$ÒoÆX©£G5FÁ&SA˚ß‹ñ_ÎªÊïÀ…äW≈ZJC√ …°kçﬁ^çµnîv—0ÜÒ—éRáp«œ   ˇˇÏΩkw[Ÿu ¯Ω~≈R6 Aä§TTQ\	U—ÊC»™ƒjÆ“%p)^†pQ*f9ªÏÚ§ÌƒNÏ…¥◊r«›ióº;È¨vbOO>Ñk˛π¸iÙÚfÔ}ﬁÁû{P™≤=3∞UÓ=Ô≥œ>˚Ωç+H,µáá°7‚
-úYÆ!Ø°ì2ø=JVsiWR Ê…1äãHm ?'e˙À˝Àxë+à"dWºô&¥:ı}îæx¸»·ñãH
-·"N÷a(áEä ı+V€%$›ÔJÙ0›Å≠ÌÓ◊´ÁﬂŸ≠Ì¿7F) È¬›`ñs™Ø-#‘?}ïôNüèµ®I`£N˘òI:N>«Ï%\…îDædkùHˇêJ(Ø±öà±TπÖaÕ1·“ÁŒ›µæ√CõÆtjB!2~8©q}/·“o∆[⁄mä¥Ü∏˙mæ‡1ç∏Ü„<t•ºŒYèRéC¸é“È+R17ñJÙ2#c,ÿÕ‘2›ëΩÅ£Âëi⁄+1û$ƒ?u\§àáÌΩ›7Ò] æ´tíóﬂª¸–øº¸ÀŸÒì–Õ:h ãüx÷hd96y¿k+0nTB.ïÁÊ…ÜØ2N]˛ÈÂ_à9}îìKZôàæ∆æhË/,˚Fé63áÛg8P÷Ù;©QŸåa`áÒ]€F∆aòçô˘O÷@>¬ä∞◊Ó7ıqFÇùxF"ÑdèKè£Òò∆ˇèSø•‘Œ-0¯ﬂ1P/v‹JC†˙ñ‡
-Í¨†üì¯C\P∏Yy5Ñ~%tûÇ¬=¸qôv±d5ìdΩÓñ\Ó„t‹˝xZjv2ªX^ˆõN@‹èØB{F„Ω4oµMVnyóŸ$ÚK IÕ9Vn¥0âaÜüøZ?ˇ÷€\±~∑⁄®±Õ9∞¬≈œ.~8˙€øÙ_5ûKb$\vY£˙•≠]ˆyhm˜m Ø)«¬÷ˇ˝õÔüúˇ§mˇ›≈ø\~ÿ·Dµ¶ƒüˇ∏‰è.øwÒk¯˚¯˚3¥"ÊX”≤,‰¬Ωÿ{Ctè⁄,D+¨aÙ8BCÁãøeóﬂdøføaœ.~Qf{tdF#5ÙyÓ‰1À Í4dÒXˆ]FE™ù4œ÷#òÊ)MÛóøÅ+Ô∆4Ò«i2∏{æs•n°Ô πä:rvd°çÆBdâAÛ#7’¬Â∑·Ê`óﬂ`óﬂbó_g∞ñe∂≠Ê’É˛Œ1P’ï!æl 1]é,Ø0›˜⁄¡NˆÚ√ÀØ√û~‚€S∫@IÚ∑rû˚2¸0ﬂT9ﬂ∞√–˝nQr4iÖîèL/¿≈'eò„Qû2Ü†M ˙»P·‰rCŸ+LÈ›ì„Ûü–˛‚ÚOq–ﬁ‰ÙÃGL…9&ä˘Ñ0vD6·j+˘\ñ•e+è<Awè4Å`Õ}Ì’a	†º ∫ò5øùÍÊ&M®™{a≠ÄG€ @Çîdˇ_há ·øÊd?§9~]œ—l
-éŸ"√<Ô1eUπ¯)¡‚∑≈âÏıœü5aZçû≈År iv˚0˘^∑”JƒŸß’=ú∫∏ÑzjÄ¡Ë~4ßó?Á∞ò:≠•πe11>t–ïÊ»˙Ù∞¯Ê1˘Öà3•Œv
-ˇÌ˙QÀç¨)~π∫ˇØæ	S˘ê–√˜ƒﬂÔ\<3∑Œº¯Ì‡Ø5Ÿ>ˆà|1ÓGûˆFœ‚ÚCÿwv\¸ú]¸í°g'wÄBØú˝}ä‚8`H≤ıOLBP¢˝a;,ı˝ƒ®&E˚F‡,KC¨äOà0çòn€Ëx¸˜vx<X}x√ ,qÏB¸˜p
-¡¥ñ±ïRB	:#ÒÁÑ0úÇ2”S)I[’;|~iì®Æ	b¢3…]Ùÿ‰&Hn+&⁄B≈Åã‡‘÷}‚|·π=A‘úÑ˘ßótNqÿ√Y<¥+RÆmuìa]cTJ3óôç‰Õ–Byi};∫≠ÇÆ,r{ñPl	J7C›È`J/%œÿøˇ¯;ﬂWÍOti
-Åv44ü‰›ˇæ¬ò·‘æêep(ùΩ b≤OAº‡^ ßHtı£òGÓmü2†Îüof	ÆD)·}Óo»Ô»}N†∏j⁄—q˜eàêPH4„e]8Xºs®”¢)Bµ=W=‚ßÂô¯ëD©◊Á—¡ %å]ıO™˚lco{ª∂ÅˆC‹d∏å∑˙ÆÃaÒ≥ãlß›ç0êëW±G∏i¡…Ó¥ƒxM_åE¸ÈVg√|‘Ì`ˆìùn+h≥±È±Qπò≠ôM`ˆnX˙Bˆâ÷÷1ïP{¿_hñ£OÍìë‡EﬁÃ$ìŸQ2ôï!cBK∆-ƒtVﬁåôôyB3ßÑﬁdâªL•DaN@WéQÒH,™å#äπõ* u-∫‘vÛµ∆>€¨§U6Pµ≠Å#£>§WØ:ççRÓ;vÜ]4(∞™•ft];ÑáÄÅb–Ï£◊è £<Õi§m¿Ê~˘·áÏçÛèÎ5Æ7ãk´hıóf%+µäVÃ-ªÎFW› Y÷Ljy51Ü ÎI¿d⁄ô…êµ¢Éò2~c{¬¸≤≈J…tW$u0Çg/QêS#p.YB•L]–0˙GÕ[v€cÍNªK@dQ6>Mu PœG&∆∞@=cÉ≠9§ú™‰‘ÏıÆ∏SŸ	ıxàsj¬Ωæ?Ã6æ‘¡¯Mc ˚Ó9Ú&^â±;}ÈôêU∑Œvˆ6´€AQ›ÀG„|BpÛ‡]‡\6] A=¬¿AÄ8(∑vµ”™∂ZÙª›çC˚æy–	œÈêcÍ.ˇnπ•ÊrÜS*eæc_a«eyÔçW≈q˝°ûX_h1ø¨–≤IÁ&ïãÀq˜4,¯¥[”MÛÏä™MËùfÁxVí£´òS®¢SÃ¨i:∏⁄´REµ«•X9ÔqJ∫4[„Úœù‚éÃa"4¿^“¶E∑/Poe£RàÛ	ÀhøﬂÖÛAÏt°òz[Œv˚2^˘Á#D∂’/íç‹çl_4.ÕÁF‰ó≥◊#ÂT2qø,á¶D.≤%uG/Ëì?∏∆ÿ2ÌöC	é9Èÿ8b[†ÀÈ˘è˛:iƒÔÛ≤ÙØùb18®c◊:∆4ªU)éÕÍvΩU1‚Á\Ódz¢g!eÚÓ≈´Of≠≥ÓÒ z«>ÆÓrhï@Íç≤ûÙÃÛÃB'óõ‚N—:bıEsÀw—Lw’4#4Zäª√ÿ‚Ol#?«d4ÄE8VÆ÷B•ê<I¢«4a3⁄GG 'ﬁD§	§›ˆÙ§¸8ÆxÚ" ¶Ä3!>ñ>c¢Õì∞˘. º3îÁ?˙æòßhÁ&Ì“öô“†Iç 7
-[·∑â$…ÒóÛP“‚q÷∞}π|…‘KC«ñ1V∏_,X·µ¨n‹äTÇåõ·I∑¯o-∑ªwjË∑\.€Ó$èÉˆ@I‹hc#W(»ªnF@√·†LUH∑Û•Èf˜¨£Ó!ïÔ∂Fß…IÛ.8hD†∏1„˝ºÔ¬ò»˚ò˝ôI]ú´~|Á:€®üÏÀFÁ"∑åMDv·Èá*=∂=ˇΩZ}'c<â”—±ç?†‡˛ÇéÖôh
-)ıÓŸ*êVÄò,Dﬂ∂P9b>Åµm?eÌË›êNB.Ì%Æ¡GãÜÅ8F•÷SNc‡ïõH›m˛M"…*“ú√∆∂à¿ˆHnÓur;>Èû}9hø¥˛„ﬁo[Ôü}ÒµıË$8u(Ô(∆ﬁh4[Ù5%BçN.,„œpåëìÌ˝˚–	m”DΩ[Œ
-EÙÖÉvcˆx<Î—°›{"îçQæ&ÄØô°p¢òóÑÕSWøßö=eFqQ¯Vì§ƒ‚πØØ{‡[Äf'V”WO›˙£r0lE]Í#ãq}îŸ-¥VÂ≤ ‘Écj)5>uv–osé–=µzóìÇÛØéË|î;√”£∞?.üˆn<‘¥—ÙWùòeiìI„O£vH…‹y•(y⁄∏úÔ†µÅwı*´îh‡¿í`ˆ3å®º-Kè∆â¿9˜˘$5ÉGÃùû∫å–áäÒ¿9UÈ≠~Øè◊úßËmñ|»x–Lû=6‚/!$'Ü¿πD=8;"“ 0øSñ©AÀ=’√vA«[L˛≈\ËÏ@R´TÁÃ?ó~¯ﬁ0åŒZ‡–ds˛Á*ï©*Ä[Ì¯é¨Hd.‚)ôãRÇ6AÒ~µæˇ\^{ıÏÉd.’ETÎx‘g∑‘„ÖÖÖ“bÂfiay…znf⁄Z÷O≠|x¸∂=öª{ò]é‚⁄{l◊'˛ôpNIˆå∂™qvÇŒtD+Vh∑ ˘xD`e «›~-hû
-=tk§ıÎï±ÍVßeºÆJúEÙçvúEàa{@l±hwî˙}ÍHÊ
-ÖΩ£Ø¬^Q∂¢Ç—
-˜I›•”o∂“A6Ï1fg$e6ZéÅ´#âÒ:€	'eÙ˛2‘,Sd◊Å‚É≥n =¿oS¯tjë£‰ˆ†˝£˜⁄—†ÄŸô§∫„n∑ÿ§É¨ŸÉCöÉcg[$!∆áãk:üåPüƒÇ∑µx_¿F\√Zˆ™s~¡»W›sDç¶©ò]üŒøæc÷	∂ZDQ”¢VQ!™%Üà§o;◊ì¿IºQ¡áR≤F¿…oﬁt‹o‚ç!◊√¿u;4ï€‚PeÙ‡5˙PhºN‹)`á mT0Xò¶‘G·ô—ãâ≥÷8,®π¡|
-≈r3 ¸ÛM'û—tGå/’™\'¶
-»πêàä&rt ‡Eé`◊—ôÈı‚±{iP*ûµh&⁄Ã<ç*_¥0?úﬂ◊ıô≤€a⁄	*SﬁÜΩB∂%/—8·ÇMïL\BFOTå  _DÃøk∆œy‘qk”J⁄5]:ﬂ
-3LÆº‘i/l›3ªÇäÿu…X4ªRƒ+"Ó√€$†◊£ T∑wºæcÇ/◊Øe≠roüÙ8p]‰+S¿ÂŸ(‚
-6TbTb-∫µO`«ñ¶z‡W¡æ	JH’ ÄC€aπlKëF#≠ qsÒò˙I∏;í⁄`BÆ"∏Wæ⁄ÖùBZ“tÿµk≠≤¯¡∆ábd‚‚–´ä|4¢d\2D·Ê…wØÎﬁ¶˘`ÿ∆S&¸ä#rõIë ¡»a$—Ôi¡ﬂ¥—ÈX°<%p.πº}>ÀB‚∫@>Ávó¯tÑ/‹v
-˛E…få o¢
-îé»îº4ı˛’ÿ€Ø(º‚åBü‡Ñõù+ø¿ΩI∏ïj…x+<ÜÌÅW^Ã∑î,ËŒ)?ÚÏ’ûê˝2!hó<8	b}ô{ë(l–0ærë‰à¿°ÄñCÿ9LÔ”"5¶CI=ËEáÎº˝ﬁ‡a&˚Ks‘»ƒMÔC™8§ ÷Ï"’në“Ecı©4πc(»EÂ˙Öä£Ã˜_HıÜ›!1>OX{èä	Oì^go"€e kPÌ∞ŒÏsÊΩál]6‡XΩπÓmj⁄V◊n
-Zì47˙O¨NM2›ÌÃøí∑çïî«¡Æi‹©R÷œ√¿,cÓÊ
-ì√€Óà‰Û¥ﬁß!/&®≤d(Q`9e\)√ Ë÷Úï]ˆtku+ÃØù~≠_)n∆<]+)UŒ¢±£BıÇÇ
-Ã»¯≠LkÖ	 Qª€|7'ÏhWsãΩ'ÏZò(3Q|≤¨√ù
-ììÂ‘¨œñ°'6~höò=‚vè¬45È∂Ä>ΩâÊ'ö∆:5–pÚÃõ◊B‚„T”ìøê∑óæ5® h≈èN)·ën‚¢Iò•¬H>H›JäUˆ›L”\.8.Ï –6¸)˜ÍéHlË
-„t·YëPDŸ"ÒF3`Q,|»¿°DBí‰›ŸaIh¯∏ÙÒm5iﬁT3Z´eûÈv∑Óo’>]ﬂ´ƒbﬂN€>íÛW∑™§tÕìGcå&˜H¨ç¢*«L¿ä˜äÁA‚ÜÊùNæÌâ7Œº…˜OñÎK+e’Î¿0ﬁûÖƒ'U•åºL£¬ŸEG8¡ﬁfìÏTÙìäÄëXèÈ˘"F-PKºÓπÊ±Äy…¯^Ù>ˇU›iﬂ	@o+àMîπòè°;‡$m§ËôüuSòÛ≤hàUãÇ∞'‰P~ü‹…˛∑À>‹;N92/	ª:∞;zıûG©†*˝Ø3)Üë¢Æ>¢6dVµtÓPJî-G5ÕÆÿaﬁÃ{¡ŒËoãhk'È6¨y:Uq®0æG· øÌ?ÌÖ≤¢
-cÔ´Ω/ÍìéwL_≥ª•p'Ü∂é◊£Ôi≈öºÉ4∞à·^ƒ≠_Ú¥|‘ºuºú'G·∆I–Íû≠Ê+¨ÇßÑõ†æÜ¬ÌJiqi)§<BSÛ$#M=,¿È P]˛≈ é⁄˘âc8>æ›Hé·ñ  A rX)Ê…ìÊm6∏Rô~LÙ∞Ñ±…c™º÷
-+Î≤∏T)-,ﬂ,°î⁄ÖÅ˝∑>ì±‘éo-d¬Dö”é°5€éè[++Yõ≥Xy≠¥PYúzVófqá–∆™X0ë¬™!ô˜8o$DÆ‹‹{´Ö¥ùGi”˜<Õ¶I±ø¢±ÿVÁ•çÉzıÕw∂vÔÌa∏÷V!&TπCóø›j—o¿)	S√ãphø{ˆÍ®≠%fhz%æÎ!ºú¥¥Gõfa@1«6Kl≤]~ƒ@FW£È7(≥
-˘,–ÔV!Ó83TúÚﬁî%	◊TÙ√„µë©¨⁄ÿìU•Iút;5 [V8wî‚√%]0]Q)1.±≈Â
-ëCh$z≈bÅ∫v◊Æó`‰à÷&9*LváTT
-≠EEôòNûI^z9ah…œV“Ë1›+“ÊÈOré~›ñ	∏a2|1÷ê£¥>»nÔ/ˇ3ì∑kÏ~Ω∂≥U´≥ùΩ}rqy˛ókæJiWº&ì ÷˘≥£· é'u)•dÆ¬A•ßÒ∑˜,ÁtNûÀ~'ONz÷ÈÚ"&-ÈtmX˝Döm¸ÁHÿ:g±/QºùbkgÿU≥ÍåÄõÍ†ˇ±ëß%Õãô¸úçÛa	4ΩQT¥≈*,Õ‘’››Ém√˘Éy¢±ª!~2Y‡xt<të|“¨6ëŸBH:Am¿UËb…k]¡^„^E«FÀ¥À≤&ãàêﬂ
-ty¡–z≤Î‹é€ÈX[21‡åÒínX9x|ITw”,_dt8ùOx8∫+∂3Ôbß©ãmsøRDéÊa#aöÙ0√j7Ös‚ã;Gûª„X6π&˚ˆœë≠Z2çaØ≤?∏K÷.a¡9Ë#óµC&4À‡öÓ$≈{9ÀÁ?˙>´ﬁø_ﬂJÕÃ»˘3‚ Ì‹ƒ∏çÒ`á8iæ∞[ùnŒ™´-Â:MMiñDy˘L¿ºÖÛ‰6Øπ€nîi”nYµÑ˛vm$øŸm™√	ÙßÖÜUÃ˙mñî'k#˘Õ|≈;Ä~µ6¢´¿|ØM,÷FàÛÕw›Œv7hÌ%§Ö]Í†◊
-·‰r r
-ú∆2-ûiO	è·⁄ñIÂHÏ……;`ıb¢?È^2õ’ókïÄ¿¶~-’˝µâöp®{¯i¬Ì¬-¢’ºn˝°ˇ∂’ÍË)/\√ÙwÕÙ˘;†o1:k#≈Ÿ„∑åçµ€Üıÿp/_e.ø$‹|VôÖ"9ZÏ)±b;*/ı+GcªÁç;ˇ8∆Î˚Ïòítél+Í€læØ∫.>€Ñ-rüÕn√MÀAﬁíª¡cå·Œf ≠'7`‰Õì/C45áC˚√”–x:çª•ùê‘2◊Ó¬dD⁄–=˙ö∞/vÛÜÍÆù†CËh&ú8Ùjö≥Mù>’◊∫⁄–c"™åçŒqf|~ûU˚˝Ë1bÑìê",Wõˇ°Sp|˛L‘ ˚Ò’·iÓ“~Ät⁄®†' ÔÖ¡(_Iö•jPœãﬁΩZ/c2nøäÅ‹ËÊÑ«…“*zyD√",}œ‹L^^€Ì´ü∂Ÿ>B¨HGÀø3ÿJ´á_N¢˜èr∫Õ”pl∞l‘‰é¸ÂåMÏ¯Åù''ﬁ\º¿¬~Ù=‰ﬂ0=∂˙Â!‡Ω∞?∂«+Gö⁄ÔËﬂ÷êF˙à∂ﬂ n°Gø≤í◊èú∑€j¬¶)ÒïÄq|1[0v0ú	ùÎòÕ~7éMl¢ekÄ∑"≤Éæv¬”n¡c˜ ‘Ê≤ñA∑Ö gFD°ñlíkÛC”ŸnÁ3Y$È,ﬂ~‘inœ∂˛ÚíÏkﬁ-rõ+¯	ÿ	≥@íDûîãÅGµ(ˇjÈΩpc6áÍ\ﬁ1Ò.Çƒ<BC  Z" ;;\|æÍg'∞fÒfÈ≈C«ëÉvÊ1ÑcJ"Ä\'xúÛŸÿûFqÃızzÎ§-0-‚5Ï≤÷Ó–∞‚mf˜Ÿ`-àÖWƒYπãf™´Ïò/†&Œôp˛ßAœ¸—SÇkeÛÕ‰t8‡˚)J?–s8,2œCaÂËy#∂\IKo´≠ˆõ8d}aÄÚ-à∂DN¢qÁ˜IÄ’¢˜õ‹@FXà‚N±X∆i†√ìÿU˚(#B\JcItbúáßI•ë®â€wx<Å≤≈;†	È€4W°¡rm—S„7≥Ü0∂t7‚4à^ıõ±mòåh≥®ﬁ≥ç√ÆÜeÄœÇX`±*˝0Ü’ämT@@ˆëÇ[ld¿€AÀ%4’Lì_Ö¬ÖÒÀ5©¥hÀ0ﬁtÄW„a9c<ÈtãGJË?”/8ÅË‰17
-≠Ú∂¶¡≠§‰£–4Ï´ﬂS¶zl&w∏U@nuÖ˜<ÊGÓ“,Nâ4LãW}Qs«W~#ÎﬁC6‘Y5È⁄÷5q,Îªì´“EÔV5¸ößíÌt3å⁄,fïögKEª3— ã+I£iΩ⁄%ΩöñÉœÀà»°IÙ)£rH≥ÛA–Æ“µdÕ6√BÕèƒÏ:≥=√K¨‚”eßBg˛\Ë%W¬√¸"û‘hZVl6eÊlˆByœ3pπìÒ	ôàÔØÉ™£.y±‚’êùî*¶Öú‘"GÏÃ:ﬁPÒAÕ8K¶£ÙÁÉ”ﬁmVØmºY´√?_0mø|3Ñu9n‹XœBGˇs£è·«HÉ+cHéë·1≈Á0 ¡¥∞ûkP™"{Ã≤Vπ≥J*&+YåuøïXf`weäÆeÑ}+¶&Æƒ˝9õ∆\øÊ…®.ˇ<[ûöÖ–hKÆÙ¡ãŸƒTÌ?¸–ÙôßDÓ<F≤»ˇC≤⁄¬§•[;[€’-ôiT*Òvok{√¨!·∞Ñ`q©–‘‡≈Í’]ù>j…‘û(hfrxå‚ËD™wÃ{òf.6›±ÒC≤:µ71h⁄ä«>+UÈ#-YU\Wﬂ√ºYh‹ÊM«x¸˘à‘1Z+ÆNµ•+∑„¥*"ŒòÕôçÿ◊™ãZB⁄¨±/ﬂoj6GDé|]‡&0zt◊NÏ	Qré(ÜâÒô›ﬁ‹Q–˜dΩüë-¶°1W≈‡â;íÜ?›6ÈRßº±âúê<
- îëOv0U¿v5+Ù	~^R¯¸xC†`nÑ‘ (,ë˝≥míÄHÔÉ)„¶nhx⁄<MnejQeèËπû•ßÚ∑u?Úd•˘
-≥v≤ç≠πÕZ£q–x˝®Ô…Nœ£ô}†™A∑-¶¢∏∞’`€y˚´Ì∞∑∂™ÃáÌ›iLëÆ√∂.Õ{™0SéÙI~§≈4ÈÍ÷"”fì| 5åŒH‚fƒ¨‚5«…ÉÙ[ﬁ¨Ø~¥ •ÁN¬†Ö)yﬂq!wA}ù38´rÿ”&[‘=E∞9äñ:C∆C]]Ü™¬Óßâ]ÓoE≈™“¬AIπóxnR}WÍQF0ö)¶†”∏Å≈ß$°’Üâ‡¸í8ÿHºÒô¡Àè«‹¢puZ›≥2l·q‘?-<l{à?Å©ÕΩjÏIé≠?,=∫°Çõ€© ≠OΩ“"^ﬂ‹ìqø€yU®∆◊st‹DnQLN9{0tØñ}‚∆s%?bΩ;íƒsÌ¨ﬁ‡óv-$ÜêË'ád§Hõ¿Ã0Ó)ÙÜCïfå?õôG0DùPUåHNa˛d4Y≤º;$•í“)•O#3av∏öKÜx8HÀc+:IÑß ò$![[R5gI™≤≤ßì¢vmåEÿ+ç∂3*)ÌÎ⁄H}O0ôp?¶ÉüÈ_„§¶€yê’ÆG{ª6Ú<O•õw?Ü ¶©L™Éöa^øM*M⁄c^úæN,O*fQÅæß◊*¸ìÃ"∆?È	)ìÂ˝9\„Òs´≥<Õ"IfúpM¡Ò&A˝À0j∑≤†ΩòuèÖ˙ip†>∞\8êªüQTôw? ƒc¯πpäË|uÖ“Dn¨⁄∫‹âÁ(Ã?¯√  “›9¸≥|ˇ{≥r8ˇ®îœÖ.˛À˜¡≈O˘≈O≠7œŸÂ7Õgó”≥oÁ…^-üømŒÔç`Ä
-odêû4‹•åBq®ìÈL)Tb¯ÜèÖ≈∫X@(Äh[á∏~é.H5Z¥›äIf€nqü:#.¥8à:√–©€Ó¿∏;®§Å˛D0ü¸jﬁ
-3t€È¬÷sÂ QC°CøÖ˙….YÙèDz˙¬+%ù!{d„Rî»ıi#∆ÁQ"«Nlmüåbz“ ‡á?·†§Z±ıKÊØ±µﬂ8vÙîi%†u6U º≠Gìï≥›y—ÆÒ™0öÍaë%üë.Mÿ˚îÂ4K,‚£⁄ ≥d˝2ï‰köì-Z‡Ω◊i?x{rFgPã◊•í9Ì”a{Ω!Á.`ïòÙ∏¿P±°·‰âa»Hkl±Xéª˝A°îéhﬂèÏ"s,∞√5ºL Ëb·Áã¢•O˜ªæK*™ﬁ5`ˇAÂ∞X,∫Ò¨å!Æ›	Êéä∑uTR#Êß¥Ú<Aê[y≠y»£¸&ÔjÚ\Ûê◊ÚzåS~‹Óû˝…je¡˘§—Ì¸§˛Äï+ΩM”„‰∏‹!ú‹:_D”E‰-=BûÎíΩß{W‹ …ÁM⁄2_ çbèçΩÉzuøFYx<.T£#)¡µ°#±‡j~Eç<„⁄[,°Æ≈Z ÔŒ£Bß(k>lî_u∆Qy+D√TRºG+1/	iâà°ºOFl[÷†TVtñµöZ(úø!r_ÂKÆüØîˆÊÖ¥7ÔÛ£ÕL{äõÓN6≤:fƒ÷Yﬁÿ/œVYﬁ{„M∞ï“ãêSª⁄ÛN¸+/Û)~√\Í<M´ú¶∞<BÌ!…¸Ï4ô¨F~µ8=ß≠uÁhßØÂÇÃ]r≤Pé_IõπàËŒ)C˙<:&sTˆ⁄√8
-á0I¡ÈH÷UÛf·áèÆ¿RQ⁄πSrØGÜ∑¶	¶y'†:'Äö˝⁄Z˜$Ω¶Òj˛$jµ¬N*8 >æØ(\Cˆ‹®é≈À"Ô(ï3Ü©µy˘˛†Ì=RSDÒ©Û¶óVJ√Ê"˚\Òküë§«àZ4⁄dÀáu"®»≈Ê»cêÅ€Isc¶•ø•WﬁwC[˜¢∏/ßªEØ)ó‰ÕósI&µAi“æŒ&]%õ…w÷Û†çÚi‹i™;≥›ç∏A5µ.nPﬂ}áÉ∫CˆèÃømﬂan‹é¯0Ó$˝Â'UNÆ&`ﬁ◊⁄öç˛€ã≤Ö7â“6}Ω\»ø«èñòq™d
-?”X2Ëx)Â¢_IKYœ?ôê3Ö†?ûo'€Ú‚÷d…iE~§∑Ωºå≥≈ç‹Û]*µ£¯E≠‹∑¢L˚˙êÚ©‡ﬁfùDe$AYhÓó
-Æ/dπÌ”'[Pù¬»œÿ≥eƒ¥•;È≤5†‹µïd(fpÿN1ñ)˝ \O£é@¯SÂ/‚÷>π_ı, {4–#m	á*`2\œÌ˛€?äÀ≠⁄ØI{œ_cÇÜ‹*}}sÎ+wsÓ÷Öµ∞∏Û)¨ÖOABaÕO{0pé≤r∏4kπÖú+D{m)G#Â∆/0ºRéÜÜø…∆∞î£Ò)ìï”í◊Z≈Anßû6bõ'QÔU{›N◊s2G◊å$>ñGD·î{e…%»	gŸëﬂ6cB≤§}µôläæ€£ÃXÊlÆ2#ÅL}⁄≤C{≥Z£∂S€›g;ÁÔW7˜vwœ?Æ5ÄyºÇJX,Ø0vï√◊lK[úÂµÃYßŒ˚ S6	i%ËE≤∞ uR‹≥›Xò˙ªÏ∏2µ¬åñ£Ñ≈ÚX©ÎŸ[{V KwZû\>N‘«äYkq¸™Ù´ô€mL¿$0Éó¯Z"◊åµã‡ıâ¡˛¯ISòdM<i`A,%nJÓd>Ö¿v‘æì≥£;∆¥”^6‹ﬁoÎ
-Xñª¨/•”¬ˆŒ∏á˚bâùõø&#-hÉJã¸ -W>Á1*ˆéÌ´√x?›ËbvËÅÒ¬ßÇ’˝ô$ß‡˘ò±±JR¬´ Â|Å›lò&`º∏∆#„ıáÏÕWÈ€¯°∂èòâ¡KÇä†0¯Oÿﬂ«aÊÓÿ—
-πò·	å4|”,qVß“ƒ
-Z"6˜
-∂é26√Ë@‹˛)gL›íüpPSÅÕ!ìÌN}«'ﬂˆyÜ(Ùk.>-zÃV”T¶
-ÛíÂªLÙ€˛‡É\ŒpŒ\«Ï¿q ÷^(cN]ß+1ãux):^
-:ÍRÓ}Íí¸æP"Ü	…~}Ô‡≠Ûè'≥™¥•Î≥Õ˚ jn4bö"tÄ7⁄Á≤à5é8‚ÈÏf±®ò⁄Ç¬j_ﬁ¿ÿ¥¸nÖ±‡^‰‰6≠x”√:+F ˙”Ë vä;<‰ı;OX˜Rﬁqr≠ZØﬁ›⁄xßæ∑∑è˘Üê¬Ã_¸ÙÚÎøoÊWYæ⁄n'˘<¸«ãøø¸∆ÂG¯p'äœüı#ö(>QØø}˘|Ωﬂ?ˇ$fâB‘4¥qÒK,¥›"C)Í~Çè@ât¬aüû˝öFAÌÌt;≠p˛†Z?ÊÌ¿Hæ~˘g¯≤ﬁçÊwÇÛ_˙‘å·[º÷ª¢•_¬3ˆáèBåG<_·Ïdâ1˝˙‚>¶j´€˚Ûç∞ˇ»AQ˝ßˇtÒ≥ã_Û&∂N{m,√Ç®≈˚˚&∂èØﬁ“#jÒ¿î~zÒœ¯x„$ÑÀ{˛≠nƒÀõª¸PÆ’føË≈G–=∫Öù„ à∂~sÒ+æ<p"Œ?·≥º¯Ó><ˇ¯Q–?F-|x˘uQÚˇ˙>¸ÂGózÒOTÓ√S9∏Ç1¸ü°≈xß%Z¸çOa§b‰˙7Ç«læ—ÑÅ5E+óãÚ	A≥a»®˘ÌË±hÏ'R6`z‚ŸˇÄ—˝Ωúﬂ¸[a0Ñ¶∆∑u é–so3
-∞Ω®DênA¯«Ü%Ã≈_Ã]¸ÔóˇÎ‹Âè/ˇ·∑?ò˚Ìè~˚„πﬂ˛◊ﬂ˛Ù∑ü¸ˆgsø˝{¥äa˘<a’:ø›«˚5‡gf‡ã&jæQÚÍÙFWçeÆRzÏ3U1ë≤V°ÿﬁÿr9Í4€√V»‰≈lì´†ûÁxå·6Évs3:>éö¿ù<-Îµ›2«M·|1+
-¶®÷B\¡?ˇ‚ÎÛâ\U∑'ŒòÏEt1Õ`õÓ43mP |Ä‹ÅõhÂêG√§≈
-≤◊ƒ47Ù`©ö/)Gón˝=JΩ'l(êØl≠–,E•Ä¯≠/W∑·ˇ’w∂k˚˚„4ÈV/¢ÎápØ5æt∞˚¡|ƒÂ>∑PîILtáPó¢ˆÆ±ùÍÊÊ;;’˙ót⁄0hQèÉ“ø”útIﬁ3≠∆Öè±©R¸«u#%—ôëâ∏Z`‹n˝%ÌEûg¿ï,⁄E≈B}ÅU À÷9°u|#õëª.ïxíÖ…ám fÕµ˛,Ø∫±µ]À´<ÿ:⁄,π{±¬MmÃóí-.Íwˆ6œ?Æül∂)£«Ú6ó=mÆ$€º°€‹⁄Öçﬂ9ˇxs=‡Ïñ_;^∫![æπÃ[võZ“MUﬂ™Ón∏£[9Z9ím,ThxŒ1ºÇy)ÂŸˆgÊòEÛªËﬂ±∑≥Ss:q‘ZÒ Ï¡^Èu–Ò—<çÓTœø≥_ﬂjúÃûˇË˚ﬁÕ‚.ô"…÷Lû/i{¶RøÁgÊ¿k∑)GéÔ^‘GCôØ¡öˆüz<+†µúà”íg6“£Qœ™÷ü”ΩHˆò<M◊v ﬂ∆ﬁ
-êΩ`¬€\‘m‚ ´†| ≠¶6ç“º¸d‹l—ÓÇ~WÜä1RùD‰, $Ì†ÀıÉ!`ÔaL»¢¿ŸtÔûŸ¸KKaÛ¢q≥bcU‚«7NÇ>Oˆd_Å¢…5+ÆÒ ><‚¶ßï
-ôûﬁC””õÀÙ„ÊM¯qÔ.˝∏∑âoÓ’n“è⁄Ω{áÛ∫!S--ñ™ãV¸ÔÊ
-=™mÚ&tn°j‹»Õºéıl¯æ‚∞ì«ÉBÛ§h'ö√$j∂FﬁQÑw”<°t“úÄjR‰Î0rà@µÎâzWÔW–*
-Pì/eJÓ∑ÿ†[G0å„ÕØV†àùÛÇxòá>∫vz<C&AûDÒ†€äû¨Õw1L6{C£GOŸæh˜~–	€,Ë¥ÿfÿÏ/Bbéb Î4Ëc]÷Ó>äö¨ƒ;%fÏ¢˝íqeû√8î≠¬ë,1èµ±¥Û7Å6áo√xﬂ√]√tpOº°Îı√«¸{"ˆGß{&»ôMÚë,∫[ç=aß#;¥zû—¥í=pÕ-S@¨Ç˝ ÅÒl#JÙ.®∑ Æí“	ì¥]”ÉuJEÌˆ›–(®g®,3ÈF“ÕQ0]´h[≠S A‹óÄÊﬂ0∆1ÏÑ*à≥V«¶8 Î‚ä≠‚
-öÍl‡#ƒs†cÕ"ˇ*·†Í¡Û¥Q]¢£1¥±s<MÖX4¥I#+G£Më≤p¶6Õ¥/º›lêŒ¿åÚsÉi•«E
-uÆ‘Ü∆±ˆÁZ∆m¥ªiJ&>[C^E®è°√’∆ÑjËÀ≈ΩjT}ë!ﬁ
-˜JÑG‹ÃCI@Ïÿ ∞‘O∏ôˆµ∞,∂œ≠]"õπCÅ©í1ï¢÷ËÇ`EŸ0/¿?Y—î‘a©PÅõwãQ—Éí=p.ÎÓÒÑeÃXEfî÷J.§^Æ|,„‚ ˇ≤tñ0–ZFÎÕßqÓ>Öì˜“œ≥‡'ô@c∑kÄ–c<0P∑:Kûƒ	òé˜˛?Ω˘Wë«<˚¨$RVôys[∑Á*øZ«V4(+}*ñ£≥^ñ-j⁄32ÔŸæÛ¿€BåR-bk—OÆC¢Ô›-+!HÿñπŒgn6±]V≥Dø_•ŸƒñYq™»#ˆE|,á∂*®E\Á±π†åF(˜™òhW[ãƒßu”]àß´ «Hpµ…dôè/íóçg–≈ÇZÏ·2–#!_zÇCzB>\îÆ	1=æ/±(—ö‹F œßw∆-&∑Ö )t{Ω«:∂ú;∂"këk∏nÊArÚD“èÑKç”~£∑ä«ÈˆU>¿â≈…◊„√t7?y6ÌàwÓî(xÇNòÿ∑´qÂQà aôùÖd múv√”hP|≈çûÜÄÑ#C@:ã`¿~h¢œÄØûÿ5JìË1^√ûw3Œö†5›=>ÀÜ†%m‰{eBSp‚MÍåìz∆ÂyO≤€PYñQÂ˝ù
-—5UL/»∑—íú=˝∆åôáÛ†$-)mzáÁYtïy¶„≈5Î¬D3£¯ƒÁd‘ñ;P¥J˘èòÏ4ÛÃûâïSÁV Õÿ:ñ…#$bzQÎ”¡∆à1qLh©ÁÑﬁö$⁄ÃﬂYê¶gw} à.ÛÏMâ"«f«ëxSR$II—%E2î‘-_“˜r…∏UKb,ô;<ñ ≠±∂Ö5øs•ÛUÙ‘0üm¿H√8ÏìLâùùt€<ƒ6,U/lF«QìüÙ>hÕw˚˙±·'ë!->r|JÓd≠Na$€TÚûvKûúX˘·ì^ÄŸ»¯Ü@°öÒ µz p#·´^,¨ﬂÔÿ\l∞5Ç€lQõ◊ÿê∫#W©™D:=Rôâ$zÙ]:≥|BÈê≥m0Eª[hdjzÚ,˘4HwaØGAﬁ Bv†
-0∑êTt7R'00ë*ÕO^◊Æh›(áéd(¥6íÁÂoÔÌóã÷õ0›ë9”óz©‰s»6Ï—óÏçv˜(hãU3<»≤˚ıxÇ%=Ûq/hÜsG·‡,tùgéòÙK˝˜ˇ’ÿNµ˛ÂÉZùùç’œ?~k´ÅËlì(7ö:F^7‰	Œ‹∂_“¢œ/)”Ω(”/…àJôQ)≠ ¶≤¡é%›'y;EÊd5V-‹˙=åó]c°Õrj/&\âÈË¯éŸYs=—>¢ÜÛk≈Íµ˝≠z≠é3»…˝E◊v∂ù'WëÑèÖ‚ÄöN¥í°zyàV?j∑ÁZ›≥éô√Qgs∑	⁄IæA”¡[”Â*õ>p ∂∑ÉñZˇˆœ-"Í5˙˙fµ^˝Ru?ÈX"◊Ç/XÏxà∫≥˝jßtMÜg–+J.;gŸ©òaõË◊ö∫˛,N“[GbÓ5˜◊@  ‹œ{ëL∂I5Íœ~ë'a©5∆É>‚˜ âÑoı¥ë‰Ñ…o_h†·§‡*f‹¥– &R·ç§„ìd≥ïÙ 	ƒÀÂJ˙zÜ›Õå1≥∑«i‘€¨È—i°HÂ«âÅÉÛ”:ä
-®w¿A~ã|âFg)ŒaôÀÂ“#∆ˆãËìQäªm“„ª¬n“Öïòñ3oos6§òPòH.¿E9≠˙J£m
-p-•ªÃiä^∑V∑“€ßÊÿ¿?f„ú•]jˆ«ƒÏSêNÈAº„q¬†Úc/<ˇ¡ß±>ˇ¡øz]Ÿ”·ÖÉ™Ò;g´É1¯≠€hŒovå◊aG!‡=.Ï„LW#Õ\bΩˆU5≤Ωï¨◊çÃ∆∑ñÎŒ˘/˚ö∏Ì+…dIùàWˇÃ†h∫Ç¥πX3òa/ö(öºzŒ¸wO ÕÛ2ÆÈ•$®⁄ë ÑèΩÎÏnù‘ƒß¯æõ—E\¬»7QÓ°ñ_®T>gFt… °l≤<PüI{Û"¯»í#¶èÓqigTaõ5ùMÈ¬Ç'[ZÙç‘tD€ˆG¿"y˙M±≥œ·>3ÑÂ,›åœZà ≈ÓÆÍô.Î≈≈4ƒi]·∑$ïÁ€ç•Ÿx-Ûcﬁ]¥éæõh1ı"ZûtŸ4öÏ¡º7<$ŸbMÜq9˘ö“W–B÷∏û4N`vt∏=0nb‚7}óy˝'∏”`Oâ∞if6‡ÙEÇòí˛Idtï'óœ≠Œ»Ÿ»√bN±+çYdHÍF˘ﬂ$)¥#ñ1_‚Á?˙kvØVﬂIã“Ô˜M7∑œå¶ëÓm&¬A66&ø›3’&/ë◊v—ó¬k´,˜œ?ﬁÿ∫∑ıÂÉZcB.õ´rÕ|]Ë6Hãj≤ÃkJFlhV(ú¯‘Ï¨yÙ û/Z|Ãõ~	Å˚ñSÂfæ{/qíHh9û˝t§Ûºû}~¶wZv]4ˇbq˚<çXÏe≤™üX·–Ãxî˙∆€·ÅLÙIIå–Î@Dö!‚ﬂ,CiO1!ââ>"√¸/mò†ËG∞Ißn⁄;LëïyN@1ñr	ÿQ∫’Zâuˆ ±àJÓe#≈á=Êõ1;ÌO1jYLQÀ<0d™£%˚QLvdá≥’uö∫†∏v'æ.›´J@∏à˝Jï3«¨õo=Ã7c°ﬁKº»h>ˆ´Ä]
-y£ä(ÿ"»£ŒÚlo!˙°	=‹˛WIæ7<ñüÍ^ii_o¿uı_>´ÒO„™úﬁºÅ≠¶∏^348on5ˆ˜Íxß&ÖdFﬂvÏËã¶%.›î¬Ñ”wYä´r¿MD¢yiΩâ‚3i¸ÔºÚáüëÒÃ[å©÷ÑÌ'ùjß5iL‡í÷⁄ÒÈÄZ+p£›¥ ÉÓv∑¥C¨.¸Ú«˝π{uÿÿe‹·≈πVÙàúÜOaŸÅEéO∫}¸y“ˆ≠◊Qg8ıFÜ˘Á_˚o^ô∆Ÿ6E˚ï”ﬁ•à…–o†@√=ﬁB’~?xZååF-rê1~€Ú+8»…w∑%_g9c-{rÏæ1	◊5¶	jå©Á≈/…w”´)]x‹†k›ânºÀDö“¡3—âú{SªÏ—å¯oç®˘ÔÈF>ë…äíX‡íË,ÅEßdMT†ê‚Ãñì‚õ9:°ZG—ñ+ö°KãÑÎ•‹\°¬ƒHπâdEBÎ¨ºÇŒ∏˛Ñ1)xÛ¶Ú‰M8ÿ“tcúU¥e„c‰vÏÿ8F∏⁄Örí1·üë∫†‚hP˚Óë-ßEsºÚUµ(É,¶iô&,gÇ3'Î&È4¶∏π@ téò˚√Á}(z|ätzÚ¯,Ï@g¿™§»⁄”b·	KΩ‹g[Ωy#+".uå◊Á`Bf ‚Ëº∆ûE^…bÙ,ß™‡¯«:xKÈÛ‘R8›⁄d9L2§Ün0!ÙÈßñ∂f≤‹%ù∫¥ûÒ†5 æM∆´Q¶m¶Aõ∂˝≤M€dT	mœ5ShâVt|åTçøBµFA,∞Óbl˘ŸÎ◊èÅ¬pÇg û‡Ld2@w˝3 ¸„Dˆ’¯cÈ«Â„æ—Ê˝7´çªy‡˙f[éﬁÆCyäÔ∫·†ü7≠÷µ˙;õ[˜ÓmmlS=ÏPÜ\»ÔÏ˝Im˛Ú¸Ÿ~˝¸[¶üñr™µw6ˆ∂˜ÍF≠© ⁄q^ﬂ*∂Å€å1ˇÛØ…È◊Í|∆0›:Œ ∞®≤ÁH•ÓW°%√rÄÿºç|µv∆Æ9∏πàhÙπ) 
-$˘õ[_WÙã._@î,œ´¢Øh)⁄‡¿hæX
-ú}^øÆadK@!˜b≤áµ
-dº3P§¢kù˝c—€ÓH‰¿_t$‘éÑh‘€ˇ+ô∂Ü/ûÃe≈±5Tr˛å°dﬁ17|iÊÅé:èd5Í$ûÃ
-’É˝Ω‚TπΩ3iícøQŸ\ö@õ⁄W‚‚49|JS†˝óèÇ˛¯sUÔRójÅä—&˚6Ö≠‘.+/ë «Ê<A>U∆zsJ·˜Z%EÀ''ìaœû∞›‰40„áØXœñ÷…†y¥¡É0õ≥8‹q…_AÍâvIá Îöï‹XLÍ∆‘Iöökwöw÷dÑ•œæ˘˙ö])c t≠©ûπ∏Iá>±+ ,@TπÑ©}|‚;«∑"	ı”d$ñw#`ÊK6g',í…[|ö¸∏∞‚…Ù1E6& mîû˙≈í\h‡[¥rºOë¶9ç*‰ÿØ¢∆ƒd‘º$Kí¡E›Æp#’]∂ªıV≠zÄ¶Úù˘Ä&Ûtπg4Aiq‡mï|˘s,≠WRÂeÖVÇ|ü.Ñ∞≠ÏZH*ª+©f4ñÚHp{#Í“Äh¡™TAº~äIÅ©rÖ´¬”ÓxqÒ·‰‹UBb1À0SÁ¶–ı-NPıy¡»…Í”We#EfëûtDHŒ–PÍÑê?´ÆﬁM¨ebÒí¿a¯âΩ„Ç[ÒêÜ¸)yXTh hø7,p˛üY#ÙC÷Î—j 4[ﬂéNù4£Á¥„gM©qçÏ‹\‰¿ô•W˜¢S,9àÿzœsõ	*j≈9Õ7\`∂¸40"Ò∏eÖ~èÙÉCãtÒ§-&[Z@Åp˘Ü}RtÁ¨|√C≠e@˚Ë6c2&¿”0‚/Ω˜WwYAÈd¯5WˆÇ«Œ¶ÜtVNPı÷ÓË(vRÍ?ØãI=Äd˝´˜Ô\3s:∏ôg∆…KòÀ8>€˚∑ ≈l3ècÆÌÓo5’7\M€Kª~Ìc6Ò‚Ì•]º\‘˚}∏yi(pßı‰ùfä7Æ~˜öÕ À◊iyÊ€w˙°~÷˜oÔ≈Ô_~}¶∞µ|&|õw/çÀ∏|È˜Kº}ﬂB—Á∞@Y”PÄ$¢ôFW·≈g∏üﬂ⁄€®ﬁ=ÿ∆`¨lc€£˛Âÿ√Òyr64Ëóé˚c/ZI”*æH2Ãπ”eÕùN+K'˘F&wqZ∑®4é◊Ò"‡9U˙i):fŒüí4ˆß¥Ó”}\—\l'@ì˙ß¨ô$´x±Iœ€≠5∏‡«$L≈|·<· OQ"i%G°b«T®F≠p'<≈¿ÊÄ… (Bh’V¿ì‘2%^^ïåDfÄFıãõ’wxV+#Ù7,JÓ&\§+πRn·∆Í¬2˛]Y]Æ‡ﬂõ´ï◊Àk´À∑‡Ô‚‚ÍÇ¯{Û&ŸbÊóWW∞Ï"4Çm‹X‰m‹∏µ∫∏óVo`ïÂ´+ã˜÷“Í‚¸}meu·µ‹+á∞#Bç‰Ã;˜˜[òeÎùÌÍ›⁄6i^A©‡ì∑”≈ªy˛ÒΩ≠›≠<æÜ‚Âí0—D^X®&†˙›É}™M7≥]˚4jQQÃyk{´v†jª°ÑÌ a«Æ√÷˝ïÖ.+£ÓDiˇ8ùﬂé.“cXínøzaªΩq6ﬂ≈¯
-÷…éÖÅÈS®Œ|¡ÿN‘åÖ˙ÑG–ñëÏ#ºè7LÁ˝ˆ©?|w≠héÌ∆k˝>2¢˙euC[∏Bû’éè∑Y~aAÛõ¥€$Ç*pÎ1zËVü'ÿt¶ÆEfü,N¬éõêçBı di;&dPî3∞Ç
-‚∫`¬úƒ˙‡CwπÆöQüØæ0W+J9~ã/J)„aÕÂ-‡6Y4Â‘õ¨ñ\Zx÷òµß’ç‘4â™Ên`…€<∞Œ∏ƒdÌ¡°â$ä	ëë5ÊöâØ(V?⁄ãö©‡mç:8#m›LÍtÌ/ÎÍÖdµ9∂Pdü√∫◊âq˜‘'À*2∫ ˇ€ˇd≠Ûg@+ÁK˘˚?‹ıQ8ƒÔˇä!`·˛ó+JydÊ>k¡÷ZuÄ•˚›X«U°üDÃ≥§÷4í=ö,≠~“JsH9“G'mîÉ≤ÍßØÏÉ∞º5D\ËÃ£ü2Ê;√™≤∆[A[‘m®NUc–|@i?Ù‘ä˚X åJäè´kV@á´ÿÜRû¬“ÔÛ∏)*L;ú’ã=a»lbíK∏’iEÕ0ÊSALm·,•6n_#òÕ5’Ã∫0–PÅÎ°/ßä¯M8∫˝Z ß˘,Ã∫”Ìüb∑H’˜√jﬂpnı˙çÔÅv3⁄Œä§ä∆gÑ- @CSº@â%l!fÇXAÕ•§`aÓ≠Ú¶,¶‚µû$#%L\ÙLú®|k˝›≠•y9¬:‘›∫|¬CÒÒá´Ú!Õû8=©ëãHyº4◊ƒE85pÛ dù€´kNˆB^çà≥Y#å ÆÓç/Ç.∆qB?m˛$ æ„1YµCµ“√Œª¢√ó∆]πPd|¡ãëØ¬<8ƒÜÓsk˚@ÒÑ}52∫
-™{ym'v3Ë˜3˜“±Fµ˘˛âÃîÈµÍ˙^[÷Ñ∑LŒò©æí¥Nü‚êÈb'afÙ8¥® ÖŸáü2‹ú–—7prFuÒëˆ+s
-ÏΩj_äû1√ÜVÄ"FkñÙ	6áë+TCÎÃÙT≥Œ~Ånˇ¬]∂“ä©b5ò¡:◊7√£hÛä˚∞nê€´v`Ø§HÅQ˙‡äÊ–˜ñt¡EãƒÖ≈ï“¬Õ◊JeÓm&˙H[¨ºVZ®,ñ +ôû∫Bà«ÃR=¨ã€>i¢%Ó0O¿q⁄Í“ÌØ˝ï`.ËÓÁØj…F˘
-%WfÅ˚eÎ∆	∂Vaµ>¢—©”∞|Dë*R6ÛZÙ)Å¶¬SüÇ[¥∫ƒPÄ¯w≈#=è¢◊A»\UÎÄ¨– ﬂëï∫∂®fXÌ¢ÍbâHuòÏëh "
-Mç8IÇ´-·y3Dkñ§˛Édù∞PGP|IxÑæ∞x>’•ﬂ'¶d1GùÊ»õ†¶™°è÷Ã∏|ê÷ï#Pü9¿€+Fî›áêO≤–ÛË9»˘#∑ŒC»4•gÁœÄ¨P:4ÈŒ0>	éß”˚beW™Ï*€2eT˘
-)€¨Ó6ÿvçÌ4ﬁ¨ﬁsµ◊d>ÁkJ(ê–cÒıçiÔO†{ ˘¸kˇÕM–<ö•ei`çnùˆ∫q!zjÒ¿7èÄ'k√BûöÀÍÌ.S„ÈŸPSzNŒ2	ŸπÎc:F`"3YÄ©Ã’é(Kπè]L&[˘‚¡WH•Z!1sõ2≠‘fﬁ‹˙ ]9‰Kv1Ω∆t›¶6¨2oI∂Ûe~∞ÈÎx~â(ZÒìsÿË˚‹¬°rÄ*Ωërjo;’›ØlmÛŒhÓRÊbZSõ©|È¸?Y;¡e5â…W^kÖ∑ex∫vÁΩ»Æ≠ë†Õ5⁄„p:.Æ›I◊ô8¶{ô÷©ìT"∂Ωy˘'ÕıJ æsei¢ÆC+2ñ¯dJYﬂΩÕ…ÒõïJ¶·^Z?7KI[áFf{ôV{S(8»´]K≤&%†ˆz…X‘R)©ﬁíd K⁄C“_5¬ˆ±Âõ7√v.8îu/˛È‚Áøºxˆ≤6LÕŸﬁ+íNΩSö®bÜÂî∂µ‡∆‚ârü¡e∫íºL´§(…≤˚pÆnı·\4ÆUïG˜bŸ‘ nπ∂fa%î¿qÃ§∞íµ“H™Ñ†rmmçvÇ\-†',…6LA&©`ç‚Îÿ€*í≤ÇÆ-ÌgÿHYiÍ}kpò⁄|◊∆Ä7ì≤vùñZ9¥‰‡É*Æs„*D13÷ì…f"&4Ü_”™6>ïvvDË$Ë¶A3û	<‰_¨%„·zÇL≠›ŸbÈ¬5Cj]ºm…ùìíÊ±ç»=∞„rA
-¡ﬁPfì≠R£Oy!”¬Òàj]ñ*„M–í∆j¨Áy¯®<:@ln›€ÇØ6~t≠{‹≥f4Ü≤õ)â^¬H	øó®”˘–Øç¥≤Äò‘L-ø6
-oX˚ñHô◊{h§Tõ–Ü˙>“y¥ñ;ÓÁú+Ç2Wût€∞ækπ…*€ŒÇwﬂ∏9JL¶ò.†ﬂâ¬>∞n
-F∏Yi¶° ê1”}N‡ñÄôb^K9LË»« ks˘Rw8@…á;œ;‚?\Ñ∑≈ˆ ê©ΩR…>‡:bÁ
-m–8MlgOk	ßïä$2â∆‘£ï∂ˆB‹Á3´ô¥ÓALL{_rd@I{9ó
-Åk&ı %	ÆXeÀ˝Ÿ≈ T€–ÂπJF@ıÕƒÿG/R ”U“:wTîüïé ¥¿©ãL5Ùï˛aò·hªﬂË'gX6<CçeÑ1™-ƒä´,†ÑU˝Ä†ÆÜg™¯R¯Ù®Ù[\°k{?Ï«QåÕ éŒi”›¥[Â3ÙEÎ<™äg®ô¬ 4Éê;bïx*z$‘˙(db„C5 Ÿé‘*ªM©¯∑B›KËúfL„uTº˘º©ÓáÒ∞Õ◊Èk™—â_¯§Gi?JîË®U‚^ÍÜï	Ü&Æá«‘dÉ˜Zò®
-d”M≈…Ó”.Œ6ÃÛQàÏñÁœ€˙i±$$ßÂ_QÀ5z3i™≈1"}µ¯Ó¨˙™ÃOÏ›çb9ÜìÊ^ZåE$ãî:o≠∫"ç–€àêtÍÂ~HócaräÔ√˘G%;*Æ K^ ^Ìƒga_e"4U}¥{å÷ö‡Eµ†ã»≠ˆD00îÁ‘ê6”1ªêπmÙºÙƒ jû&‰∞¶oEû©51$YV'T8#e:ÔçÙ¬\ü`6BOÎ&bÃ	3∫˚
-Ÿ›º]≤»æ dÉ>D-Hcâπv¯8l”I2:§É•z≥@(=£ÃE*Å4-Ô™òÊv[æÌækæ¬üŸ È`J°◊‚IYS|sÏµ*ëÅçƒ0m“ ]dÌ3Ú~âS£NÎmyV92*(¥Éã·A>:“Ìqoâ5<ôOπuà¥©í∏ì∞•1ÅuÉ
-;il'1úùËß±A
-è5∆GAC[? ºpO FH;*Õ WÌ"w÷ÿÕä£>u,…$Ç1èH¿Nù:˙÷O?|˜íÃqORê¯‹6ºwc‡ø	$^2≠Rrú/;µR≤á+•W™üºQGûuΩxwŒ?ﬁŸÉG>ﬂdÌo ◊„µ;◊ø®Sèfò˝°Vy_Îî¨ŒË¢„ƒv4sVÀ S¬Â∫gã‚Ï”ã~ÒTlT7ﬁ‰9ëÚUÙ}”aΩ3YÖW<m&§Ã6Ãº,œ}‹/¡ü9≥õ-^|2ÌA"2DäßÉm£SRïÂõæ%◊Æ Œ‚∫æ˜csU_« 3¡åÚÑnÁ^∑9å◊F°∂óKPÓ≈$1_ñ)Ì·¢@‹ˆêÖ`Ñ»§±”´íèkH~k∏¬´¨ˇZVﬁûÄ%π¯ÈÂü]¸Ï‚_æ~ÒìÀo_<cóﬂ∏¸àˇ˛z˝èœ"ë~˜ñ`…/I˚Ùy\	è∫<VµOdb¿g•4úùn¶Åg∏ ±˘¸„∞?àöñ≤e0	Ëv:±ÉiÊ∏˘Bô«Ó7äœ[hb≤_h2ÉG‚0à˘1∂Å∆;≠µ—5ìrOøÑ”µï•dëc-’®x}ìg
->K`≥¯–M≤˘I®2yKhóoc°÷V+Â%øâëΩu˛qù¥Ôà‘‘£©πœµ;Ö1ù¬ìz˙ë:Áj°ò@NøÎç&ΩÈMTô¢ÍÙ5–£6ï—…\Õ˛KŸË)˜$~»ØkÏºµU€mL{ÒÎüá9É†¸Î⁄∂A${UÎ—€;\ôöjΩ±íΩ—íHSºäç…∏ d5∆üÛ∞/œ!ﬂUT@p~„y˘Ä8¿1£úé{ızmcﬂ››	cΩjd1#Ç@eö8c©ë∆ÏµÕå6fÓ——∆ñÈ8∏jÜÑR/I‰ ¥ó$åHÇÈß≤ı¶ãÙ∆ﬁŒ˝jΩ∫’ÿ€≈≠≈¯w*∏õ÷≥˜Êt4±qÀã˜koï$«IfËëò›ñçD>¿ü˙É≠–§M#oÉcÔ ˝ÔáÌ â]i !∆ñí&£ûƒfNJπ´mã-¨ÔÊ¯X®‹§Ù&#«áì:Wwa»?¥y‡‚bVvè	µ”2ÎjÙç¸èV”"gEµu‚ 8Üœy†π¡	¨Ê£É8)/ÛDæÿ7âµ>¯ ˇ¸kïüBwîgﬁ0…ûÅ87ÆÓßöŸM˙;o@^_a◊BkJ¨S•„8)œÓï®i"•¶ß¢n⁄î?àœ4°Ï9u…€®˛…TdÔ»+√ÙYﬂ•∑^à6N‚gπóì®·ﬁzr¯Âl('~ep}…›ÔÊfGêáè‡YF0fãï\®»~G!WVÏL)¨‡hÏIõ& KöÃ€2Ü≤ÀD˛ï ;∑wïp¸Ä¡˘Ç„µÆ fU<ø≥vü
-≠Ä~∫ƒüí*@[⁄äπ∫≠0,∑º·]&£+»IΩŸ#…eötúG˛Hê‹7‹ÿt˘eNÇ{ªy8Ur‚$)®^XÏ9áÂÊ^ÕL=¡ÉŒd0eﬁÛ$ê£≤"w„/O<à‚Eâs∑(Fß9∂@2kß›Aú:⁄¨ÛüGÈ)É2*.ãYYÄFv ;êì»M 4.¶Y√{Õ‘«/íﬁÕz∆ç{ÏË:ùËf›∫è”»£Ù0{ÙÔ⁄zg*√sËÖZ4∑[@"q;Â/ÖOmãù∞ÉQ¨#,G([f∑è‘ ˙%ë·‹—\`;ç€Dªc÷lqºú¢L_7ªŒrXb.Ä9ÀˆŒHN D˙>4ÜGßag¯˚º…ÉÜMà‚ΩnÅúØ‹≤·/U‹ÈIoÆ≥^Ÿ\Ã•Âú√Â»M±å˚¡Wœ¬∞U{ˆõQÛ˜ﬁJÕ≥∏Z˜´_|ªV€|ß~∞]”añ"∏ˆﬁ⁄ˇ@≈H Ÿ~Påt˘·Â◊Òﬂ≈3Év¥ru∑¬∏πöØáG›Nç‡ÿÂáÏ‚üjì~Œ.~…Ç«aûø;:|à)wŒÇ˜éU¿$«)\ÿy#‹S~«~@„¯∆Âw.~y˘óFÙ'Âdeé£⁄nw;¬íÉé|<ãVå˛}Ω~ﬂ”—¥∆ΩÙç†M˘-˚é·‚Ô.˛ÂÚõ?Ω¯G|Ó%§˘ Ó˜ªùnßQ7à	∞5dùÛˇÿ‰Ûüºuÿ<ù≥Û_t`ÅÏ≈ﬂ≤Ào≤ã_≥ãﬂ∞ãøgø∞á◊ztúb∑rxˆ1º_^¸Ê‚ßóﬂ0á'Ûuòk«‹Ú|tÜu˘mv˘ª¸ª¸ª¸:É©'¢U9ED∫ë¶(ˇ`∞!¯y(~Æ±z4emÉ◊
-hs\ºM&KÚ'ö·ùb£ºnñ'*F”hF¸<Ù5+åiËC&Ü(˝ jÿÛ‰õ|ªÅ¬2å“Å©Ê´‚ß∑˘—X6.öß&∑ZOV±á≠V~ï¬%} L@ç9pì#π4$¢?LY>	D ™F3‡—khŸ)H G  É°~b¿∑àuõ\ˇå±kÆÇQTƒ®É$vl0%ç«∞Ë„&b¶•FëS(4å˘és˙dæz(C£÷ì˘Èb∏,\ÿY•¡B3N£`»0˘dM&ﬁ;ÓˆYﬂDÙÉ23Ì»øØ_/*^àkÛ˚“jç‚µådõ◊Øﬂ∆¡ÄB√ÿWFï(+#U‘¥ïòHπ7åO
-4â’àOcï˜$gc¢e5/E∂a7è‡¯ Ç‹ËMv4C?Ì˙˚âb¬Åû…Ã÷èF≠©˝2Ûv4K?
-%∫˝MƒÅhQF'Úá$:F∆∞>lá) NäX?6Gû‚ÆèÒó˘¿äE	àl}≠€ò;ÅıÒyøåÔÿ"®Ä»˙ÅlÒ–=Ôwá@π∞¯dx|åQÿB¬ªÄRzpÕ\ÈXø4ÇC[ÚÚ!›ße·‹µtBNÉ´PQ§›Å`˛õakõu;!OÀ…ê¨-ò∏†h‡é8b#ÅKÜY„#ì≠z[œ∫«
-¡ùZTcù‘è)Ì'Üßì˚<~hı5ÏùbÁ†_cëtÚ #H·É€|¨èãèXÄJ%$ò:– f(`Ä“6ß¨3©µáÂ8NÒñ€√u—≈ÿCs¨ºå±ûÏÚfæ+—a∆…†ıÒô¢7£∞9π(◊ºö ‚mç˜≥=HX∞kà•9m`Gp[¡©æäH(p
-Äﬂ˘dÚ@ıƒ&`MYëÙ$ó¯e¶f lπÔçŒºŸhoR(ÛëAµÍÉTﬂQÀ≤-'ö¬™FîÀ§j $›⁄[L™á+
-0›S0›ÉÍO∆©}—„Á?œze9hx,Œõ≤xñ¥Q°◊Î¯{¯ˆ„µP;„Uh^ò√UÌR‘M©ï‘ém;M≤éYXb>⁄é^–bT2õØôU]æ+&jâAÒJ∫ñ»˙´Îπ	…e;™°(∆£)óÜÇ¢—*˚«B;Ú.æóß∂éﬂé'¢ªŒÚ´´y3]„—1ª;ÉMÿã#›ºÒço/i˝À('~ Õ4B ô{]¥‹P©4O/à3=Õ’(º™âà÷Ê8Ô‹çõƒ*0D
-pN∫g ù.íŒ-%Ôww+Ú yU5ØõÃQÀ2:‚T¡ÙUÉcêê∞>0MzM?”FÛ$<	˚¡˚‡·›=´»ÈT…µ]Ê"ô%î`ñx§Ü+P¡ia¯Œ™?óKŒ£ÓÃ´]êA≈ÑDy;<x4º8»™åÿ<r‘ØJQ[vs^Dnö÷YÚÃ`úÍLZãîî—uV8ãÑÂêA⁄RΩkFÆí≈<mË|(	-:[ÇHçpdp∏¯ ãiM4•/…êb”©ÛKÿFR∫¶§2ŸêŒÈMhFâ0dvœdodF„„√Xge†=leÂ°Ÿ{∫ZSh	tKã¶jÖ⁄ö–“òÑ∞“é¡ùÁ8a0e08%l7nº…‰qñÊôÛ˘ï(ôZj„êèp»˙Áü†Éåî,¥Œü!Ê=Ú»)M`µ	ã%‘Ø|&Œ?|¨	ƒÄ∑#€Æ£R≤·%5ßºçº<ê“™fZˇè¥~ø∂±_´ÁKâäØæÛKV˚„Z}ck£ñ?Iú
-¡Îa¬¸ äÏwö»¡3í2µ¬©≥I(ã@#Aï4…)·0l”O±ÈN?ã3Y3ò*Xa/-ƒœ¥êÇ˛#ç∑>úTü‰Ω-hû•ﬂdÖö&^fìnCyy¸a≈ÒOã>DúQÙR‡πûj Î–∂9˛’≠íw›Hsg§¸*I5å®W2"»OK8¢»O∏áä¶Ï[Ç€Ì
-f¢µ)çå X2-∞ÔÓ∞è¡b“öÒñ_WOÉ·∑ ç^[B„<¥ /,LgK†£≤Y∂Ã%ad∞íö˛éõx⁄∑•Gî∞`Û”j˝ß‘Ù{ÏRlí:o	„ƒ©≤„Yìûêbñ ˙c6M7êÖ•	›¶“ÿNˇ’˛„ Y-¶3∏X“√@˝R∫°¬4€=1kù˘!ô«KÕø≈≤Ω¯úÍ<˚v·÷Uw¡Ñ¯«2ÇæïD+—∆Ú≤m»O:˙∏ı–°TSZÒY4“ä}ˆˆ& ÿƒ≤á∂næY!’>‚!À?’8Ó6£}ºª–Äê+ã1ı[∏DÓø˝3Äú!œè¥4j,≈FV‡÷êxàâd”1Øu W∑i¿≥"g]È…m”ÊÀ1I—'∫ELïBÓñ7©ôÀq[≤n:ÚΩ,û[…I}rÕ4&7ä%›å¡Qƒ◊ı≤+j˝¸ÁM1´!$Mk"%EDÕE‰à1å«Éw9Ÿ?IÏÁù≠‡Œ±# ·œÉÖ√Ñ_BXYñÉ<û.ÕøKA†ßÌTbÀ·GÑd◊eJL~AÍ◊Ö¸”èrí@9ª¥…˛x¢ç%Ë6{ü/ûä¥èKñ∆w»èƒ›¶¡ ¢$”¿˚òÙ<—ëÈcu¿=`*•Öï[•õ+*ê>Ô…çìû∞tMÈO∆N˜WxQß‘L∏F.,«)Ö)’0?õ~[p¸$‡2)`ô ¡É´¨~Ø±j˝¸[olø4¨öÖD'ÛsS£DÆ¥Ú†D¡á•°¨jq◊ıEA≤ÇWGFä˝ÀƒF4Íí‚<ßEG/≈Å?>±J^¢ï˙¥ìËDêü2z˝Ÿ4Î’êîoËôsµ#(ŒÜ»¶˜DXIEz~r;É;|˘º†…µzI¸O;ZY‘´k•ÓÑ¯6æ 5â£„ëzßÀmuØ3ØÛ©È{∫∏Tz≠Çˇ/Wn%Å…Îøë›ù ÷~vLhEJN‡DÔn3p®<!/–£^'M]øÓp|£ªÜ->|’·õ^5ßá.˙cºgªH ∂˘w"äÖÅ›µ–l%K∂}Toª"y`u•‰ìÇO{êï?'çŒx˛—oXΩ∂±∑≥S€›®’Sbãx'ÈwŸn! 4X[ÛOàë À©∂Ûw0lE›É~ªX}'à:˜˝¬¢¬)èNC‡ïN{1&F⁄Ó≠}Î…A}rˆùRM ;h};˙N™48˝ª1{X∏Åå Ú`£RËTaSã~‹kt´≥a>Ív–-¡–1˝e†3˘nXIz´˛*uÎ”ÌˆxO¯çííñ’I-Z“Â!ßèëy!0ó›ﬁ˝~∑p#¯BQG Ksõ8	·ÆÈÁIç8äÜÛ C‘^Ã:òªUm·ÜÆœ∞Ê–≠EªEßñ\Næ{úÌÕ/®∫E:lÏ`ªD¨ÚŸÜ”
-õ›!Ff∫⁄àåÍ0®ˇÒ_˛)*˘6ˆﬁ™’˜_|tAØá
-©(éÉGW†›åΩokª˚[çÂìH†q‘ß™qº5Zú0d≥%ãûH⁄Ï˙Z¢k†gq›éó*É∞úHíîccÊ»∏L\˜Ô?˛·álcoAnko∑1ö‘˛CVx5YH9˙>‰Kb –Ñí®s‹ı/˙§•Ê5*û˝◊lk˜ﬁ^„Ös ÒÿïÜ#Î“Q˙˛XuÀäW˘Ç#Ç€+çL÷≈•˙ﬂ~&≠”¶9>ŸªÉÃ˜1™xH&úyÅÓ8})û[b@¥[ÂAó¬ë#ÎìÉ∆¢„(Ï#-Ûﬁ˝/œˇ3Îü?£h∆;¯
-òœ=Õò˙>ÌWùì		¨®67ŸídãCô∑3|ìà£ŒZ™úN!)˛ï+ÀT+gËı›1p¢)átVŒ±pÂµ ò8*∑'ªhX^√gÄK9C—òb]LÊñ˙µbwg∏9…„ZE∆x,ˇÍÈ—ÅuE¥¨óEØq◊,0µîSVfHõDí±≤XZ∏µpUQ@ï
-2Bê:í$∑:hOª”RæöhT75i˜&Ï›x,pEnΩ√Ãgÿlá9$ˇ›˝¥à˝42∞…√t`:©gåsùΩæÕüR1úÚ]ïc≈‡œøçµeƒ∑±M˜Øç¨ücÉXÈÔ„KÄπOÌ'cìÄ•‹gcìq‡ÕàéDÚhö‰¢Ω(õÍ≈TÎ“n!÷+¶im$ø˘◊,mU&ç◊¶Ì!WÕw/<Í¥zf„øR∫€ø≈UÑÕŒqõ÷D\∑%õÁ3¡ﬂ…<÷Gà∞‡<rÎ4%w”Ò|¥4∫L
-k8yﬂ8]gÔ◊<KlS÷ñ¯∂pR«íÇs@EO‚ÖÂe-aZàÁI3Ïã¥/ŒΩπl^dûWü§TÌ·πÒÃëM5„∞Ô∂(Hí˚A'lø–Lù˛_«kM˚¡ësäº7T¢Gìèπ¡.Æçånπ∑ñdÍíHe>$ÔAt`	ÄÏ≤∆¨ßHú§Ñhò]´€ßLÖ√Dl˚1Fàãwb'°UƒΩ(D©Z3Ë!4ZRøjùIîÃ%ﬁÌ‘1$ ”6£ °7j
-1ò∑˜ª0Íõ˙Ÿìø¨;£±ï`á_Ã‰ñâ©+ÙÔ¥l?gQ©ióxë|açùEÇÅR˝r´·[VbŒ¢√Uv≠áùL78Ï˝lŒ–gˇ%nh÷h9!fø.#¥˛ÉÙŒˆ+ÑA7›æ⁄Ä˜[Oôò6¿çDf™cA÷À8•5öz‘ôoö¸:ìHÇôz.˜Ç!Ó∫Ì,¶\@s\ccjdF“1îWì€î∞yåîW±2ﬁtZXÑQ!¯Ås3
-ë§js÷Pyµ∏≠Qÿ	˚∞•ØË1ãUD
-«¢â€F	ú{°Xn¢IºÙ	63®≈ÄY∏Å °€»9‰∏Q	Á˝ƒÓË°kndöÂu
-˜·Vy÷Cª€òv&^»#ı2$öë,\`T™ûÎ5',œ¥ı”*†ı7˙Ó*`Ã8bÙ3rhÜ<RÖXÌ±X«Á±°’'Ã¥9H—J±Ñ
-ùv∑.ªcö≤[ñÜef‚ÿÿ∆®{_aœ+vÔ†ŒHFª_´cb]nøÜˆ|œø˝7¸ıFı>JóÈµJƒ[=ÿ‹⁄KÂë,á‹mŒ5!qÂ¥ì„äaFÜ⁄OÑw[Z4¢8ˇ	ÜÉÆ=óG˙ÂÈ]„x|$:÷◊Æ)éXÚv¢,6µœ˝Ò+‰ƒÎ‹™[orc|ÓéñÀŸ:©πd;'A,¯Xª!ÚÂ-…;è£ƒIÄıÛ◊≤‘Ã~_>eoπÚy√¸ÍëY¬ì¡Ó<9å≠giËp∑VõÂÏt»t˚,mÊø¿ˆ˘-∆µ'îÃ>Üãˆ›ßéM∆/M·˜ ‹^Ü(Eòı≥ÈŒYÍCfÕ3!T´‹2'¨"å+Iáñ|H©À…\‚πR»ÀÄêãg8ÑSXAaæ¢E7ÜZ%«Ï™´ñØC\-ºøhÓ…*[te1∫aí)^Y4OöåWÌ±µ–8%;z7√”⁄2é6fV·¶m˘ÕbKöâ	8éûê!kAô…è{ïf8ïÍ»„6˝¡JVÈÊ»êÜŸÕ	™¿jKRÂoÓ»;˛6πº∏ú°ÌYâ!„÷`zÉïè©©-¿µû√◊heçuÙV+
-uö‹7¬ËH<o®	≈¬ùQS5¶‡x,‹í∂44ïîF“ÏÖÿ≠‘À‘Ωw'ﬂ¶+ªŒ∆d˝n‚u° É€†2f "|∆—Í §Œpy‘pu–üˇ‡ø”?ˇ¡ˇÃ•,lö—‚b!Ûy∞ØÏ∆A:Õ˙à)Å5zu¯∞c6	êÙCCy)Å^Z‡\¢j‘`Ç4òP[ÒHçà÷—9üf<ë1\!≥˝©—gÜáë“Ù≈òÊ*]1ØcL§∑Bf”(vm%âÄõt9⁄´·”ñàÇ∂∂ƒ»p§˜Œy	ä¶{˘·O!ˆ7OÏOÚ0ãÁ'ä$_o0ıfí*ﬁ8| §§˜¬î˙óI˙n/unôì]ﬁtÓ™jC:KóÉz""4ç=sZ¶òò°EMr˘◊ ´b™´È2ÎÚ0t¨25ŸÁÑöVo2aÇPØ3¡Áﬂ˝ÅËïÀÄçTUU‚i<ÂVÀól UÕY*Ò<¨≈¢ˇîπ⁄=ÎÂc[ï;ûé≤Hô¸ÏƒÅ87(NwcøZﬂüÿ≠ˇƒöIqj›#ãG4EZ†±™UóÏ∑ö§ˇÂIòÊd…3ë∫Ï¢)Î¯ﬂ∞NY∆©"CÀoˇÕÄJ…‚(û◊ZéK±s2§∏"«ûÃèJ‚´`^∫±ªÈ ìK=6\1Éˇπfo»ﬂsΩ”L[X*µIsVc~√Àã≈úC÷ûv;] ∫Î^_¥wïÚ≤∏∫¸ﬁÏ/ˇ<-íøtmwÛ≈NS≠”˙îœëºî≥§ö˙ùû% 1ß<Iò.Îˇ?G/ˇçƒ]	Tˆ5˚rÑ'”2y√"X¸ª‚•o∆HÛ©}‹Ã`Cˇó©z–{0S?|ü†ókz…´0É0¡Á£?)cÚÑxU•·ƒ«‹2£ì ¸[Ña“¨3w4ËÃı˙‘yj±s&•}Ô_Y£zVÌçj}≥Vg◊YÌèÔÔ’Qæˇ≈∆ﬁÓ4ñ£‘E|¥€V§NÁoÌnÌoU∑∑I?	c	≤“bê3lmﬁ¶¢›C◊~6˚∏ã:˘>¶k„ë¥?£`Ñ0¥∫Ó8;jwèbO7Å∞G]u†Pk¯§ÃÄUS(ãåõwﬂŸ≠Ó‘ÄâŒ	≠Ã›÷EﬁÇ≠Ä"Ú&B™1|îÎõ¥¢ı–÷Ê›ÇÂ‡ÄÅÑÓ˜ªßQ
-˝0∆Ù _M(r˚·{(Pc≈∆
-b§%1	ÒΩr∑3Ï=Í-8≥aãú[ÖÑ@˘2Ì'ŸÙpœ˝∆ „e—4PQl˝˝Ä$ÒQ+ß4ìºÌxÿlÜq,[Ö∆
-NÀVÒ∞ﬂê`Jï	Û+‡zŒïpXA¸¥”djΩb8
-jÌ°B”T‹∑éP´}Ü.X∆∫ﬁûuY∑∞uT¶{?†~Â‰PÔ}÷è–Çœf§‹uó™X∆Â88]¶”ÏûˆÄ@
-ç«≥Ä\kI‡ÕÑiwÉñÜ∆⁄n|)|˙È,Kˆ∫t;Ìß9K[Õ‘øD ’vªêCzâ*D¢_!QµD§T1ce˝Ü≥†÷
-qª4∞a»÷ﬂGX„„,(Úóm6bﬂâ:QUÏH√¸~Ê◊…∫	‘ﬁ:Û(åX‹oñTLõÊ
-1Æ˙∞›∂mÖ˙·1„>ıXõOÿfA¶IêeDy1Ã
-¿¨H£˚<%ÜQ°bnÖ7'Ó«hÁ‰éTõE	≥4*ÅÈIìí¢ì˘Ã47ëGé:í/0zj¯ﬁ0å*;‘Ω>"ÏœÊZÿ@π√∏fç√vnà$≠ı‹zJv7¶µK≠=–êhñ·
-Àñìô8$Ìi‰Ê"â—€NÉvø¢iæ–RÌ¯C6eê,‰VJàÕåß8£XÑ:ßHÙ«Ì.&Ìö_©18êH◊fæ˙ºÇ,hqŸ’b)W…y¸ adF1’¯ÑU>ç:Ö‚mŸ<æ√Ä;3l|Ö;ãË˝’5wXû3…]A',‡ﬂ]‰Qw—é‡y◊Ma/†B3|»¡å:¨ÜO«© DKìZ˙c6GΩñQk_ÑY—‚lãÏ4GÄ3åÖ$o‡&€zìAŒ›RVÇÙ6ÿ‰T.9ò1≈X@0íí®ÁÅ∞\ò∏˜xå∏pmˇ—L˜"[;· hëa´ÚÛ⁄¥Q¬zVÜßYÇÌ¨Õ6jh¬e9±_Ì¨DT±ù‹ì.≠!4{ûê/qî„Ò⁄È*+:]e≈Ye[+‚Ñ;†ò ⁄3≈îqÙîl‹âTî‚•cÑÂ„.B! Tm/¥9ö˝¬ÚTmP»¢eÖÀÚ∞Y“Ädå)p•ââÏõV¿I+¨±⁄ND3¶ P‰ﬂ[h´ÌS¥hzY˚ºË[niº∂ö;âZ¿Qôf=9ôﬁ÷9ZuU:8∞B†–E≠Å‹»ˆ«äŒ ·#º5_X®T∆ü≥ïjZ‹òûS‘+/ƒdπê¨qﬁ√·ßÀÄoM≥g√à™Yç‡¢*¿«váVZö7æ3/ÄÄ*"&÷"-_ŒPl yÁÏíäuiYk.@…˝–o 5X˛⁄Ù*æÙÇ=[üù§eôD-ˆπ/“…‡˜l≤Ü@•±8å`_ÂÖÛ«÷7á‹Ï˛Ä?ÃnùJã÷%›úM6œL7ãe∂hgö∫˚∆CAí÷™.◊¬yÒíÈo‹€ª]å∑ü§¿ùq≠Êé“$€2Ê©3‘•œÜÈBnKé˝⁄ùëDOW0¡º¯“!‡Y;gÎäSÿyô$è8=<â‰å†xß]0@/∫SÌ§hß⁄^u2*ú≤#0ØSxy¸èáGTË‰3ª^&è§e‹m¢⁄©"e£¶ﬂ*fpü*Á÷Ô>∫ÀΩÉ%F¸]±FÍãHëîo)ì˜pHç$eƒ©∞7	—á0ÌV‘ÓNe›`-Ûxœ#≈≥J4OÇ‰qÜëI(zgÍ$ä/S!ÿr%á‰∂≠ïÒ£‡Ï2	Oá{ÀfﬁàíÙˆ¸ÿõ¥Ã¬´+lS`+Òá¡ﬁ	,û†∆^ˆnÌéæPìgC2y| ‡®Y;„Ñô\óÕ`“ ¯8â2ˆ3ò4~G‹#h˜œ“G`,T≈ª∏cx˝n;5=ä≥≥>äo´O°ßòÕ4È€aU]≤ﬁHÇÎ\)…£∑RÚúvHè)√Eà—¨Î "ã‡É˚-s´û‡ÀEO ’Œﬂèn‰VmØíÀ¬®=≈ö¶±•>Æt6æ‘≥;ÚNÃÿá≈[roeÌC™êe⁄Ω±9/ke≤ˇüÚ™>ˇÓØ=Îgqf'òåhç_ –3xAËR8™±∆÷Œ¡ˆ~u˜¸„öm*‰‰çÅ”å®	ŸZ†øß;≈¯y)ïOü‹≤M>ß],w´≈26ÜÇ—|ÁoÿŒﬁV“vj$.ÙÇ‡∞+dôÛŸ˘¸#ªôtˆHà›¶æä„yıcìwgp∂!±y»T˝øjÔòª{˜˝∞zÌ^∆ﬁqvW≤•ñÒÿKﬁ9ÏInÔoÊ}€Í¿ì®5⁄≥ﬁ°;∏bÌ†´b¥)öÏöcTLÇ¡µú<(9”Àﬂû¢;¨ˆ§çïjèoû—ﬁîˆ/o°•◊cè√£9‘«¬m›˘]d„ú ?≤Î	[⁄ÌGè¢N–Æ™ò§mTı∆NP x‰[T‹ä’W}+Zbi¡P‚L†¸iÈKòâôD±*Fï∂ÙÔÑÑ)!î
-€A/yD÷ˇ~»ÃOö )|®À-QW˝<LVtÖgM.™U7‰ØC_ßn›”®˘Fu®Êˇû:‡•rÖGôN{ÌË8jrÖ4—ÔÍ≠‚ÿ$W™¿ΩÊ˚ºHF)2√F∆ﬁññUä^ûSZ)Ü+Â¡Iÿ)X0‡çò ŸCùC7RœdLT3}‡îÆ≥{Ù¶B∫Q8ç&±T r∂˚4—#Ïú≥Ω,:uôtF\∫ÊËcˆ9,ì,Ú0)’Å◊u
-v¡MWÃ’≈TÒí¢≈»√>´vZ˝n‘*qv§œ⁄!1#ÌÕ˝ùm< =µ‡!f⁄ÎcZ 1î%˛∏° •ﬂ:ê-äÜQl≤’xß∫ªYﬂ€⁄D≠;uk#àı§|ã"«ÖΩTaad™_ºÉl–D3)±äg?q	˙2÷v9¯Ñ;ƒ·QMòj¥±	ùñ;›3›óçVLi!30G°¢ Ûb¥äm πÒ8hî⁄T÷‘]≤9Ô∞ä%∂®ÄKÆ[!Ï˜µ 
-óÆ€πÌN!˜¿¬Ëá
-NVs%Üı‘*µCXö‹‹Lq¡v∑ÚA≥y˛/≠`»7øwÇ^ø¿Wa&ﬁ3 á
-¿ÿXä π´4–l¬…Î´qLK?ÕÖ7k&h≠Fø≠¨±ºßá3	Ä•›6 ˚¥™e⁄˙(y`Ku°X»‡œW·[Ã0_ÏA}õµ#æ¥ÄÈÅÆ`oáGoE·ônœFƒªµC‘÷ƒÊAE;’UjüÖGÚ‡-J/‘—±:µ«!bMú∆m*≠^ÙÀ¯≥†,Zò<é*∆Õÿ\™˚çÀ1PùvB^µ8¬2NÍˇÕÛî‹∑≠öòE≈sïº1\Å˜K£π¨í©V+¿Â—›jÏ	LZ,©±†o€i∏ˇ¥•iË.¡◊W™ëX#iajèÉáêi©µLπ∆$aºï-¢m¬w≈cNGŒ>ÂÓπ‰‚±ÕPÿä√)≤—Íû≥®”ÍûïÒG˝”BÆ1Ï°e:Ä:f9;˝Q˙$ldÎπ¢≠¸·+„1†Tg€Xa∆)å:ü‡Ø'òPÉ^CC5°I/@µΩÄF¯",Ø»-fñWdó.nÆöXJ·∆Æ≈R≥¸Œ/Ç”÷ø†úUÀÄ~ctﬁl¡¨òeGdÔCï9Lwî3≈øxØ±∏!“¨ÿËöA€^˛W‚ëKVT¢[%%«î’ï‹ÀhIWZæâ§h‰ø≤7™[ªI˛⁄rãÍ£˜S˝[◊r9åD¥ñªïÉÜΩµ\•º¨¶ù`{áÓS$í‘waó∏ôÇ„2Â∏ñ®U‡¶(pø¬≤n∏bîÈ€ND)k¯Zä»(cÕî,S;ÙÊ˙(’ƒ]S3>ˇa¶( feâo≤íÌn\p3	Ô—†CŒ[2◊œﬂFÄû¨@˙J`kWì∆™"odG‰úüVw`…ÃfçÂ_gØﬂ·[‡‘'r%GºÀ
-ÇèTí™tßZØüõoÂkªı⁄[ç˝zmß∂+›â_w¢ArŸÖ.Zg;Ut≈Ÿÿ⁄ØbT.ïR[∫H	≠‹ÕBÀ0%tK«≥iêÅ·ÚmòÑMì<ÿµ“Í≤E¬éK|uÿv‹[›qÇ^o¯4|ü» öé∫C∞PT–—)kÜ˝Èî¸}Ä òà1πL"∂O!n∞ôúu@˝¡ﬁ´¥Ë_£d÷Òƒ¿∆ÃÜÔ–1”jÆësí-x\⁄Fò†\∑pﬂÅÓDvåG[ÅW%Ê∑"câ»{ÕpÌãØ27Îùä@¬o[
-Õb_«æZ)±EåLÁTiÏÓNWVÓéSÀøëX4ôﬁeä:L)G“¯Ù4¡©u;«]oouêRL©ª©h^\,ä¥/≈ËÒ± Ås«˝π{ı˙nµ»"vÿ+jbîA ÿì’\|“Ì£WÛS`…Ã◊'p‰Vsãs≠ËQÑÔ·Í©≠ûx]-i:2a{g:41*MH–Ì≈ÙÃ⁄≥oB íß§å.ÀY2eíY/Lj^üòuÓ9≤*`>eÈ±`’îÒ˝<4C≥pq∏»Úí
-:VÛFî©_©xë)QH≤ù—_ŒjÍ\„éôóOWÙÆûtÕ˜ip&≠ﬁÛo˛9€ÿ€π_ÖK˙w≥H&WònEº´@^ÿŒ"(œÏÁ?˙Î¨âdÁCO<óÅê,≈xm@$öé{U6ö/#¶,E4gÏÔ^ÇDaÊúßs¯7m0≤¨78Ã“∂∫)œπñim‰jPºÒ{ËYcÀÈ}leß≥I!ÎôGAÂ$b¯ùk£Æ¢¿Ç	QÑW∆ÌÃÿYQ}õqë◊5≈∑y(}$|1Ã€eH˜Ìòaä.ÀûÙΩ]lØ À4ÅÏá]v¢ˇª ñÖnüµ˙Q√µ∫g6Ë
-:˛<€Eƒ,gf*kõΩ⁄3Í‰:EÑ≠e„√…ê†LßæóÅ£èÖ<À+OŸª›n;:Ëîı‡–“∫·RÑ≠Éﬁ~WË›Ù‘º’C∏4ÀJØ4∑¿’J‰rŒ∫«∞ÿÄ…VhX∫q\9ï˚oG¸0U]N„“⁄Á^91√<<¥∏}[Ø$îpoSH`„ﬁ≈ûÅãË–ÿ∂ÿ5⁄Ã9‹J›™∞&Rçﬁ◊ø}#6ZÂ+"§öm˝ˇ·ÏÍr€∏ÅªO±}¢TG™$'ÆaG\‘XN!ªÌCêŸZUã®RÍï%Ü‡¥O=AØ·õ‰$ù.9$g%£FÄH⁄Ÿ·ﬂpf»!øŸâÇm…Dã£Â^.>„u‚Ñ“FÙ¯L)H/Æ{aâT‚Â˘≤Õ®L<Tî≠ß0 [^¿ã˛r˜Ø¨Jr%sæ‡≤3û.ˆ¿Ã°‡œMÚï¸˘P|˛qTÊ’3¬üÃ˙§É†ÓUÅr'Úi<ÿOÅfr'¡Ì∏"â∆≠G2[wX% ˜õÅíªî ﬁl∆rÔBÔ£DdÀinO[ñ˘Ô¥tEtpÜ©æ≈o¯‡:∑h[ç(˝ån3«a^.f+êu!'÷¯æ)o≥l±úZ5T¿:x\Ä¸ÅòA√ä•±¿·o∂É±.iî}ôÔN[úÜw∞©«¥åÆ˛=â†ËiÂF˚W[Æ≠†ãƒ˙.ˇö«2©’ªˆG’ÕIËñA•ÈRÚÌ^*ø·sDÅDÜÌgı®√AQÙ¿Æ™_ƒüvùXΩ˙±ÛâCça[Û˘h2G%ã…ZY˜ìƒ %ˇ68;¥ı]5,˝ÊqÒ
--„¿†ídësS_∑$(‡ﬁàV˛"›¿…<>./«(kÏ\°≈‹œÿ$'Y˚◊uEƒ9hÌ∑‘Fõ‚`P6£=ã‰›‡fEıÁ+°lBÆ÷é|™]
-©:J˘è/|Á1<Ë‡™W≈r]ƒû¿fÂÈ¯Æç·ØÒbŸ v* ÚÖ0˝	®¨	⁄Ω—|„}cµœ1NjÍ†3‰LÀ¸ﬁö–HÂÏ$rúÃpœ∏ù®–™ŒπÄí≠⁄¯OHé&ªÑò„ÖŒä	EŒj&DÖ€¿ hÅSú;Ç/o˚\"|ﬁ›ıBA)=∂	e8Ï¬
-Ù£TéGˇóÛ„é2)#C„Ïæzú•∂©ó.¸ˆ”99 hm&≈M•ìÒÿf+@ﬁLß	Œ Q∏‡èÇßøåñ¶Lﬂçô;…$(D“æÓy*î‡`€î…Æ ¬!Ú∂ì2K .É7ˇD·mÓm[TêºÌg“ªˇ|ŒŸ‹æÉÙ|+¸—]>YayØ∏YBw7Ékì¿Ç%¢é'˙ŒQéaf’“'≈%M∞∏–≤ôaœÿÖ◊*‚WΩÂ©A\Lqiì0˝!yª+¶ãˆº{+ÊH<ÎÖ{ÙÖà	Éf&∆7|v‘X–Ñ◊>⁄`^N÷›ˇrgj‡™¢ Ss"z	(hsVˇås≠Üò28•”3wø8~·≈\<µñãß(´`RDLC˙ı¬;qøähØ·xèI∞·∂ÆÚÂ:œÁ&
-[‘A“K˛>Tdd$Êm©ñçò∏JhÛÀyÜ∞¸√Áß_üüŒûü8}ÕŸI68¡êrõç·èd—π8ÂyˇÕä/"*KƒíP≥st|HwE&≥1Ùﬂ^ÈœD£:XW&	XlÈ<'„Ø-0àâ.˘Ô;òcoõ(‘≈à%>Ä°Ã™Ω“‘Á2ñcî&2~”4ÑÛÏÚ≤§4ù¢1‚ﬁK\ú˚È %Äo«ü4–aUåLèåuë8¯g±(7Í!≥@L£¸¿Åê~˝ÁØÏÚd88=gAîßRZp>¸t˙˛‘J¨äﬂóﬂŸîFª¿TÌ§5¨ù‹u«ÒEs≥úôùACwEã/ΩvÄÓ’Ü◊¡=õ%¬®'&∫?ãq◊¡¨ +˝˛£`¨Yäﬂn¿,<'cMƒA™‘\µ•
-ƒó[ÉÇS»TZÑ‘ôd˙÷˛àXlyBpt,°˜mTBªÛHn0oƒ¥ã˘ıÏvúó*=Æ-/¶¨⁄ÆÅı4ØuS‚j˚£ØlÑ§‘’5;óBb1«'HÀ™ÀFvö´ÑãAæ<æjäÌl°∫2tá∞VÒöœùﬁÊÂÄÊ°w*\RX˚ÃÓΩ3uuob’#÷±wVDkFÆÔπÄˆãweô‰WG1óG∆´a7Wc](L•ÓíèÙc>çPë¶˝¥∂SqLì:≈ıGkã/ß˘"Iåg≥á„ëfÂne˙PΩZXmÉ€ﬁZ2ÑEÌk|üé˜Ωwòd‡	Œi%5é{·j∂∏˛,’eè”È§÷<aµU_»enVYØì≤≤&ê©V—x€Áo’]3°YÏ6©g7ÿp¸ìnC\^≠Ô *†›J6∫±ÔÏŸ)èæoju≥>◊+Ò4\ü‘uImEˆ—Î¿gû•‚õhuÚ98∏VË.ÓÈ6Wiœ›≈t4^¨3ﬂ«`Åâõíæﬁãª:†î]ægªúÊ@ZlÍ;æâùGˆö∏EkdııÔ˘ü©ÀlBOΩhÈÇÍaÔ•ŸÔÏÌ…»◊FW[∏;›¥µÅL´KÙëñsá&ì∆y`÷¯µyPºOJà%´⁄Ë5uÖSÂºÖüÂÌÚ?   ˇˇÏΩks◊u(˙ùø¢9¶œÃàÉ¡‡ERCÅ(J8Az XÒE±1” Zúó∫g —R~»≤Âs rÏßnJUâs|#SÁ8∂„8éR∑Ú·‚O Wﬂ¯Ó˘	w≠µﬂèÓêTîSï±ŒtÔÁ⁄kØΩ^{≠a0È¬RQñ<BP‰¯≥ƒf>˝„6gUt<ºN¢ö/~eaØuk°òÀâãb…>ôIxN<ù/Ÿ#"˝◊¢ofY˜ÿÔ›ÇÓ≥ºHÛãøF«á0^`È‡‘Ç¢Né∏¢ØA1#2óuEÅé#„á˙JZSƒø-‡8Ê?MûÒ∂],ê≈ò"òq°≈¢]xŸtëïÜL÷ÀI∏∑∏µ¶ÏîÊÏ≠ŒﬂªÆá©#M$CÃõx'èÔ[Rÿ1Ñ¢ØŒTfkµ Ï<?ºÆ}DËïfÈËñÉ÷Ê‰òØwÉÈ+9dN◊«à≠fÔ¨\}Åq¿<ûHYÏ€\∏VËbu<&ÓTé „“ra¬èÿ…RVjπºzf
-;°%í˘ÎºŸiµTlÂÖêÑ˘,€Ï¨è≤Z∆&JπÇÀiÄÿGÁ»f‚Ã≤P/É∑Y”`oTﬁ∫NÃ=ß„¨´£Î NO3Íè‰ÖD}Éø—';ÜøÒp83≥ië%'Ûhjÿ«ñ¬Ïî#~}§WÔò)c˘‘é˙¶˜†èÅ1π¸∫…Ÿg,s-}ã·”˚zP5ó‡8çZÙå˚,˜Õ˚n⁄∏I`4£k…‘¶tê`ÇΩ0…—¶M»èﬁ âÎ	OkÖmuŒs/¢°B—ôΩ'_G/#¨ïÑﬁcZ∑ÌîeLY>(~ñd©Çi»T#Û®ks©çu≥V∆$ke.9ÿF-d£ÒÏµÄ»ÈÙâì”q°àV∆ÑBq∞≈Eåì´“¸∂d2/6ùPÊKˇE3âUJ#ÎÚ'Ê™âùÌ•vdq¡5ÏÔÔÛn9ÁY.?1ñ}G˜ÙÕÌµØ/olQVfÜÎß®6ÁﬂÔÃ,7ãu€dS“eõ∞8|*ÓâÁj`%–í®WCﬁ¨≈b‘Ïß‰h\ìM∫4ø_;0ìì6'çsQF0¥pb¨-&CÔ·Rs¿°6©h6Á_˛g¸ãªz⁄>±‰€åç≤‹ÈdÏì »Éd,P‹Àv/ºù∂loy∂É'ªôÂ9.˝ò◊Ap%YNÃ m9NÔáqÔ°à≠<˝*<Œ„ñÒdõ.≈oY•Zaá<úÃB¬ç6;Ä5èÿú¬∫√¶±Ó1óS˘”áßÄ7ˇ¢^Åπﬂä_¡{‚‚jA5,såWxäˆ+/u
-®‹h«√>`Ω)ÊÁââ†ÃÎ¶A_ç‚r¬N‡2-®ı(´JòBÆ
-ÿûFÏkJ7»‚˝'z˘2w%Rèå¿9®Cb‡”˚≥"ﬁb†äâ“<8Òò)BGp™£«RUöÊ≥'l‡£¥Xc txËßn4¶«£Í”√¿≤yeÜ	˜;9ñµK7ıx‘z|!ï∏°„0RoL¿iØ∏lliQzéÿŸ‹(=∫tÑí±Zƒ{+b≥\c¢5ÜWL3$ÜU	xJ:}Aˆ)ôø∏øÖ–aÌ6≥-Ó{– ˛E«6ÿ§€£2àwµﬂ√  ÿ‚ «b”:}ãEGVn<=(íàÃÉÂÉ∏wbtá√@—'˙“-ß[ppîˆù,˘gå8S:ƒQMÔ¸…®vc˛Ó˛≥pˇﬁ¨ÌNWá0∫RÎ–ÿ∆ZÇXª»ªè*+¡Ëdê˘_—Ò∑áév–J6}¡zeâä¶˚6÷ÆJ="Ûﬂñ%ôKuºªCC»C2‡uÕ}6ì≈EñÊVﬂdËD˙6Iz≤œÒ!bNÈÌ‡µ¿p⁄Í°A∑ƒ∆6YôhõxBÓÿ÷ò‘€àú™çwo_øÆ€∫q‡æÓØÊıü€ªµŸ-»∞T⁄:lÌ¥;k≈j∂O¢rJ§ ;<Aﬁﬁûö“Î2 ‹°hC„`´@«ÌËˇ∂√ÀYZ50õﬁäõÔ]oæ¥LÚj3:'LWÜ•#Óµ‰ú,K∆ô±¥ÑC~E\óü`ù›VIπøÑa±l’jPävÖG—rØ›xw–OÜ÷ëÎ≤ö%∆HïuJœ#e!±«Îú•ã\	ﬁ˘éJ0[ﬁ≈€ıC
--UÉè∂8˝v⁄G]å—6*Àà§E7iÚÍ∑F]:Ú©BÉx/√"/Vñ—%Ó(¨‚ù6~=R|⁄[»ÆøÂç√Y≈ë>çë˜ûÆ8H†Ã˝«⁄ )ñòÒ!p$„,B g´ÓµÚ;¡Éà¿ùÎ⁄É|æó™Ælˆ∫Ò»®^s™Æ x`¢¶x‚T¥	ﬁ¨ŒÉò√˘X¸®—r9yMàêú!Ú6B¨–dçPQŒ&ô@rx%f÷ ˆ’ì˙≈ÂQÌå~ﬁπ]ˆ0’:TìhtﬁMc_g%Ù]@∫j,ˆÀ 'ÿ““z3ŒTÇâ“äçõ«‘/RGØ%c*z®Q7_H7µ`É—K˘S®’kµÇ>ëâ„òÊ§°ú#˛î#FvÇô97y§ππa4÷*äåí ÜˇQÏÚ/—=p.åô'$í¯‡Aèc9+`Ko≥¡øÈÕ⁄≠ˇ~E∏+óJ|ôúÁæ‘4æ®Sﬂ
-˜&2¿à∆)ê∏©RﬂŸ⁄ö
-ãÂ-√õÏVvÑˆ¶‚Ñﬁ*ÏÓ2ÉÛN‹ÆP(›Ú‚ü™ëyI∂+±°T¬∞áF‚l”∆¨BkA&úô‹B¶€xï∫ÿ¸òbæ∏~w;#3%µËÛ«˜4≠GX¡Ì‰}~g¸‹ÜfıñDà1œ‡3∏ñØQOƒ,∏©—àû`“—ëf9Ê®aì%ïÉ‹¡ôdSÿﬁîÌátV‰íÁH8kg1Æ˘∏—…&ΩËìÌlÚ\êÏ≥¸çÂ≠¿«´öÉÚ¯åh!3<pŸVw•y-—)z5ÕsÌ»Ò¨—vÓw∫ÃŒ%t÷vØ¡X{6Ó∏}KÌy|3TªK∆ûu”mz\3¯Æ5«vô´F≈7Ìºg”Z5páö=*É?êˆ’µ≠∆vìÖ≤˙¯£`kÌ~csk˘˛√M_6 ¸òŸ5ú»EdÿÖM“Ôä(È9{.ã¯∫©æ∆dfvr9œ‘¸ûg,≤"?.w“Zdœ‹?*°XèrÿÚHv§§åKïÌHÿÅ‹€»¥,ûpNÎT]ô‘Â#2±Y∑±ÃÑ‘ÜXÁS8Ëπ√^!é◊mY3¶,∞[V|Yæ.#ªı¸D’Œrd¯£hXòë˛ÿÍvÇ$»n*q_Úc´]Oﬁc_~d£ñÁEÊv2˚∏\∂dˆó3ŸóO®∆ÂRv©÷¥ÌÏ∆H3úHí˛±ôü#£¸¨“"€4I⁄ûhI“±NŒë(S◊*wù/azÓiß´Ü¸Á›;[‹k!≥ŸKgû|v~éïGeŒ>¸≤õôµ€ÒÕÁˇêùœ˝ry‹›Œåº‹côa¸ClÕ1#«û¡òhÎ¢÷§˜≈üÉçt3∆;`†‘W¶⁄ ∏ºiÌπ‘6dD„ÛL«ÏlËÛ,bÙ¿∞M $Äj<<Õù\ÕÁm°C`Tó6Ve‹â0B•£-¥`òÚ¡p±@™·Ç]YU=!åsÃ”œ§óp¸<¥ß≈`75ÎúgÛàÂm<Ÿé„aDkèÛ¶∞¸À¯ˆXÃ¨["ØM”9Œ¬Œbõkù±on˙#¿:$w™ø˙9ç—xåÂgÜC#∆zõ∏©3Âx≠Ñîˇ<¶óãßØ±í,r#+ªx¬˛=ÒÛÓ√#sóûf dt‘/t∫¡lÒDˇu™Ÿ¨‰¯Ó≤õ·@⁄∞%!c⁄DÔ:›U˚RÆ3v7öùÉ÷ ßRa®Û÷∆ñ 	˝ô•õ‡˙.K7a‰—:@—{ëp√ôê;{-™‘n⁄[;Ã©_0rCiîE¶µ…Ùƒ1›Ë']8Åçaóá»oìÓE±`„1êØ”Ë¶8ºÕa4f‡úı (ŒhºÍÙaÿ˝fàÙ)1CÛ›∆ΩÕFÄ»2‡€êb+ApÒ[äZÿ	»Wc¶L¡ó“A‘¬P[t˚0	ﬁƒ(J«Ö,mGC¥j`§4HÅD˜Ü0‰∞Æ‘‹˘ŒˇØ‡¸oÉÛüÁøŒˇé⁄;ˇ$J8ƒ!ô€Xày‹£1()∫ít—=FZñ≥ú•¸0Å`¶áè£ÉñÜ®CÇ/∞Iêb)UNÑ=∂dﬂåÿäï†:Sõì≈Ç~	ìô+¯xAÿ ó?Xgw·»"¡›óî6-¯–∑	#ñ◊◊ΩÅÎ°¡˛¸™VM"xÿäJÃÉÁÊ˛ùù£øÙwñ˛Œ”ﬂª”ï†@ﬂo ¢„{@ù‚‡—a˘J¯veÖ!ﬂ8¯Í‚áÏ’¸rŸÍôUê-œ/´ñﬂÄäØ˜#?ˇ6oxÕ]¯xµ∂/∫Q¸øˇ ﬁﬁm∞nÒ˝≈˜y7Ì˛vXC¨Çö—º6£-h‡~ò Ú˛øÀ˚üc=ËŒü≤w≥Øzg6ß`ˆ™ÍÅ„ŸjxpÄÅÛ:Ä†tÒ1˝wájbƒ^¸w3 O7|itp=h´ÒóÂñÁƒßÌõõBÛØ21/nÈ ¬˛Y—2^àÓˆè"çÆ\ø2_*/≥G	’*xìµ«oñZ#(:‘j‰∫vÔﬁnŸte€ΩŒ
-‹¨ÌñiÄ◊fÆÕÏÖ.Ì¸)8¸≠ÕBQ1N^≈òï9{>o3ñu@_|$#Z\∞ï.xíƒóümº+RZZ¥·‚›†¬Ç≥uœ\ŸŸõﬁï›«„g∆bGÓá√√0¿K«aÔCB¬oÅQ•®zPÖ}Ò—˘Ø/˛Ù˘_ÉÛœ.~tÒ>¸˜°w{œ7ÿ*ÓÚÈ¸I˙ﬁµ≤6åk3Œb¯Í]õd‰è√4	ß€a∑“Äë“±˚‚«Pjø¸–€›Bç˙πÁÊ¸r÷0≠z◊ºkÉ/≈„T.ÌÖITÅc28Íc`Òú•õfyP‚xºI'8éE€™∏-È≤* pÿÎıá<á,ÈÛS?—3„Ωvò¥%ﬂ¿O±ßÀ@∏`—„v»ﬂ‘¸»P3IÅµQ≈ÿ®)¯J0S'ÜjÜmõôe_≥ÚÂ$Œ≤WoPù∆™ØA˘2´¡∆ªC3Ì1/lı÷M…≠{˜0*g´S•á˜¯√˘†? ¢…∂„4·KÍìj≈Óûü˛ÒﬁPè/Ò=‡–RäÚâyÂÄµ;L˙£ÉCúÂΩªÿ“Ω’{˜*¯≥Aﬂk‹ªÁˆ™ï5JC–4ΩN/Òê≤[Ú¸õú≥Âq‹âÈ˝ww"+Ñ«ﬂt.êo ,0É6l<hﬁ_^_€l¨Ú∞åRYÏqπJåAﬂ7£!∆›G_Så9¬_)ñ€Ç SJÈ~h‘F")Ä&$'µ°AlÒ~8¿vòêN3Ä;ù©«=¨ôÍÜÌ1%ÙÓ	Y´çRA∑|Öy∏lÆ≠76∂ﬁzÛAsı≠˚À1GÁB≠ÛO.ﬁá]‹ÎèzZ¯YÏW8*‚4`å/	7$‘∞)n˝ UåZè·∏x∞bëX ”•2T;8àzò™à÷‡*:˝„‡(π§§!¸?	è©D´¬˘o‡D˙n°éÜû œ“ŒÃnπ¬∂ºÈ„ÿa0A·õ!Ã¸qÅZ¯5LÏÁø¶6d≥N?∞öhá·Ò®Õö¯5Òª±MP·OŒwÒ=kƒ5YVÉ$,¯˘//~≈rÒΩã_AcÁº° ≠pá£ òzF„/iÉp¸∆}¡F6Ï#+à‚,!Ö>ÀTkIÁ¯,fSÆ3ô∑H,KD\Ä¯èÿYJei∂Û	QKÌ£Ï#ÿIp˛u¢2oÅòﬁ¬G¨Ö9hÄìËS‡»‡I„F£\|’†oâòﬁ“èYK<÷XP¢‡ GQ≤G{+≈ )úè D[’≤íû¢·õ ÖØ#êJ–Ûõ,˛ûKÄ¯mú™Œ?ôæ¯-B2Ó•J
-Â•√+“’πﬂ∆ùÕ€Q¥¯Ow`àø›ùÆEÊeÃâi5t–]º˚BÿT?2†Hi∏Ñ?˝ßÔcÎ?æ£ãã(8ä»ÜÔ/ﬁ◊üJ} _L}<®0WÁ(Qú∞≤h÷≥eπ@ly`uhqò4	’¥Ü$L`WböKù1ÍÜO`á•,√…$è®˛fÿyÃ»3–/˙7}ÏËwpQ Nm-v´…C*¬˙Í⁄ÚJsmkme∆3ΩsÒ_¶.˛˙¸«SÁı˘œ¶>ˇ¯Ûøû˙¸üÚ˘/?ˇtÍÛ_ÌN#Xíkeˆ˙ëc°-ΩFq“Âö≥{%FºtRƒ®ŒŸRxƒª∞ Z◊Ø+7`£Î≈≈`N˘CdV0‹=ñ√¯ÚJ8“”Y∞#êÇ0ÍbÃóå∑%Ær7v¥˚:Ê‘P·ô5ô∑wÀˆ}ıä›äπ¯®®ê—∫zÒë¨ˆ∂ÄÅr¬‹K¢1˜Æº¬˛(;(+∂=n¢
-Jœ≈©Ñ`{É◊ÎAÕ®Æë;¡<êEwö6(ßuúb>l>ÿx∞Ω±Ã©NJ+µ∆¯à,˜BEÎû›¿ë∏…è®Ey$iÆˆqzG)r∂hmP÷p·√+	
-˙N‹ä˘¥∫·Äì
-ã≥ÿ„€ïíY¬ËâÑvÙïÄ(
-ç*Ä¬µ ®±*¨M<La6=ñ/»gÑÈ∏’TÓ¿DDÁu¶å:Yc(0Úe<àgıäÅÉ»ç£cç£#xëﬂìpXÃ€	€m~˘·ÙäÖztÿπT˙[?’84<6`∏≠q0©ËìÇ±˚Ò≥*âøT¡‹òüÁD^,Z9kR‹≈7·¨ï¥9X“¡Só∆ÿΩ6QZáú/ÓãŸõ⁄•7Äbk`úG0˛w8¶æM–º¯6∞høΩ¯Œ˘SZ’a∆ŒÈÚ]Ÿd˚ ◊Geñ◊ﬂ\˛∆&ÔL¿ÜÄrãÀÒ>ÿà*r›¨g›ÌR,u üÇP¶SqW¥BõZ´õLQR3†“˚˚t–£Jö≠ÍóÀ ¬ß/`EÒ´‡~éRX˙˛„‚{≈(I‡o7NS¯áÕ±xö?√u¯€Ká)›Eñ¶/gnÿ=l¨A(Ïú$—˛
-MÚ†?d_˙É”]¨—¿å…(”—˝l˝€é:Es÷\ óÜ`†ﬂçªÒ…ó∞ú„≤Çºp-†X⁄måkRûz^ùÉÁ¿)w’Èè ‚nÿÂîl‘arx®P¯√ Í√4Nßè˙qã±a˚˚¿Øïµ&o‡≈P÷}Xì{	:d¥Ä59Ë'OÍtÌ8Û˝ÑÃMG|?á∏π”gﬂ˙;’‡ç}‘#8 “Q‚'>ñ¡bØ'˝—Ä19§ËÜèìm8«ùiîIó∆˚!FvÍõ·¶Å3£Â$å¡œ˘Ôû}Áøá/ˇÄ_˛æ¸ø¸|˘ø¸
-!c `dçê∏≠52$º¯W_æã_æ_æçU)¯ﬁ¿|P‡p√p^¿êœ?√äˇ_~Ö_˛ö˙>~˘<˘9~˘ÃŒfºw»&€†)˝£ò“Ô‡ÀÔ˘îÃ·∞÷—‡	còÓÖ) ≈˚8ç‡À˜¯˝√*/∞ §–óÊ8Í˝ÏÎÁ‚Àgæ Û\Ú8	ﬂz∏º÷‹‰å—˝ê"HñËÛC t)¨{Ë∫ëÚCZÕj
-ÃömDÅ€û˜{>îÔâƒIdÄa¢—T$0dÊ∆7≈0‹|wÂ^†SIm™+b†≈Ûﬂ+≈Ûﬂ+∏DòÎPΩ˘|Ûœôo˛âΩYÄ™7ø÷ﬁòu>≈7Po¥Wø1:¢Ì#1màZò<È`JO≠£œ∞Œø¯:˙æ˘{_Gﬂ«WøÚç˚)º¡◊f∆xÒ	V˘å^Ã≥±I∂Å¯è¢î™ﬂ©7⁄´ﬂ+Xâ¶ë ©f/æã£˙éØŸ_‚õo≥7@ˇZ6k∂∆Éu∞√∂á¶ÉN¸Œ(nÎ}{¯ÄJõ\ºoΩ±^ùˇ÷Ëb3Í∆Lq≠5˛,˜K_„?ƒ7?7ZXªAzv”¯…ì∞é∫ª0M·tC⁄ã∑A÷N˚ù0ë˙L∆•E!˘I†”Óïñˇ¡a√qÓ∑¯G¨-†ZBVBKúÏndÏFÿ:,µ(”è>„†≈p≠Ã‘qõ∆XJΩ3ﬁ·a‘%u∞óRœ˙`}π˘∆PmH˙B∫¿;_-
-„#È2
-}< àR)˜åê∏Ê=)’4ùFV∆˝3Ç—|(¯"2=Ùi&QzÿÔ`,R /ˆ·/ò¸Oja‚ÓÇ"ÆQµXCQê˚#Nè√e£`Ÿz£Ÿÿ|„¡˙* ©’}.≈·±–¬úØJ%cïÍÇmì.>≤úÖÆØ√CQXhLdçˆ ﬁ.#cZ≈ƒ•ìÄï®C[◊Å8≠•∑@¶Fß1b÷Ωe_◊À∞Ño	1ƒ8àÚWÇ Är˘
-èb)’;®∑öπˇº∂4·_•“ëEXë,Ú:¸´g…„ap5–ÿI¶fv–v‡ßº}⁄Ï$ª;t{_^Èï
-|	ÖÒu@π‘å7ª‘íÔ’¡w◊iT¬-Ã‘´à‰eåy^‰¡†8ööÚÎ¯å´ào¸Ä§xMÈ≈ﬁÄ§eºy1¿à4v!√3)´pmÃ,A“aßºëÀqgëıR`4ı*Œç~¬ÍcW⁄Oh‘ΩΩ‹G‘fÛÊ®'ƒæ]°¢µˇñƒv≠3¡D›\ÊKTå“√“âÿdı¿∆∫	O~√##j‡'ôö$∆?0‡a‹E¶&Ó‘]€íÿGÄú_”™i/;jÑ$4î√ÿòÎ∏µÂ∞wºlú,∏Ã©"™¢wåeò∞∞åîrUø:9⁄û$HTÑ§ŒºPÉÈË…Èø<é√€¯ıSÊX)—: âçﬂFâé†AMÅòÿB"çyPÊ$nπVíq£è`ñ‚é~+ÃºÄËÿÉ£∫t¨[,ÓS¿+“IëÅ,R§C€Ôw:¿êP?æléMìEÈ¸ì%8-K;ÁüûˇèÛ_üˇÊ¸∑Áˇp˛ªÛ<ˇ˝˘?ùˇ·¸ü/ﬁø¯`∑<=™≈k≥E	I•ñv-Cag
-vñ—ΩúÃÿ3'>∂È?•—‰èezƒî<T€å¥à|9≈ÿ6√c¬/˙◊£êÂ˘ê∞ú<ò§7¨fô∑ÄπãB;J„üÓåz8=X<Ù_™c-±¢∏0◊i˙xç¨Ñ
-Ä˝n<úVÿGÜh‚ääØ±ˇt©√ ˆˇ‰#/ãk5M L`Cô°e}>?3∏«>π¥Ë@∞/Ø≠´Ïpº4¶R›g0I√∏-”wˆÙGCÇjI€§Â
-Á<€«q”˝«äNÈc_\4Ü+cÙvQ√rww0?+∆ôciKƒr1U(Y¨ª˜A„DC!æÍ?6A˜Vy∫98p´’j∆∞d^éñVe◊ˇ–Õ™&	Ë˚)|pö3H≈1¶ôgﬁ']∏¡W›JVW;ÒuÌPV†ƒØ7^”ÈN’`¡–¥…Õ∆‚íaVM!I ‘øf&ÉŒÆ’Ï´sjk¢ÂR¯6áΩbP«oAB6b{êÈpåFXëeﬂ$OZ˜«¬^Ì1¥if|–éôÉ¬õçNÈ%À Œw;Üô„¯oF®ﬁ@„+¯ñ<	∞wu[#—˝ ©«◊‹ÚuÀ,Ÿdï⁄M”Õp"≥¿h¥1úkpBÕYwë¸¯$ﬂä√ëqÀÍ SB∑EP<èg´ÈBÎòq6¯Ù6ÔWT;Ωå´!g≤π’\{¯÷Í⁄Ê√ıÂoH–4j⁄‘WWËÔ=ÚVo–™6»Ë—XÊ ≤˝ÔT'œWÄ‰`∏ô—±¬œ A≠‚È°yCKdj-ÒlâÿZπ%kaL≠R§cºê<H#`àîˆ™‡ÿæ)”q Z¢*wè–ë9% D◊ ÷ä®Ã∑égQ˘2–ngµ∏õC<Ûñ=br“VSπÃ∑MN#ÂkØ£ÄT«KÄ€ùê‡∆”luœF•a±˚gÔ‡]´ÛOÂTHÓKQ‚xâ¬˚}Ó˚l€>0®ÔÑ¬Êv˛?/æw˛…˘gÁOÀ|áa©é†£sCBmN⁄‹…éF≤°VC=¶o≈`É∑ä+1¬”õl"Ì à0åÿîfßCµñ◊2≈ï3r≈”‡(≈ˆÿù‰ÀïÖ„YÔP√’Ï¢´&±ISóòÑ5D,ÆÎ¯©ÈnJ§nFºRÇçï;ﬁ®1 =FÔøk∞HÚ∂ç¸f(7{ﬂÎ”¨IUÁıâÆç∫˙{±Áò9Và9?&ÜÔå»ÿﬂW„’˜AXEI.¥¡ïïpá}˜˙jÏ06!ì[eÈJÌ˝ØçÊ˙ı]e€—∆D¶|d¯4ó	2∞‚e‚ÊÃÜ4óÈó.P¢.y.ÀíåM‘Ñ¸Ãí¥xTí åÍ Ñ∑P0'¨íDè:¬+ä—ë∆ˆhO„\πÌwî‚ﬁ◊N\!ë¸∏Ù8ä©vdó5nâZyR't8‘n∆ÒcE6ãxËëu.îåÒ”⁄”8@n∂V<ü ñ#:•^‘5Æ19–ù®∂Úö¬T#1˛g1»O⁄≠≤Ø¢x¿¥0∫∫I„ù%∑WfTuˆO~øÌÅ∑î{Rn¿bÆøÇN#ë≥‰F˝/¡êÔ1c≥+ŒËóçé€QÇn¿—;£∞S@®¡'tA?ƒê¯§˛ûa§Ç{:ßx•äNµvÔ5WPú0^@4‘ıÙ<ÍvË·¯CÎz{û{R
-Ë1œ“Ò+›x/4¥‚Ω=ç·¬H˚Ó••&ÅØóôì
-oÍ’Wˇ7—öOÆ3üTÔç∫m]cõßÎVÊ^»’ãΩ=¶ótU‡¥–DswÁı]Sç§ÍîÃœBKñ€òæzåoj…è*¡6ãåõËO_ˆ:nÎeGˆ:é.ıÀ∞~åXëŸÜ]ÎÓƒ`—‹["|-$,vFÆ¢?z'‡©›I9ŒRé3’ŸÃÌkfrg^õ∞µiWWÛ&pŸ¿ÆQ>vç2¨*£´ àaZ	ÜÀRœxPk"Î
-Çt€g]eZWF>Î Kº’zx∞¬Ï7j éÈÖJNe‡Èú7hÕÑ·—§Œ4Zd0‚UêéˆòNú.ˆp‚eó£( ∫Øõ±»È<N·îLG	›@Œ@HÍD“"ÿ9CåﬂΩµÊÊ1ì«‰ùã§Lì'[U∆üS•X+.¡/ûΩf°÷p…≠!—jpxÈÊ$◊äR<´[∑÷òRh≈î·â˘ª9V†—•¨@~]Œ≥˝då∫X‘L>ìXzp,£Ã±»’3ñb1lÃP∆ 6
-–È`Æz0”çÌÉ>*J ÎiÇ|˘Kﬁ«_$I¸—9n9’óÅ‘ÖèüÅe’F|e£°d
-ò˘ÉæƒÏ¬'Æ&íaΩ‚7”∞ÑO(™∫z-uÿ∏ŒM‚ŒAXÿÅ!¶≠~IÌ5[”Øm7ó7÷Vﬁ∫ø‹¸£M©îQGW o¥◊(∫≈ÃÇ°lu¢∞á¢Ö‡1Øπ÷ñk2ö≠’Ó“ﬂ˙ª™]:-E=S_πÄú?°Uárï“Qó∞8ô(é±ØcŸó1∫"U∆B√()›Ì˜±%≠πÑ≤	EΩß~é»s,OƒËâF‚]–·ì‡ò‚Ù•xA*(≈…O®„§/tkÙcb÷`<e⁄QØH8Ï'”ΩQ7J◊‚‡πáW√:ÿb r'Ì5Ú¥¬¶twÚ∞É©ãûBº°õo˝˝ ∆dr]<7)nkó¸!Í‹¬ˆòY¡§ë]Éº6Ñ›`æs¶ÇÂ≥√k∂˝SŸt¶Pñ:2hò|(x√lñ‹¸ãgjÃl⁄ÿl:Dx†)å∑+Åˇ∞±±ºæı†a˙uÙ;™‡ÄÅ≥¿o–C=ò„Q“ëaˆáaÁ!∫Ù".‘*A&∞zÍâ‰¨ÑBHÜªgW™†≈(a,E Œ|ÚÄô—0fØJúu`PfS)ìΩK±€Œ¿(J:Áè8oﬂCV≠cQ“éø°ôÄÄ‘AWï^åì Q°€[{>aµäãc&#∏™èXe¯Ó	%üÄ)˘åkœWòrINB£[j‘ï1k¨ Ç't]«Ü∞vÍBÆßë¥äRÉIŒE§πíˆ˛®Ã~%`ìØ@õ*æ?ÀÜ	0L;)Påjî$˝§TÕÙªàı±-£…H∑Çj:b˛à8,>95J≈UKSW°N ´e!PÏÌä⁄˘Ü‰à´¬‘Ãl‚“≤åµ4ÿh%®Å^»±?%µ§©ˇ¬C¶MÑõÏ|…hò-Æ∞bÀ∆’iì—,ÓG≤ñ`™ÌPv¥WÇñeåFLñ≠ír’§p öi^«°%r ‚`Aï»Ÿ∆úπbceM	ÕJPìC◊ÈZ˜¯–ï@éÉ¶@!>”€⁄≤º©eäVr%=êØàìAnèŸŸA$0àQQF ±ö&wò _MÌ°s⁄Ym+M†Dµ?`“[Kmypñâ„8„ö¶#∑Ñ’+K*¢QÆ∫<ï‚ö†h ¿1Üp|± fÏn7úR©7û‚¿d®}≈ù§¢ì¬&Ùäﬁ¿m÷7Zæhbì‡:®∫eÕè —;“≥®hŸhx≤-¶ıä<…VôgU	ºÁÊ*:…?5ôI≈EílBô§ﬁMV=<Ô`F.W(ÿ¬k4kËX+EdgY=äGä'Fè˛(z≤◊ì∂~—tCñ∂ÎöF√-ÒK‰q’≥∏åz ∑ïƒ^Q˛‹ÕØóD-™÷ø<˝Ÿ9gYÙEë™)~yj:9Ø0ö«j¥7:êbÈ◊$U…g”ıR’5ÒÀSµÿç[:sºÉ[Hr§⁄€⁄∂Y5’x¯ víò*˚5…xAÍì5ﬂ‡?ºYyE’+z£f¥œŒòÓŸßt%¨Ö1Z)fŒ(‚iÆË∆Üg=Ó·:Ùb-|å⁄lá˝QßÕS	k…ÑE~-Íì~·!•Æ›è…ŒDQÕë”îRRXr3{±—‹€£ æv
-’I∫
--Vô"+Aìe{”ìs“Û¡f” è≥ŸÚ'GÊıYä9úì≈-ïe´⁄X»Ic<'ƒ”€Ó+(Ä^pm
-;Å WbÖ÷ç;)èl¢∆Í≥&Œû∂Ä®§T%jç(A;:å>0 ∏ ≤M
-°Ö˚ﬂj˜∞lN◊QoÒ¢Ïëú=≈˝"’Ö £w…fâM_+Éâ∫Uá\$∆ï
-n¿ôﬁ`ﬁÑ†}ˆ¥c≈_ªÏ≈F∂)ê˝¥ídïY)ê¥YˆßÎ”K∞ä®¥ EE°Ã∫VAûq‘tΩ·T;N√ΩN4Ö!Óµƒî8⁄¶6 ¿Õó5	4:N4Y◊‹l–WD&*µ+\õ•÷WﬁÃq‘˝Áq◊¨ÕœdSu,0\ÕñJCRÇòπ÷ŸZefú”ÒR…˚¸:F¿Çø‘ÖåÅÖÕï∑≤ÂK*áleœ¯H∂— ¡´Æiî¥"≤*∑äÇá“O¡í÷‰…øTnÄ+Ñí*Á%åv@`ÇS'oçU§Î0Â˛⁄Êû^Æ,<*x¨–∏wm¢7â€∞¡ñ{Ì§∑)k	,;»y WÉƒü≠-’~oìB∞Qó≥∑&[‹„∏◊ÓW	ÇPuõ÷4∫sxXØ¨æp—-‘	\c%tÎ∫<ä|iÊX™iﬁ/¬RïˆåËZûq•"dõÀE=◊¥ÃHkßÃ’ŸÌ§¶≤åŒürE–¿ó5/w>U)iÚj61PßM©dâo/FÑà7k5M&N†â¨y∆P/A˛ -–ó’$≥êQÕqã¶h+2Ó@Sù≠ËÚTíÎÙb‹Ö¯_è6? ª]h£~µ¬N‰0avÉ∆íp“6n6’fu÷w-wÌ=é]LPÌUh	ıﬂ‚‚SÉ≥sS§^·|«ÍŸS`Vb`.:E…¶‡Äjù=≈ ¯£?HX‡«àKgü∂ó“‚ÛMÉoˆª{qîj∂É+t˜ì©mÚóÜ≈«å’A ÷}ÇÚÑ&ìóOÏW>‹Î'√í≠¯R€–_ÕhùkºkÉt22Ùè–"w‹läé·YµˆÌ≥pÍ†ä(fT1êR§qW(°†¶≈ ø/£ãÂ›Jïµ9sæÇ#÷«ôÑNŒÎl h›K~RﬂM:ãÆUì©JZ«“z°çI.Ωëπ◊Úøã™¨›`æx‚QÍs»#ñÖv‚›*Fé¶Ïû®z±ù⁄nU±Ç_sà¥6ÉHd—Â¡Í=ÕÆË‡≠ì±?ú
-Ÿ≠7R//Åì?πuJ/§É√•M÷Pr'4DF∞È
-˜„ê!t<Eëgîû±†FGgOìx?éæIi%hO!’V¡8û”´iÙúâ“∑∆œ‹…=úÅwÿ¢´‡TÎ|bﬁ¿>V,ÃØÛ⁄âi°h5≈”äì{ôcõô}Æ¡ı¢·q?y¸Ökva“aÂ≤/sHsµ¸ç›k_ñXj”"´úÖVNŒ>g3Íåh°R&Ëƒ{∞ó`[∑”≈ÕV!ü˛hÑŒÏxFÙBÚÖO¢É8&ZRñ‹Ìã#Z€|kycµ˘`mï"©y$˝≤¡SÏå^ãrhh=“)c„çë3Øà¢@-I ‚€˝—Ÿ”(ËèÇ£∏ô-óR®*Ñ2L˚±I¬Tü]Ä√(⁄Ÿ/;ƒB/õÕ≤ŸöÛíäû˝¨2Qq+∆,G¡~gÙ.OQ	‡Ì…R¶|–®µ ò˙®íã˚I¨˘I0’:≥õ{4^◊ºU∆»1dQÚµqgQ≈t{Ò¡ê6Ç±5°Â≈:°ìﬂÈ#K@zY‚]Ê\uÍhnzùF@}âÓ•u5I ó;‚_&≈∫Q3ÇN"s›ÖÊ1Äí¶Â"%7ÈÒ∆ƒA42Bd…V¨‹}∫êdUñb+áÃiô0öÕ≥n©.3ñ#…¡Ö……8	»ñÅ./]^öT≤Ò»6I7jei6˙W±aj4‘6Å¶èp(!âgLå¢–pPï@>\Ò§‰£—v›∞Ä‘óå ⁄ç9Ü<Øi¸®	<å`ã$[ù„©‚Y"‡®∑lWÙP[ÅrïÌ|é˜y≠k.ÉÄôß≤E˙¥|Bgﬁá˝≤¸zc¸~QÇj∆°£…cjfñEãUä
-äs7¥∏“ú'ÅhòN&048 ÁÜ!Î6¡√ÂMA¶ ıVBÃV8Ï'Ü˘	˘¶ABrJ˙#Wó£„c]ıÅ≤J;÷aU¡=Œ“ }<ìˆ1zEq 	0Itˆ	ÒÑ,=≈i¿(C‹Ìû=≈@’A¢ª7ól´™ªı¢≈DÒΩÑ^±gOS2»¡~“´Òl@˛±ƒ>&4ÉYRXv_U[ç´Z'`B»^3ﬁÌº-áv-“&»2⁄	…7HÙ<˚–≥cò?*∑0¯ÛûG}ØM◊$m»◊¢Õ3W/2îπLÙŒ
-¶ºú°Ω¿è}bL‘óRª‘]k+Éq…dù4 <á”I6π]ì±˜∏;(Iº"Ïñiπˆ˝>É2±D√ﬁ7£ΩØ«—ÒïÃπi…;ªa≈`ªÙÒzÆ™¿ézΩ0NS“•rrè»¡ 3v¢l“∆Ω
-o{·Q| õbîhu; Y-{ÙÃùH∫<ËﬁÉhñ~LÓ&õÁUÈï‚µNhùsô¿2áñ£óbö£Ü&µÕ›÷≠‰–´$9<‰»%**2!ìòœ
-&`78¶ò`øD÷èÔ"ü# ÁºéHëÒ?õ¢øcXîóÕmIø0Ê	‚≤AêéŸ¥CV:aä€ˆ™Ù√§Ëä¬Tπì∆)™°k^a%hSˆïiˇ&ï9Ë˜€îX}/l¥^˜ Ì7π◊üp¢[R·ﬂ◊?†¢àÚPYOe#$é0>|ÃÃ“˘È¥ùl⁄∑*tÌmø”?Æ„v;Í0uMr˜∂˙É˙--„8•ê&ôì¥2áQÿ6≤¶ø∆≤…cÆÒN‹z¨eYñ.d•#|rı®¨rèÀΩs∑áá0ZÌ´0ôë≥Æ*Ã¡{†ì÷≠àí°WÇ∑G)0OPáGıe™ù‚i]¥î‡2˘-ÃE>ãπ»ï»ÀR‰ﬁÜÉqÍk)«y>Ùäìá]5ùóa\Ïw-gªπXMÚ 4óÅö…Hƒ˛™ù8|÷ü-ùÂ9ˇ—ˇ¨<h6+[k6Ç’íÆ¨m-„O7˝˘â¬etÃFdÙ$œÿ--!<¿?∏≈÷@G≈ôöù√]["µë`cä,íÉΩ∞tÛFeÊÊBefˆ’Juf°\®ÀbwoäB≥µô Ãç[(\ùÅ2¸ÈÏ|Â’˛⁄]3†πΩ2($Ä_no¸eø”û≈nÿœ$jªÕªª¥pΩÙºùY}ï-\1◊ÓÙ´Êz9Àúïò<{ma·ºHVa^ZtÄ’ÙSc’Ÿ‘ à‹q˝”¶('£®ç5àÓ2Ç¥6ÈìÈÃ≠Z;:(’Âè¯òˇ≥ü˝´9µ◊¶u∫#”´´6ãi_∂tÿª—bÅ^N•,]AßÄîA>‡§.ÈÎ0ws€ƒ
-O["ÈÌ›>¥Ÿ≠œÎw¢N*k≥	r´çzoÿõ¢XEÑâ£S‰V#&•òA®}/H÷6÷∂÷(≥aSÅÕ¡éh–39Ü{©∞X®†añ3ïìG≤‡µÈÉúŒñä‹9∂X/OùÍGŒ‚›QöªEµ˚EıkÏŒË2Ω_}ôÓ©ÙˇÏ„è˛ø˛(ÿj¸ÒV√Çíò†°© ©∆¡/S†üÅØiªyàπ&–âùÕÉ£8çÒÿFÒØ°%ö‰E]ØAπ˚m≠S^3\≠o È™+Ç™”Ôô⁄‡›bE#€E"µµ
-˛Ø∫PÜwå˝Ï…¨,¡œÑÌ|-v˚Ω>Ò≈äN|Ì)Í‘∑XAJÚ]è¨œToVÄøøn‘*ÇÂ˘FΩéÜ˝¢M0-¬W,`∏®À1ıM`Æù»ã6ö‹qÅÍoß' 3ô-…ÔŒI3¿©EÙì~i°Z!¿¿Sùp/Í,Í3gî@≥+˝n£Z$E˜¸ê5ˆ≥è>£Kÿ∏ßäß˘êÀù('û˘#~Â¡ˆV#hl '≥›‹|ˆ≠ø£ë-?|∏˝çF3x9W”hé*ÓöuÙQ◊‹ãΩõ¡ùN™ø{ÌD’ÖÈÜ)áb’ƒ.bÃnô]˚`™Î∆„ yYœ†∑4:∫˚åë˙Å≠º≥ëÉrD ÔıFò‹6L¬≥ø«Sq+f–1ÁêgOœû∂˙£!Y#,Ö™	Õ]$ì∑Z]óµt©I(ä	ÓﬁCÇnÃVfnÕWpÛWk7ºÑ»)7gS£[q¶Ò*WIá,N—®€+Vêcø·Æ™1ÅÏs∏∫`R¥avê¢ÂHåõˇ1ùÔàfpŸdÁdá1ı6™ÅV§Aö¥ç%Ò„kÂêQ“9òc0=Ürf±ìÂS˝º£õc<¶À<ÒË7ñ	ì(4∆‰rºTS‡u:tÔmÒÑî&¬˜{˜˙≠Q∫x¬4ÁÃfﬂr+ªﬂ4ÕHTÖÆ¢·m‡Íå∂ÅuÑÜÁÃá⁄],úrÒ›ÛOœIAºœˇˆ‚áÁOÉãÔ_|p˛	êπÇQÔ(Ïå`ô§ —û∆ aÿ;à¯<Öä_ïö(õÒpÑSa 
-¿ÎÔÔÎΩ+Ô';!mù”£≤~∆uêƒ∞´üh¨´R“û¸K{Òƒ—Œûﬁ˘˙ŸáÕµ{k>vï0I÷ V2æô≥r
-REd„˜Ó-Øh˝úfS√tÁΩÜÎ\~Õõ!Íb—]&öS∆ ì f»6X|
-ã€ÀìS<LZáä§GLy≥X∏U+å:∞ÔGqt|∑ˇÓb°‘Ç[¯ß:4¿¯ù†ÂÊ°RÎ	˚∂¿‹|!ÿè;ùE¶à°`èaL¶Nã?~ìç·Fa˙E˙p™¢◊K˚«≈Ù¢&¶ùÆ[•HZ7ôSAŸQ\/⁄\õÍPŒáˇ^ñ∂`E`ÀËjòR®M`NÆùÃæB
-∆ákØÃÕí[v8†ºSÌï“Ãî5´iºzú’CWM¯/≤.¶⁄≤è†z#∆ZÒ‘m√Y?Âèº«©ÀàIDùÍç∫¡µ•˜En“^√”Ø˙8÷âôX÷±±NW∆’á=œ>˛ipπyoym+w˛,∏˚`êÊŸ«ú}+h6@åÀÃö2% hEÿ{2≈oƒÀ, C“Ëz»ÜXÃ…üyõÒ—&Æ›Léì≈;«Iµ?∏
-“5ÖË`9éYÏ€bç+æ ‘fﬂo{À≈È*K…CΩ†è±¸eAYÈc§S™∑§Ô‘:Îf©Ë®ÁpO€ZExò—ÀˆÄŸã]∑∂ê◊Ωı÷π}≈ÍQs3£HºÄU	À˛KÅsD‘›/0é™˜óWWe)ûÄB»œSÙ®˘WY<˛›i∫√z˛IpÒÉ‡‚á¡≈á¡≈oºb¸¸∑öŸ¶≈üˆœäÂ‡¿åG¥È'›ÂNºˇ&≈´ß`UvÄïÕ˜≈b9£F5xhﬁ`6Ü∫d]_U\úfxÏ©JÀñ—≠¥ÆÂ©«[›∞xJRow)’rBrq®V2áôh©N∞:~/âiÁLMKÕ¬Íà˘zÁƒR6◊)ÛËOÄ—ªö≤»·± S∏Å‰hTdŒë≤K{PV∆SFR∏x£5Ì˝≈˜ãÂ≤Cúßw≥æ?5SÆÿâ=¢”,Ã^üCM8≠e=úéíÑG ¢ì	RéŸ<(πTó∂7fáÌÇåÏ6ÀiÇäÚ√≥∞ò¸2ÖútÉ%•J31ﬁjåU3 Á≈å{*pxù)2`t£÷–&sÏ∏√®7{ODö´)ï#ì…(mu2ãÖÿ?V1‡KÃ$sÉ4˘^á›=p@!À= _{ΩáÇñm˘LRˆ*®’∆’´Ï<√8›Iï≠Ωˆ]≥,˚QS¿[œ-@ﬂ5B0]ıí—]ûª•UvVíÕ [íÅœÏz⁄º|ÃæÅ˙B6â@PNà–¨ÚùœíºÒ°Ìb®z€—4ªœº0QæQ≥∏à«á·êßkaî°ŒJ0Â≠#º&VÀ®hÛu>ah‹a.ñ ÇzPCÏ0"ÆÍÛLˇh^lfßõ>4yÃ26§ê1è;Eﬁ«!0∫Í∑ºmdÅ¢¯Ï[?-JHXZ2ê˘®eN„ˆ{≈!>"◊3ÅÏÈgŒíHÄòíZtJ&F°˚^⁄íÎ¨hÖÚF$c¶ôøÆŒ3˚âsn'˙áDÖ«ú«ÒiñÃ†97ôsn˘lHûk:]‚†Ö
-˜ëR·^;ë¸È#Sw+†Gø¶“nŸ£v«◊`Ô£7=bÜ≠˛◊&,Uπ0Ω˙å©ü]Ó∆IÃ"VHw©Úù≠U⁄JxJÜùbUí˜~£˙ƒ6`˘√ïîüeb´¥‚Ú‚wÖ¯∞…ÇO’ÇÖ“‰Ÿå
-Å$4(8ôiÑ_‚‡∑ù>ƒ_ë(¶QïûLVôËåQôûLVôFu˛,ªΩ0Â)ˆ;Ωs¢3Á-Zà≤è{>=i©,K%Ìéq?Ü0ƒãÎ÷´vÿÌ“´è@‡ª¯q±åf$◊gC} e/∫˙¥ˇ¯!Ω·ŸSätîLÇÌÃ0√∂Ûf‘Ÿ'ÌNÑë˝≥ãm◊≈]≤yº„„zÌÙ‘£¢c£Ÿ∆ù8e£A..>8{˙Öl¬ô[/oOñÅ%Kñﬂånπ∂,?¶›á˙|´œ˝ÂçØm/olÂ°Zç#FÒàô;`…¨A¥eP‰—æ&ä¬bèìüˇ√Ê=®“ø>⁄ØpïV—LHÚ,‘¢©H'".úÌ»s¿éTÈaQy=ÅW®Îı3Ÿ]≠\fî¥Ã8{5¿x{¶E}£†3¶wX›ËÎ0wª≥OŸñ&‘ßnaüeYD?-”ô"ﬂÄ”…Œ•iœZÎÏ{ì≤rås)©pztKﬂΩÇΩ`≥Õ—‰Y™{ì_ŒﬂÓ®π˝K’“≥è
-ıˇÃ´Œœ Å˜±≈ ùñ=&K©ª¶b{ZÊu•yUÒ?Ö˜Òù⁄˙Oó5∞Á¯¯8vk^Yé?»∑˚Ω~ÿjœxÏËyM≠ŸtU€ëf>ÿ⁄ñˇÛÉÌ≠≥7É“‡Ï)Fò¬1sˆósÂ‡ˇ˘É«)2öå4Ü?e‘®al∫‡MxF›—ﬂåŸr≠G˚√∫sÆ!%au3hâÕ4¯å¯ŒQ SqSys#9°M±
-ìŸÉ3≤2|jÈhÒzí[ìÔ`Q„|#√µ¬Æ˛Ÿ?˜ó7ø∂›h´çª€Ø£Êgˇw∞µ|wΩ±ºç>”´gﬁ}˙ÚÎ«"„ö¢=˚Wv6ÒnŒkú·º6©£…¨Ìf¬√ı∆òÛ¿¡NÄ∆÷Ú⁄z õ≠ZÙ/Ï(ÃÎ‹l–ˆ’1˘‹SòU*ï•œö<ƒã	> ˝⁄0πs≤S¸J±R|˛4œ>ºwˆa≥±±“Ä_€[kÎkõÀ[çÌ&¸⁄x–º4˜ƒ◊ÌÕ>fÉﬂ,≤†ÍáY‹åÅÌ˙CÿzxÇπıÑ}Øﬂ…ê1â◊Ü{˝ˆÔiÍ∑≤	[⁄q6Î`qewçæK˚öœ5ÔµDÕgûÿ_;óArCxW—nÙM∆¢ﬂ¨	g–L~HY,rá0åÑ&œ0æM4_.tŸÂ(N®Ù{ÔÅï*^jí>ÚœlNˇñΩÚÖ‡´%mâT‘Çg¬ˆÑ7ﬁ{ØE]MÉ∫›∞˜Œ(Ï_õé∫w&ûõ◊iÿûÉ∆tûri_7P0®ñüØO~p_æKJ™ë/MáÜ0ºœD  ^äq˛ o&·†^<ÜøLØ7ó∑Æó’\Ò!ò˙´	•K9V~ø$◊Ö¡ß•”>NvF1…xΩiûxdùßù´t„yÙ‘ÅPéiQ£æcJ:
-:|‰!‘3≥yÃ◊ñHÃ©˚‹,Òˆœs¥•¥p‘÷Ã,laØ^]≤)ñãXX∏ä¯o≤∂|Á √é]#G†)^œ«^{*rµ¨3Ë˘ñÈ+—≠∞6[{ﬁï—Æì=ÔäXøÁ\Ì»ÕVk‡'üº‡«UºΩ‡iˆÀ+éî_‹1‡·«4Í(¿ì°eΩÈóré1ØJB™„Ë–èOphyÅ€°`Ö {ˆ“ß iáYG•k'zÍóô)4)Ù”·“R≠:_.øB.ó_-?B¿$=(ã√£`Áö˛‡twíF&Å˚$ …Ï~2uÉÏe7‚ö¸]AYü»èQ~úH«ì≠1£ñ¸r˙≈,∞˚Œœ°4√œegÛ∫*◊èœ/†<ªı ≥L‡Ê+–‘à_@â6Ôﬁß15f7∆j»„«.ü
-◊.óâ"c¯v”¸t+Oc≠Zu¡∑˙œ>‹X^_£•À5(qus˚npΩV]‡`Å>) ë”Ûr?Ω≥⁄XÆœºPSlÈ†≠µçÕ‡˙\µÊ_≠I\∫sÓ%±/'ﬁpŸ∑3æ»»‘Yftëf)/∏~æ¿ ¯ëÒnæÙ ¯ô –~ú´º/!R∆kõ[ök_€n Åìà¡Ò¬K2æ®X	¯ô ^ÇH√ı‹·ÿæp5ÿ'≤Â¸˚ôF»∂ô“wÅIﬂ<ÿ…º/Ä≈égW%F÷èè,«÷bò{a'Ãæ®#_Õ√´ØÏÔø∫??g^ﬂq]´òóîÔ,SnR/‰%µ‡µ¬€Àπ∫Í∫?y›ßZß≥≥è≤aè»‹ºº:ou∏Ä7E˝}<≤Ô—˙&më˘‹Ω˘ﬂ =Mø<Á≥/˛xg =K§˙&É±rÎ©ÿ7„-3|høMÖπêQ+Ë˙Å
-‹<æ˘É £àV1\∆à[ßH|¯êáä+Ó'S˜ö≈ Imv™ƒCò¥~X/¶á˝~¬‡ıóqo4å‘É”rﬁ∏'^Õ'ciµõU÷Ê˛3vã*Ä/À”	L¶ﬁwV¯ˆKñ¿DÔÍŒ^€È†˚Ûâí˜
-?Q$G‡ü£‡•]”ë˘@—„áÓ?ÑJŸ@±+ñz5ÖC&Ób$øÓ æá2ª$"±|NûvD7mçL°<Óúë‘œ :ôÑ˚"WcVë§"ÁCˆ›…˜È§§ÏÙ˚Qiù}w*…àñºøø}?•Z+‚óë5≥¶«ìD∞4Òé5+q?Íˆù8‹WÏñ»§F˜áÆ"xÈÁZØ∑"…o Dƒ ]ù˜ïätÙ™A÷û^*nøÀgiw†ó⁄è¯ã•x´;Poß∂ª´ÍÑT∆*ˇ	Œx*ò5h¢¨UúVÕúEÑºè°
-Ã∞TÖÓyn/”YüUäzÌ˚)€ñu‘}PKx_«lÖ¢Yäéy3L’BÕÚûÀÏ∫ºnÖ◊êπµÙçaC‹=äõ·˛ò†Ìl;È—SΩ≥‹ãª‰çv/	ªë]Ïv`>0ì,≤¥êÊHrÜ!6≠
-.9G"«d†ÌA#N§æ_J">ü≥JO…√°õà÷ppÛVË:“}7=_±ËT√DV1QÓP_0WZ‘eä<J]! »
-Uæ‰∑TDOŒî.±±Í”2≤¶ó√9eÖ„‘ ®E‘5@•»KÎ±7ﬂU{ÓÊÏD˝nÍì1âW¥°[ãÿMçh‚–÷ùE:¥ÏD@∏ne_¨iÔã.¥`f4ë]ˆq∂CΩ3Ç}jm#Ño~ÇW53»≥*˙<=öô/ŸÄ >Ω
-¥dÌØ{Äﬁtßœ⁄g∆UkˇaÂ€7Ï<úD;«±qÑm%Nê•q¥á Íò4YÌ=≠™ë•É–B˚úx`b^íXﬂ¬¿∆+q∞ed˙’∂hçÙê9L^å“õÔÒ!F∆·ÔG—˝M¡EQ"AOˇ< ç(Ö°‘Q;…ÄœÓr´F!ÑqPäYª™®"¢\zÉTz#ÕÍ±=˝*[ì¨îÛ<Æ†…˘À£fıÀ¬Bôbdöobn£˝∏uGIü7l∞à‡ùbøwÄwE¿#áëñxﬂ1ˇÌ˚i‡–-‡ºtûÔò§êD)c7¥fÙ¿ΩqØ3ìA|kï†$πG_Îe l™)äÎ[Ûıï·Ÿ!ñD˚ã'ﬂNY∞¶–	‘§4-,bä^£ﬂkÙ⁄AG«¶´ÂÀbKzP'€óå#Ç¡ìH4<ä9Ô¶7ëØ–ùBπÓR#ßz(Ω—Ωa/∏v¬˘|‘^·®HgÖœ
-fƒK™j±©@-ù€0"∏¥éD <Íl3Tµ}π†U0d~Ωﬁ≥è>£*œ~ˆO]Ê≥ug[ÆˇÇÄ·S¡~ÒÎˆ´ãÔ˚˚˘1ıc< Ü∫8`
-πJ\*ı:ñ åò√aPÊ±ƒsªjcBæÚm„~¿©g9¥È›Ìè0^M—4YÑ-Jc∂GØÕU˘_˝ﬂ≥ xD‘É√*≠Ã•»Au:¨
-bè)w	ÊŒÆM◊ã{ùQR∫1xó.gb¿ÅEwq—$‡JÌ∆ÜT>ÌS∆î'ıÍ<–Ê:0/ÅâgŒ!l¨¬í#hpœ∏ƒ˛ÿ)ó8∏ıOÊÕO”<ü˙ˆ§‡9ê…–ï≠ÓœtË8Ÿèﬂ•K‹%Éy@Æ~ÁÑNâz «éOÖ
-c…Î5”Íµ‡t∑,¸ÃÇVht ±»ù(=Û≠éë $]ò'W1üøÜœ°Gˇ}\y arŒ ≥Ì¸&¯Rd_Â|ƒ.9¬Îk'lK„Å˝*‘±ÒøÍÖG2.¸#∞5_rïbL˙Í §∆qW¥èæ≤Ø’õÒÄ2ÔúP◊»{x2ô1≠È.?çMr@Õ†p~Óúî4éÄ	+®;ΩøµK3Â”‘@máÁÃ≈^®_º<—ê¢4u\ä·?IÖ){VP;íÈÙ¡˘+ÜFR·ÈWf§GüF”–a^πb(1W(ùjëêvëqx	fx—‘ô»á	πÛbdb ·”˚1À%õq}%¶Á‹G∂ê≤ë-)+rùÚFu˚√î“Q√'!lË£®Ö'È“≥ßf{Í¡™ÿ⁄◊†”∂TIEB—îˆŸP`1≠∞”u"’A´?Ç#	æ≈°FL±EåDCÑ^˘¸êıF!éßá™*µ´D•ì Gû•sçﬁçSÃúÚ¶⁄m@ˆ1_HÿŸå¢«®£j,€Õ‘»N¢íÕ÷…N™*}1%Æ‘∫· ˆ›©dèå∞'”¿ÔªAêQGV:ÊöU<†ZÚ{8ÎxX*V—RÓˆ˚ù(Ï!ØâÒZ<J>ùŸ~ŸJ=#¡IøGR°•&£?r’GÜÍgïë§œóW|<ß¬√Ø9;Ω≠CÖp¯öƒÓ™-Õ™$#]¶j¶¢@÷TzW ‡=Ü›,¶Ï≈§?CLäÚ,í@8ﬁ!j‘°Ã∑,SﬂŸ€ N˙‘RsbP]À=F]8FGg6´ÎÁ§1äIïãÒTÅcE#®1£bH¥M⁄
-‘S#¥ØwÂíµ–ç&$0«˛2NÎ/’ƒ^µóå«ƒ⁄å3ﬂú˜/‰Gx<N˝•ïèåÚ«Ÿ8ƒåèçπaSôˆ¸¿rl£JjH9ÙÉ¥w0_⁄QH)ˇ<Î†u(‡å]";Àƒﬁ.˘√„X™Bw'D∆F¯´'ùπÍ9¸™áaä"Üfc–j£û˙ÜÆtøÀS®¸∆˛ª
-í¿∆NM’ß¶™SSS,k= ûâ[ I¥ÇlÇäÚiL4≤\Ñm:∑J≥ïB≠P>≠˚j`ïØÚ*Ç•t´V3:˚™SaéUx§'æcπ¿ÈΩ§rÍP-È»ÆrSßÄq0J~hÁ.Ô°AπxµË~Åˆµ8WC¡ıÙÕØyÍiÂYfY≈1À ˆºn‰ú~pìsƒÇgπ˙6≤ƒËı{—±Ä5#68-V@gŒÄ◊”§¶∫’_ÖC3âÂÕ´7ÃZXˇ1/Ë“í/á?ùm≤∆pzE$^sï«ö@“ÑSËw_»“5b“Ó<˚¯;¡JÛÏ√F3ÿ¶¥≥Õ≠µFıµÂ`Ω∏ºΩ∫ˆ¿Õ†≤nHZ>z†—C©jÜ¬ó⁄UY‹ïÑ/•· 3kÍ\ëcX<aˇû
-÷Ñ‡óS•ïÂ_D›i3!JE0üîãE∞(eÁŸAËâŸËôv<≈`Ùè1%DéÙ®ä±`«Ö;xÌ}{À;l«I÷j"˝Ωv"Ná´äú":q≈ j!àˆä”⁄„4‰âÄΩ`Ã N{ÙÚΩ≥ÙKœ˛Á/Ç˚ÀMº‹Ø∑ÓÊ≤‚∫˚≠ 3∂D\Ñæµ+I∏÷í”Â?Ò5˝2VÁﬁöõÒa¸“05naÿq˛rñ0˛%- ¯Œs„Eeπ'-Jj™´-üÔïåe˜[≈tührŸ≈≤Ω°≠ˇ§\\çÕ∆V¶J€%zì≥ßGq:
-)ÑJ&≠iô\_§\}sêDœﬂ@≈™õÕÙ‚á˚#ıòT‡û¶qØ’µ#‚ﬁn˚™¶d◊®j„gVÕPYkz”c[o™ÊH“1ı3nÖ∏7ï‡πM%«
-1Z4H˝˛‹W{t‹'«ß'¿68∑F<
-Qcéß„Ô0ÿƒ÷ÿ‹‰ﬂÿ«Baàœö01èCØ{ΩÅ˝,¢m∂PûÅQ˛‡Iük†¸QÿÈ∞le!zGﬂdÍ7q$éÇ«ÔÓy¶êe÷∂˜Ì_˝ôô–r›.b≤‡∂n¡∆yr8y¶lﬂÑƒ∆˜;ñ4iûFhuÊ◊»¢"π^mÙ◊óµæ,ò¨“â?Nqô¸ØHP#m ˜JY,ùÄY
-c√}¡•ÁÈ „}:†„≤©ﬂ‹¡§”=X†Õa4`æü⁄[;â¢om1H3ã<{cöØSñ¨r0ªÿ={⁄Ì≥áAäÎ∆ﬂÃ-’Ö]Æd«q¥å*g[3¬:ı@ö**∞1XÙZosîÑá¸M‹ÜπÄ ´„œus´Òpc88O:˚1<ÓüˇçD•"Í?E ŸØ,ÏµnÌ/¿≥ΩÉ:øı˛ÍLe∂V´ÃŒ/∞kÔ 9;Õ˝<∏ˆ·˝Õ5
-Ç£ö€ﬂoœ‹∏a47ª∞ ÌΩZô©Õf∑˜∑*%õ1º÷≠õ∑ˆ˜Õˆrˇ,åo!{|‚†§∆Ts¶∑=kS;oyKªJpÖçÉ∏Åû•™ØsÄÃl©vπŸ”9≠QX|uƒ+±˚h@ƒVk–F
-€n¶<V`‚Ó 1ÏåkÃ÷EÉâ⁄t:—;˛@ql≤fÈõsD÷$„'918ƒ8ÿS∫ïÂ∑|äAü63¯3Ió8úºW’tœ¢L¢‚úºX—„Ñiπ»MÀ∆Ω⁄ºª"˙%¨":x˝ ®ld$fËR›;ê7ŸÃPƒ¸=·„È#πoåÁ™qº¿ ^‘O'ÀT*C•y∞Çåª~≈‚˝,µ9ç™V´mFq“z–Æd–YÙë<!w HÚ9PΩÁX◊ı‡Í@πûAËYŸÚ†±∆˙Ï„ü2èáÅŒ‰z“‰«ãS˛˛√√Ø”ìΩpe•Ç–U!>˚gˇ∑I8xÕ(¨3Ss:„n–¶1WR≠kVÏvù∂ÖÊ˘MÕ†V¥∏ò¢l2[≈˜ûH+å¡˜‹¸≥Ôµ¸ﬁT .àY€t÷‹mjg’π‘©m<Ù30†∞§l7∆1ƒˇ´÷n·±a•*,OñòêŸ™ô›úq†ù„IJ·ﬁ{ å¥¢¡ê÷)»^$<@rI¨Ü9'∆√∆®±BJG‰ÜX≥¯¿∫#l]ﬁ1ÄHÙ«:uÕ†-À ⁄.“=e|◊"ìÚN5ˆkQ O%+ÊSô·Gxú.:ÿkñéUV9Ñ≈¨^2«A[;™;[A!}DÊ06Úèz∫»[%ëˆò/≈sÙÃ£Ó1‰?7<|∆À´Å07BƒSíE≠¿Dûò∑9ßßº‚Ï√‹By“c“B:∫ì»¢dû}H{ÑswˇÜ«$ŒqM¯8n¡Êx∂w¶ø†êQíªnÌÆÇ§ut5›ﬁ8MŸÂ
-Ô≠˛òîÒÚÄ„¸Ú1€U„2ˆﬁ{;ª@˘¬£àí0.û§Óπa z˛k{¶ë∑•s®pfq`˚G	◊ÂËAs¨‰6Á∏¯Òk"à≠î 	Ø[c 9eî›É›œrΩ∞Z–K{áEiƒµ∞∞ÉÇ_øÑ≠ŒJÌÏ≈ª¸—r‡Ü†tÕÒÒb]<F‚à·‡=’ÕhX⁄©UDÁ—7„<ßfvÀ–z?‚ïΩÚ‚ùpjèù\d´·Càwù˛‰Ì.∆» ´”8*¯™îÚ±#⁄Õ‘jƒ˚HÆáÂ‚ -OY¯6àè·¥ÜÏ¿%›©§tº<†ÙßixQäy·%î¢π1Í¬Æo3Åw5ÜY2sú2Uÿ[áq∫LM n±«LjÓ˜H+äß
-” AŒ˚eÓ>‚ó)|3%ÀÛª—»<>L∞_ˆ{Bñ¬9ï‘T©QCÜÿ”¨ë¿“ï≈uŒj.≤¡Y1=ÿ3*§TzK oßÕ‘EºÓRU†élö¬„´¶;|+€!CƒsﬁÁ9‚Pã˛´%{Ù∞w≠^)EŸ’N[∂ÊgW-$-Û˚)V˚ªuCﬂ∞ÉL√‚1ò3ñ˘ÃP¨8^\å¡úøƒ/o%ô÷z"-ñœªÉ˚\1{%	æ√KÚåÍæıìFÿ:K`àØ‚]Ã≤‡¡¡QäÀ"’ß©p.Í·q|∆aÚ’«^M·P6ÆéÑÔñ`uê∂ÈÂv11‹ªbcÒrö¬aO∏fıu«Dl·^#¿Ì^fiÜq-à≠˛h“ee¶Ü◊¿{ÙPAIÍWÚY§'gøLÑw¶ﬁµ≈°6ò˜Ã%/<ª0!^7Ûñ0Äâù3˘@”´˚€Y;˙5Â„Ï{æóÛ∏±ØîŸ#ª‚sEPÆ∞ãÅi˛óÊ~Œ<aQ2ÒºÇv;Üp®ˆ˙«ËÉÊt†ÏW€Jbﬂ%˙pe"+>UöJô/m¶)üó¢àwSIˇ8[ÎtÚHï)•m®3¯wz©î\õ[À[€[Æ√ˆQÿ)‹±ö¿dª\√Äı¡ ÉÌÊfA∏åè±«™±Ó¨7V∂∂õçÕúéaô€+x¡W•ñ’GÜNáßCwÄ¿ù¯≈ÙÛî:)ΩQ‘i•÷‹∏1ÀY!ó_5ûH‘QM⁄·†9µóK«[rTH‚ú
-$lDy“.‚ñO«¨27'√Rﬂøﬂ/<⁄µìå„[ó&MU0No¥≥À©ƒ∫ò0ﬁ˝A5Okk[kÀÎ®nwÕõ*£óÅÃêãË∆Tø”	iåë¯ô ÿwÅÕïLûÓ˘a…æ–†dz™óí,GB÷ï∫:ˆxïsπs•–O_HP3¶“ﬂÙYô≥6BÜ1›{#XÇûkKl‰õ©π¡.u%üÕ\c 3'®ıg∆,E3ïô∑*P†:SvÇ¶Iªêßa-kPÊi…›g`ŸJókπ\({oºI‡KùÚ‚%+À¥*∆üÿK„Û‰øò/≤nÇÄuR2xÅàuä¢+
-¶⁄µ–7CKƒâƒe¬’π€ÈÊ]J ∑„§∑ ß,⁄[ CÍ»K“Ô™Gà'q–<{w‚√ÃQxØi¢ãÊ*Yù¬QÀSøl∫}zb
-‚«πT(5…œ1vœ8¥-	ñÙ7õ€ü⁄sr ¸x<ù∏á†%´£–¬ˇı◊?˙Ωp¿@ﬂVÚl}^∫©Ü(qô_≤Ówà	ú„%ò©.Hª¶©<‚9õsä%‰0îîê•Ì-TÙ”4pÌ≤“F‚Fé–¶ó?tãÄıygD˛C® Ì
-yóﬂ/Dp<˚‡œŸu˛?ˇπ^Zóé≠“.ÂuB»Yks‚€üüπŸã√¬<u‹5#Ú	,ÚVî™ãå‚¢#™Œû¶˛Yò”∞wìo¥û{çŒ¬1U;˛uwUÜ……mcå	
-?ﬂAn⁄‚≤∫[≈∏µ¥xbh>‹“∫GøÈz%'oWöcGÉ≈rqr«(è1ñ[ëë‰y8ô¡‡‘∞Îbñ†ÛπÌ{\∫Y<aˇû:±qﬁ¡oÈaòyåMÇ_ìÓÜÔΩ¿vﬂcÚDTAøı¡àÚ“1tA4˝G¨˜V¥HÒ#ÀZZñ*“A\“N≈ÂTÀ¬uLNkeÓ"05ˇjmEó6ìpSàf$pû}+ÿ‹nÆØΩæ¿¥n9‰‰ Ú$Ù±ÇÁ2†ñücm;¡ıπƒl‰Ñ»Î{í ∂ÜòZÃë/ô±ODÂ◊AÊw˛œ<BËÜ#b∫Ç=•_îü•jI⁄Ç0`≠å™R\Bµh]{êê‹Ù≤Ω<~^yÆ[éÀW∂1?ö®ô5üC„&/”ù3“úöè≥:0í≤ÿÈsNŸmÛh«„[õuR¨ôMQn3∞Uãœ>˛oH·6óW∂÷æﬁhâ˙¯£`e}çÙhÄexÔÍÀ[>-m„N{©*]™ì∏[*{ÈwöYv>èôØΩxßtB¥JvÑ9M Ÿ»69∫›z…ÿf:Ä¯ìïﬁC%N˜è∂:8ı∫ó±Oﬁ˘bGC…¬ä<·9;ƒ4≤ˆn>√˚lÇº(∑‹Ù¿˘9QlRL∫dÂâwó¡Aò˜=qÚ≠x™•È(ù‡0ŒD•l(˘Ú¸Mú®û√U:\€…>& –l∫›ú™^ˇ#G€\ÜE/td<edBQÈ‘EuÜ∫/bƒs√CŸ¨∆⁄∆ ÉççÌÕˇ`3&b3∏.œb¯Üˇ¬l«®˜∏◊?Ó	¶C¸¸ﬂàÂê3P€tfµ‹ØæÜC5‰„f¥7˜ú¨Fv;ìÒ¢˛K‚0JHÅyõ§Ka“»›…K‡6Ù>Î N˝√Ò“â"óc7>>ßaÏ∂…X∑û'áq&œ˜ZpHç^à˘(πÒ<πõ4Fà9;∆˜Æ≥}ÔÃ6aQ6£°ÊZeo<Æò“k¢w´Ásyô?'ª*é~}(””¡›Q‹ÅeÎ#¯˚˚AJ∫¶oe“$;∞¶ú˜F?ÈÍNe®a”⁄UN•!%fnBÎ%˛à≤X,;`.[£[çÜ04K ¯Gzxiÿçh‡ÓJèÜ}sYåv’H§W^œéı¿ø|ÅÚtL≤ôò1=“¶u\.óEá‹+Óv`ÜYó^j€Ω«^Äë^à∑a‚ä˜ûˆÛ2`Æ.ÔÂ1·f2>ØBª∏ükTx∑ıF!·5ñ√zS-|ÄÆµWyMX8±6Ÿui¡UÖ´X##"”òïëpıfe¥Smì•W§:“Rc…≤o8…≤≤í/â•¿G«A∏1Æ¸Tf€å“+ï›…ÏBV'Û>éJ≠¢yf…b>µÍMhv&´>“≈’®’gëGë·ÖASj†vàTM∂ú—Ä([ ÍÑËKñQ4;Õ’…qVJW/¿0”ô@ıÓdGCËs—‘çJBjVÌ¥Ætk_ZëêæQŒÂö§ÿﬁz¿˝¸cŒ…˜ÈÓ	7ˆ≠7_‘âÿê“„◊o√Œgk¸”ıegÕûægZ◊ç—ù °f√xvgf©∏YDeZ`eeªŸll¨dñ 6~´±≤uˆaV	è{|ŒT7ùñÓWÚôEåˇ?   ˇˇ †€ë∏

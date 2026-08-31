@@ -333,6 +333,7 @@ export const goalsActions       = goalsSlice.actions;
 // ─── Selectors ────────────────────────────────────────────────────────────────
 export const sel = {
   // ui
+  options:         (s) => s.ui,
   activePage:      (s) => s.ui.activePage,
   sidebarOpen:     (s) => s.ui.sidebarOpen,
   showTsBar:       (s) => s.ui.showTsBar,
@@ -392,6 +393,7 @@ export const sel = {
   // goals
   goals:           (s) => s.goals,
   activity:        (s) => s.goals.activity,
+  revision:        (s) => s.revision?.mastery || {},
   // ─── Sélecteur de Maîtrise de la Sourate ───
   revisionMastery: (state, surahNum, totalVerses) => {
     if (!state.revision?.mastery) return 0;
@@ -429,4 +431,16 @@ export const setLDataThunk = (surahNum, ayatNum, fn) => (dispatch, getState) => 
   if (newLP > prevLP) {
     dispatch(goalsActions.recordActivity({ date: today, partsLearned: newLP - prevLP }));
   }
+};
+
+export const act = {
+  ...uiActions,
+  ...quranActions,
+  ...playerActions,
+  ...learnActions,
+  ...collectionsActions,
+  ...voiceActions,
+  ...goalsActions,
+  ...revisionActions,
+  setLDataThunk,
 };

@@ -218,28 +218,8 @@ export function getSilentIndices(normWord, rawWord, wordIndex = 0) {
   return silent;
 }
 
-// ─── Spaced Repetition, Learning Phase, & Mastery Score ──────────────────────
-export function computeMastery(ld, ayatText) {
-  const toRevise = ld?.toRevise;
-  const words = ayatText ? ayatText.split(' ').filter(Boolean) : [];
-  const totalLetters = words.reduce((s, w) => s + splitArabicClusters(w).length, 0);
-  if (totalLetters === 0) return 0;
-
-  let reviseLetters = 0;
-  if (toRevise === true) {
-    reviseLetters = totalLetters;
-  } else if (toRevise && typeof toRevise === 'object') {
-    const chars = toRevise.chars || {};
-    const revWords = toRevise.words || [];
-    reviseLetters += Object.values(chars).reduce((s, arr) => s + arr.length, 0);
-    revWords.forEach(wi => {
-      if (!chars[wi] && words[wi]) reviseLetters += splitArabicClusters(words[wi]).length;
-    });
-  }
-
-  const knownLetters = Math.max(0, totalLetters - reviseLetters);
-  return Math.round((knownLetters / totalLetters) * 100);
-}
+import { computeMastery } from "../components/common/Mastery.jsx";
+export { computeMastery };
 
 export function calcPhase(ld) {
   if (!ld) return { label: 'NON COMMENCÉ', color: 'var(--text3)', step: 0 };

@@ -1,9 +1,11 @@
+import { computeMastery } from "../components/common/Mastery.jsx";
+
 // ─── Dashboard Analytics & Chart Utilities ────────────────────────────────────
 
 /**
  * Computes primary KPI numbers from learnData dictionary
  */
-export function computeDashboardKpis(learnData, surahs = []) {
+export function computeDashboardKpis(learnData, surahs = [], surahTextCache = {}) {
   const entries = Object.entries(learnData || {});
   
   const totalLearned = entries.filter(([, v]) => v.learned).length;
@@ -21,11 +23,13 @@ export function computeDashboardKpis(learnData, surahs = []) {
 
   const surahProgress = {};
   entries.forEach(([key, v]) => {
-    const [sNum] = key.split(":").map(Number);
-    if (!surahProgress[sNum]) surahProgress[sNum] = { learned: 0, total: 0, read: 0 };
+    const [sNum, aNum] = key.split(":").map(Number);
+    if (!surahProgress[sNum]) surahProgress[sNum] = { learned: 0, total: 0, read: 0, masterySum: 0 };
     surahProgress[sNum].total++;
     if (v.learned) surahProgress[sNum].learned++;
     surahProgress[sNum].read += v.readCount || 0;
+    const text = surahTextCache[sNum]?.[aNum];
+    surahProgress[sNum].masterySum += computeMastery(v, text);
   });
 
   const learnedSurahs = Object.entries(surahProgress).filter(
@@ -33,7 +37,12 @@ export function computeDashboardKpis(learnData, surahs = []) {
   ).length;
 
   const totalAyats = 6236;
-  const pctAyats = totalAyats > 0 ? totalLearned / totalAyats : 0;
+  const totalMasterySum = entries.reduce((s, [k, v]) => {
+    const [sn, an] = k.split(":").map(Number);
+    return s + computeMastery(v, surahTextCache[sn]?.[an]);
+  }, 0);
+  const globalMasteryPct = totalAyats > 0 ? (totalMasterySum / totalAyats) / 100 : 0;
+  const pctAyats = globalMasteryPct;
 
   return {
     totalLearned,
@@ -44,6 +53,7 @@ export function computeDashboardKpis(learnData, surahs = []) {
     learnedSurahs,
     surahProgress,
     pctAyats,
+    globalMasteryPct,
   };
 }
 
@@ -175,35 +185,32 @@ export function computeCalendarGrid(year, month) {
 /**
  * Computes per-Surah statistics for Learning Map dashboard view
  */
-export function computeSurahLearningStats(surahs, learnData) {
+export function computeSurahLearningStats(surahs, learnData, surahTextCache = {}) {
   return (surahs || []).map((s) => {
     const total = s.numberOfAyahs || 0;
-    const learned = Object.keys(learnData || {}).filter((k) => {
-      const [sn] = k.split(":").map(Number);
-      return sn === s.number && learnData[k]?.learned;
-    }).length;
+    let masterySum = 0;
+    let learned = 0;
+    let perfect = 0;
+    let questioned = 0;
 
-    const perfect = Object.keys(learnData || {}).filter((k) => {
-      const [sn] = k.split(":").map(Number);
-      if (sn !== s.number || !learnData[k]?.learned) return false;
-      const attempts = learnData[k]?.writingAttempts || [];
-      return attempts.some((a) => a.score === 100);
-    }).length;
+    for (let a = 1; a <= total; a++) {
+      const k = `${s.number}:${a}`;
+      const v = learnData?.[k];
+      if (v) {
+        if (v.learned) learned++;
+        const text = surahTextCache?.[s.number]?.[a];
+        masterySum += computeMastery(v, text);
+        const attempts = v.writingAttempts || [];
+        if (v.learned && attempts.some((att) => att.score === 100)) perfect++;
+        if (v.questionScores && Object.keys(v.questionScores).length > 0) questioned++;
+      }
+    }
 
-    const questioned = Object.keys(learnData || {}).filter((k) => {
-      const [sn] = k.split(":").map(Number);
-      return (
-        sn === s.number &&
-        learnData[k]?.questionScores &&
-        Object.keys(learnData[k].questionScores).length > 0
-      );
-    }).length;
-
-    const pct = total > 0 ? Math.round((learned / total) * 100) : 0;
+    const pct = total > 0 ? Math.min(100, Math.round(masterySum / total)) : 0;
     const status =
-      learned === 0
+      masterySum === 0
         ? "not_started"
-        : learned === total
+        : pct === 100
         ? "completed"
         : "in_progress";
 

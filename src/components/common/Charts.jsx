@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 
-export function GoalsPanel({ goals, todayAct, weeklyTotal, streak, goalAyatsPct, goalPartsPct, weeklyPct, onSetGoal, surahs }) {
+export function GoalsPanel({ goals, todayAct, weeklyTotal, streak, goalAyatsPct, goalPartsPct, weeklyPct, onSetGoal, surahs, onOpenReminders }) {
   const [editKey, setEditKey] = useState(null);
   const [editVal, setEditVal] = useState("");
 
@@ -135,6 +135,32 @@ export function GoalsPanel({ goals, todayAct, weeklyTotal, streak, goalAyatsPct,
           {editKey !== "targetDate" && <button className="goal-edit-btn" onClick={()=>startEdit("targetDate", goals.targetDate||"")}>✎</button>}
         </div>
       </div>
+
+      {onOpenReminders && (
+        <button
+          onClick={onOpenReminders}
+          style={{
+            marginTop: 4,
+            padding: "8px 12px",
+            borderRadius: 8,
+            background: "rgba(201,168,76,0.08)",
+            border: "1px solid var(--gold)",
+            color: "var(--gold2)",
+            fontSize: 9,
+            fontFamily: "'Cinzel',serif",
+            letterSpacing: 1.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            transition: "all 0.2s",
+          }}
+        >
+          <span>⏰</span> PROGRAMMER LES RAPPELS QUOTIDIENS
+        </button>
+      )}
     </div>
   );
 }
@@ -535,12 +561,13 @@ export function MiniBarChart({ data, color }) {
 }
 
 // ─── KpiWidget ────────────────────────────────────────────────────────────────
-export function KpiWidget({ totalLearned, totalRead, totalWords, totalParts, learnedParts, learnedSurahs, activeSurahs, pctAyats, entries, surahs, onNavigate }) {
+export function KpiWidget({ totalLearned, totalRead, totalWords, totalParts, learnedParts, learnedSurahs, activeSurahs, pctAyats, entries, surahs, globalMasteryPct, onNavigate }) {
+  const masteryDisplay = globalMasteryPct !== undefined ? `${Math.round(globalMasteryPct * 100)}%` : `${Math.round((pctAyats || 0) * 100)}%`;
   const kpis = [
-    { label:"VERSETS APPRIS",   val:totalLearned,  color:"var(--gold2)" },
+    { label:"MAÎTRISE GLOBALE", val:masteryDisplay, color:"var(--gold2)" },
+    { label:"VERSETS APPRIS",   val:totalLearned,  color:"var(--green2)" },
     { label:"LECTURES",         val:totalRead,     color:"var(--teal2)" },
-    { label:"MOTS MÉMORISÉS",   val:totalWords,    color:"var(--green2)" },
-    { label:"PARTIES CRÉÉES",   val:totalParts,    color:"var(--text2)" },
+    { label:"MOTS MÉMORISÉS",   val:totalWords,    color:"var(--gold)" },
     { label:"PARTIES APPRISES", val:learnedParts,  color:"var(--teal2)" },
     { label:"SOURATES 100%",    val:learnedSurahs, color:"var(--gold2)" },
   ];

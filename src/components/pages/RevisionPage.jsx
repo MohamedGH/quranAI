@@ -9,8 +9,9 @@ import { RevisionEcritureMode } from "../modes/RevisionEcritureMode.jsx";
 import { TajweedExercice } from "../modes/TajweedExercice.jsx";
 import { splitArabicWords, splitArabicChars } from "../../utils/arabicUtils.js";
 import { computeMastery, MasteryBar, MasteryBadge } from "../common/Mastery.jsx";
+import { LearningEvolutionChart } from "../common/LearningEvolutionChart.jsx";
 
-export function RevisionPage({ learnData, surahs, setLData, onNavigate, initialFilter }) {
+export function RevisionPage({ learnData, surahs, setLData, activity = {}, goals = {}, surahTextCache = {}, onNavigate, initialFilter }) {
   const { surahNum: urlSn, rangeFrom: urlRf, rangeTo: urlRt, qIdx: urlQIdx } = useParams();
   const [filter, setFilter]         = useState(initialFilter || "carte"); // "carte" | "questions"
   const [openSurahs, setOpenSurahs] = useState({});    // surahNum → bool
@@ -191,8 +192,9 @@ export function RevisionPage({ learnData, surahs, setLData, onNavigate, initialF
       {/* Filters */}
       <div className="rev-filter-row">
         {[
-          { id:"carte",    label:"📊 CARTE" },
-          { id:"questions",label:"❓ QUESTIONS" },
+          { id:"carte",     label:"📊 CARTE" },
+          { id:"evolution", label:"📈 ÉVOLUTION" },
+          { id:"questions", label:"❓ QUESTIONS" },
         ].map(f => (
           <button key={f.id}
             className={`rev-filter-btn${filter===f.id?" active":""}`}
@@ -203,7 +205,20 @@ export function RevisionPage({ learnData, surahs, setLData, onNavigate, initialF
       </div>
 
       {filter === "carte" && (
-        <LearningMapPage surahs={surahs} learnData={learnData} onNavigate={onNavigate} />
+        <LearningMapPage surahs={surahs} learnData={learnData} surahTextCache={surahTextCache} onNavigate={onNavigate} />
+      )}
+
+      {filter === "evolution" && (
+        <div style={{ padding: "8px 0" }}>
+          <LearningEvolutionChart
+            learnData={learnData}
+            activity={activity}
+            surahs={surahs}
+            surahTextCache={surahTextCache}
+            goals={goals}
+            onNavigate={onNavigate}
+          />
+        </div>
       )}
 
       {filter === "questions" && (
@@ -215,19 +230,19 @@ export function RevisionPage({ learnData, surahs, setLData, onNavigate, initialF
         />
       )}
 
-      {filter !== "questions" && filter !== "carte" && totalLearned === 0 && (
+      {filter !== "questions" && filter !== "carte" && filter !== "evolution" && totalLearned === 0 && (
         <div className="rev-empty">
           Aucun ayat appris.<br />
           Marquez des ayats comme appris dans l'onglet CORAN pour les retrouver ici.
         </div>
       )}
 
-      {filter !== "questions" && filter !== "carte" && totalLearned > 0 && filteredSurahNums.length === 0 && (
+      {filter !== "questions" && filter !== "carte" && filter !== "evolution" && totalLearned > 0 && filteredSurahNums.length === 0 && (
         <div className="rev-empty">Aucun ayat dans ce filtre.</div>
       )}
 
       {/* Surah blocks */}
-      {(filter !== "questions" && filter !== "carte") && filteredSurahNums.map(sn => {
+      {(filter !== "questions" && filter !== "carte" && filter !== "evolution") && filteredSurahNums.map(sn => {
         const surahInfo  = surahs.find(s => s.number === sn);
         const ayatItems  = filteredBySurah[sn] || [];
         const isOpen     = !!openSurahs[sn];

@@ -1134,6 +1134,11 @@ export const CSS = `
   .concord-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;border:1px solid var(--border2);background:var(--surface2);font-size:9px;letter-spacing:1px;color:var(--text2);cursor:pointer;transition:all .2s;}
   .concord-tag:hover{border-color:var(--gold);color:var(--gold);}
   .concord-tags-row{display:flex;flex-wrap:wrap;gap:6px;}
+  @keyframes toastSlideIn {
+    0% { transform: translateY(-20px) scale(0.95); opacity: 0; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
+
   @media(max-width:700px){.concord-page{padding:16px 14px 80px;}.concord-ayat-text{font-size:18px;}.concord-search-bar input{font-size:16px;}}
 
 `;

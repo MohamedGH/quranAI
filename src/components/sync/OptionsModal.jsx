@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { sel, act, uiActions } from "../../store.js";
 import { RECITATORS, TRANS_EDITIONS, TRANS_LABELS, setGlobalRecitator, getGlobalRecitator } from "../../utils/reciterAudio.js";
 
-export function OptionsModal({ onClose }) {
+export function OptionsModal({ onClose, onOpenReminders }) {
   const dispatch = useDispatch();
   const enableTimestamps      = useSelector(sel.enableTimestamps);
   const enableLetterByLetter  = useSelector(sel.enableLetterByLetter);
@@ -75,6 +75,41 @@ export function OptionsModal({ onClose }) {
           <Row label="PARTIES" desc="Afficher les découpes de mémorisation" on={showParts} onToggle={() => dispatch(uiActions.toggleShowParts())} color="var(--gold2)" />
           <Row label="ORTHOGRAPHE" desc="Vérification en révision écrite" on={spellCheck} onToggle={() => dispatch(uiActions.toggleSpellCheck())} color="var(--gold2)" />
           <Row label="NUMÉROS" desc="Annoncer les numéros d'ayat" on={announceNum} onToggle={() => dispatch(uiActions.toggleAnnounceNum())} color="var(--teal2)" />
+
+          {onOpenReminders && (
+            <>
+              <Section title="NOTIFICATIONS & RAPPELS" />
+              <div style={{ marginTop: 10 }}>
+                <button
+                  onClick={() => {
+                    onClose();
+                    onOpenReminders();
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    background: "rgba(201,168,76,.1)",
+                    border: "1px solid var(--gold)",
+                    borderRadius: 8,
+                    color: "var(--gold2)",
+                    fontSize: 9,
+                    fontFamily: "'Cinzel',serif",
+                    letterSpacing: 1.5,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span>⏰</span> CONFIGURER LES RAPPELS PROGRAMMÉS
+                  </span>
+                  <span>➜</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

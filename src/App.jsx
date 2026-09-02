@@ -15,6 +15,9 @@ import { AnimatedPage, AnimatedSubmenu } from "./components/common/AnimatedWrapp
 import { ArabicHighlighted, PlayingArabicHighlighted } from "./components/common/ArabicHighlighted.jsx";
 import { MasteryBar, MasteryBadge, MasteryDebug, computeMastery } from "./components/common/Mastery.jsx";
 import { RappelWidget } from "./components/common/RappelWidget.jsx";
+import { ScheduledRemindersModal } from "./components/common/ScheduledRemindersModal.jsx";
+import { NotificationToast } from "./components/common/NotificationToast.jsx";
+import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
 
 import { LoginScreen } from "./components/sync/LoginScreen.jsx";
@@ -439,7 +442,33 @@ function AppInner({ currentUser, onSignOut }) {
   const wakeLockRef  = useRef(null);
 
   const [showRappel, setShowRappel] = useState(false);
+  const [showScheduledReminders, setShowScheduledReminders] = useState(false);
+  const [activeReminderToast, setActiveReminderToast] = useState(null);
   const [aideMemoireClickModes, setAideMemoireClickModes] = useState({});
+
+  // Background Notification Scheduler loop for daily Quran revisions & memorizations
+  useEffect(() => {
+    const cleanup = initNotificationScheduler({
+      onTrigger: (payload) => {
+        setActiveReminderToast(payload);
+      },
+      onNavigate: (path) => {
+        navigate(path);
+      },
+    });
+
+    const handleToastEvent = (e) => {
+      if (e.detail) {
+        setActiveReminderToast(e.detail);
+      }
+    };
+    window.addEventListener("quran_reminder_toast", handleToastEvent);
+
+    return () => {
+      cleanup();
+      window.removeEventListener("quran_reminder_toast", handleToastEvent);
+    };
+  }, [navigate]);
 
   const surahs_ref    = useRef(surahs);
   const ayats_ref     = useRef(ayats);
@@ -1431,11 +1460,24 @@ function AppInner({ currentUser, onSignOut }) {
               🎤
             </button>
 
+            {/* Rappels programmés (Desktop & Mobile) */}
+            <button
+              className="voice-btn"
+              onClick={() => setShowScheduledReminders(true)}
+              title="Rappels programmés de révision & mémorisation"
+              style={{
+                color: "var(--gold2)",
+                borderColor: "rgba(201,168,76,.3)",
+              }}
+            >
+              ⏰
+            </button>
+
             {/* Rappel vocal (desktop only) */}
             <button
               className="voice-btn desktop-only-action"
               onClick={() => setShowRappel(v => !v)}
-              title="Rappel vocal"
+              title="Rappel vocal périodique"
               style={{
                 background: showRappel ? 'rgba(201,168,76,.18)' : undefined,
                 borderColor: showRappel ? 'rgba(201,168,76,.5)' : undefined,
@@ -1493,6 +1535,19 @@ function AppInner({ currentUser, onSignOut }) {
                       <span className={`user-menu-badge ${showArabicKeyboard ? 'on' : 'off'}`}>
                         {showArabicKeyboard ? 'ON' : 'OFF'}
                       </span>
+                    </button>
+
+                    <button
+                      className="user-menu-item"
+                      onClick={() => {
+                        setShowScheduledReminders(true);
+                        setShowUserMenu(false);
+                      }}
+                    >
+                      <div className="menu-left">
+                        <span>⏰</span>
+                        <span>Rappels Programmés</span>
+                      </div>
                     </button>
 
                     <button
@@ -1658,8 +1713,11 @@ function AppInner({ currentUser, onSignOut }) {
                 surahs={surahs}
                 goals={goals}
                 activity={activity}
+                surahStats={surahStats}
+                surahTextCache={surahTextCache}
                 onSetGoal={(key, value) => dispatch(goalsActions.setGoal({ key, value }))}
                 onRecordActivity={(date, delta) => dispatch(goalsActions.recordActivity({ date, ...delta }))}
+                onOpenReminders={() => setShowScheduledReminders(true)}
                 onNavigate={(surahNum) => { navigate(`/quran/${surahNum}`); const s = surahs.find(x=>x.number===surahNum); if(s){setSelectedSurah(s);} }}
               /></AnimatedPage>
             } />
@@ -1698,6 +1756,9 @@ function AppInner({ currentUser, onSignOut }) {
                 learnData={learnData}
                 surahs={surahs}
                 setLData={setLData}
+                activity={activity}
+                goals={goals}
+                surahTextCache={surahTextCache}
                 onNavigate={(surahNum, ayatNum) => {
                   navigate(`/quran/${surahNum}/${ayatNum}`);
                   const s = surahs.find(x => x.number === surahNum);
@@ -1716,6 +1777,9 @@ function AppInner({ currentUser, onSignOut }) {
                 learnData={learnData}
                 surahs={surahs}
                 setLData={setLData}
+                activity={activity}
+                goals={goals}
+                surahTextCache={surahTextCache}
                 initialFilter="carte"
                 onNavigate={(surahNum, ayatNum) => {
                   navigate(`/quran/${surahNum}/${ayatNum}`);
@@ -1735,6 +1799,7 @@ function AppInner({ currentUser, onSignOut }) {
                 learnData={learnData}
                 surahs={surahs}
                 setLData={setLData}
+                surahTextCache={surahTextCache}
                 initialFilter="questions"
                 onNavigate={(surahNum, ayatNum) => {
                   navigate(`/quran/${surahNum}/${ayatNum}`);
@@ -2679,7 +2744,31 @@ function AppInner({ currentUser, onSignOut }) {
         )}
 
         {/* COLLECTION MODAL */}
-        {showOptionsModal && <OptionsModal onClose={() => setShowOptionsModal(false)} />}
+        {showOptionsModal && (
+          <OptionsModal
+            onClose={() => setShowOptionsModal(false)}
+            onOpenReminders={() => setShowScheduledReminders(true)}
+          />
+        )}
+        {showScheduledReminders && (
+          <ScheduledRemindersModal
+            surahs={surahs}
+            onClose={() => setShowScheduledReminders(false)}
+            onNavigate={(path) => {
+              setShowScheduledReminders(false);
+              navigate(path);
+            }}
+          />
+        )}
+        {activeReminderToast && (
+          <NotificationToast
+            payload={activeReminderToast}
+            onClose={() => setActiveReminderToast(null)}
+            onNavigate={(path) => {
+              navigate(path);
+            }}
+          />
+        )}
         {collModal && (
           <CollectionModal
             ayat={collModal}

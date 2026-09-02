@@ -1,13 +1,14 @@
 import { ActivityCalendar } from "../common/Charts.jsx";
 import { ExportImport } from "../sync/ExportImport.jsx";
-import { masteryColor } from "../common/Mastery.jsx";
+import { masteryColor, computeMastery } from "../common/Mastery.jsx";
 import React, { useState, useMemo } from "react";
 import { useSelector } from "react-redux";
 import { sel } from "../../store.js";
 import { DonutChart, MiniBarChart, KpiWidget, ActivityBarChart, GoalsPanel } from "../common/Charts.jsx";
+import { LearningEvolutionChart } from "../common/LearningEvolutionChart.jsx";
 import { fetchSurahSimple } from "../../utils/reciterAudio.js";
 
-export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, onSetGoal, onRecordActivity }) {
+export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, onSetGoal, onRecordActivity, surahStats, surahTextCache = {}, onOpenReminders }) {
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
 
@@ -39,24 +40,31 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
   const surahProgress = useMemo(() => {
     const sp = {};
     entries.forEach(([key, v]) => {
-      const [sNum] = key.split(":").map(Number);
-      if (!sp[sNum]) sp[sNum] = { learned:0, total:0, read:0 };
+      const [sNum, aNum] = key.split(":").map(Number);
+      if (!sp[sNum]) sp[sNum] = { learned:0, total:0, read:0, masterySum:0 };
       sp[sNum].total++;
       if (v.learned) sp[sNum].learned++;
       sp[sNum].read += v.readCount||0;
+      const text = surahTextCache[sNum]?.[aNum];
+      sp[sNum].masterySum += computeMastery(v, text);
     });
     return sp;
-  }, [entries]);
+  }, [entries, surahTextCache]);
 
   const learnedSurahs = useMemo(() => Object.entries(surahProgress).filter(([,d]) => d.learned > 0 && d.learned === d.total).length, [surahProgress]);
 
   const activeSurahs = useMemo(() => Object.entries(surahProgress)
     .map(([num, d]) => {
-      const meta = surahs.find(s=>s.number===Number(num));
-      return { num:Number(num), ...d, pct: d.total>0?d.learned/d.total:0, meta };
+      const sNum = Number(num);
+      const meta = surahs.find(s=>s.number===sNum);
+      const totalAyahs = meta?.numberOfAyahs || d.total || 1;
+      const st = surahStats?.[sNum];
+      const masterySum = st?.mastery !== undefined ? st.mastery : d.masterySum;
+      const masteryPct = totalAyahs > 0 ? Math.min(100, Math.round(masterySum / totalAyahs)) : 0;
+      return { num: sNum, ...d, pct: masteryPct / 100, masteryPct, meta };
     })
     .sort((a,b) => b.read - a.read)
-    .slice(0, 8), [surahProgress, surahs]);
+    .slice(0, 8), [surahProgress, surahs, surahStats]);
 
   const topLearned = useMemo(() => [...activeSurahs].sort((a,b)=>b.pct-a.pct).slice(0,5), [activeSurahs]);
 
@@ -80,7 +88,20 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
   const meccan   = activeSurahs.filter(a=>a.meta?.revelationType==="Meccan").length;
   const medinan  = activeSurahs.filter(a=>a.meta?.revelationType==="Medinan").length;
   const totalAyats = 6236;
-  const pctAyats   = totalAyats > 0 ? totalLearned / totalAyats : 0;
+
+  // Unified global mastery: sum of all ayat masteries in the Quran / 6236
+  const totalMasterySum = useMemo(() => {
+    let sum = 0;
+    for (const [key, v] of entries) {
+      const [sn, an] = key.split(':').map(Number);
+      const text = surahTextCache[sn]?.[an];
+      sum += computeMastery(v, text);
+    }
+    return sum;
+  }, [entries, surahTextCache]);
+
+  const globalMasteryPct = totalAyats > 0 ? (totalMasterySum / totalAyats) / 100 : 0;
+  const pctAyats   = globalMasteryPct;
 
   const recentActivity = useMemo(() => entries
     .filter(([,v]) => (v.readCount||0) > 0)
@@ -122,24 +143,35 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
 
   // ── Dashboard layout (drag/resize/add/remove) ──────────────────────────────
   const ALL_WIDGETS = [
-    { id:"kpis",       label:"VUE D'ENSEMBLE",          defaultSize:2 },
-    { id:"objectifs",  label:"OBJECTIFS",                defaultSize:1 },
-    { id:"calendrier", label:"CALENDRIER D'ACTIVITÉ",    defaultSize:1 },
-    { id:"sourates",   label:"SOURATES ÉTUDIÉES",        defaultSize:1 },
-    { id:"repartition",label:"RÉPARTITION",              defaultSize:1 },
-    { id:"week",       label:"7 DERNIERS JOURS",         defaultSize:1 },
-    { id:"heatmap",    label:"HEATMAP 7 SEMAINES",       defaultSize:2 },
-    { id:"recents",    label:"ACTIVITÉ RÉCENTE",         defaultSize:1 },
-    { id:"top",        label:"TOP SOURATES",             defaultSize:1 },
-    { id:"timeline",   label:"TIMELINE",                 defaultSize:2 },
-    { id:"citation",   label:"CITATION",                 defaultSize:2 },
-    { id:"export",     label:"EXPORT / IMPORT",          defaultSize:2 },
+    { id:"kpis",       label:"VUE D'ENSEMBLE & KPIS",       defaultSize:2 },
+    { id:"evolution",  label:"ÉVOLUTION DE L'APPRENTISSAGE",defaultSize:2 },
+    { id:"repartition",label:"RÉPARTITION DU CORAN",        defaultSize:1 },
+    { id:"week",       label:"ACTIVITÉ (7 DERNIERS JOURS)",  defaultSize:1 },
+    { id:"timeline",   label:"MAÎTRISE DANS LE TEMPS (30J)",defaultSize:2 },
+    { id:"calendrier", label:"CALENDRIER D'ACTIVITÉ",        defaultSize:2 },
+    { id:"objectifs",  label:"OBJECTIFS & SÉRIE",           defaultSize:1 },
+    { id:"sourates",   label:"SOURATES ÉTUDIÉES",           defaultSize:1 },
+    { id:"heatmap",    label:"HEATMAP D'ACTIVITÉ (7 SEM.)", defaultSize:2 },
+    { id:"top",        label:"TOP SOURATES",                defaultSize:1 },
+    { id:"recents",    label:"ACTIVITÉ RÉCENTE",            defaultSize:1 },
+    { id:"citation",   label:"CITATION",                    defaultSize:2 },
+    { id:"export",     label:"EXPORT / IMPORT",             defaultSize:2 },
   ];
 
   const loadLayout = () => {
     try {
       const s = localStorage.getItem("quran_dash_layout");
-      if (s) return JSON.parse(s);
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) {
+          const map = new Map(parsed.map(w => [w.id, w]));
+          // Merge to ensure all widgets from ALL_WIDGETS are present
+          return ALL_WIDGETS.map(w => {
+            const existing = map.get(w.id);
+            return existing ? { ...w, ...existing, visible: existing.visible !== undefined ? existing.visible : true } : { id: w.id, visible: true, size: w.defaultSize };
+          });
+        }
+      }
     } catch {}
     return ALL_WIDGETS.map(w => ({ id: w.id, visible: true, size: w.defaultSize }));
   };
@@ -159,6 +191,7 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
   const moveUp        = (idx) => { if (idx === 0) return; const l=[...layout]; [l[idx-1],l[idx]]=[l[idx],l[idx-1]]; saveLayout(l); };
   const moveDown      = (idx) => { if (idx>=layout.length-1) return; const l=[...layout]; [l[idx],l[idx+1]]=[l[idx+1],l[idx]]; saveLayout(l); };
   const resetLayout   = () => saveLayout(ALL_WIDGETS.map(w => ({ id: w.id, visible: true, size: w.defaultSize })));
+  const showAllCharts = () => saveLayout(layout.map(w => ({ ...w, visible: true })));
 
   const onDragStart   = (i) => setDragIdx(i);
   const onDragEnter   = (i) => setDragOver(i);
@@ -176,31 +209,36 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
   const masteryTimeline = useMemo(() => {
     const days = 30;
     const points = [];
+    const targetSurahMeta = masteryTimelineSn ? surahs.find(s => s.number === masteryTimelineSn) : null;
+    const totalAyatsCount = targetSurahMeta ? (targetSurahMeta.numberOfAyahs || 1) : 6236;
+
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().slice(0, 10);
-      // Count ayats whose learnedAt <= dateStr and no open revise session after dateStr
-      let learned = 0, total = 0;
+      let masterySum = 0;
       for (const [key, v] of Object.entries(learnData)) {
-        const [sn] = key.split(':').map(Number);
+        const [sn, an] = key.split(':').map(Number);
         if (masteryTimelineSn && sn !== masteryTimelineSn) continue;
-        if (!v.learnedAt) continue;
-        total++;
-        if (v.learnedAt.slice(0, 10) <= dateStr) {
-          // Check if revise session was open on this date (deducts mastery)
+        if (!v.learnedAt && !v.updatedAt) continue;
+        const itemDate = (v.learnedAt || v.updatedAt || '').slice(0, 10);
+        if (itemDate <= dateStr) {
           const hist = v.reviseHistory || [];
           const openOnDate = hist.some(e => {
             const start = e.startDate?.slice(0, 10);
             const end   = e.endDate?.slice(0, 10);
             return start && start <= dateStr && (!end || end > dateStr);
           });
-          if (!openOnDate) learned++;
+          if (!openOnDate) {
+            const text = surahTextCache[sn]?.[an];
+            masterySum += computeMastery(v, text);
+          }
         }
       }
-      points.push({ date: dateStr, label: d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short' }), learned, total, pct: total > 0 ? Math.round(learned / total * 100) : 0 });
+      const pct = totalAyatsCount > 0 ? Math.min(100, Math.round(masterySum / totalAyatsCount)) : 0;
+      points.push({ date: dateStr, label: d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short' }), learned: Math.round(masterySum), total: totalAyatsCount, pct });
     }
     return points;
-  }, [learnData, masteryTimelineSn]);
+  }, [learnData, masteryTimelineSn, surahs, surahTextCache]);
 
   const masteryTimelineSurahNums = useMemo(() => {
     const sns = [...new Set(Object.keys(learnData).map(k => parseInt(k.split(':')[0])))].filter(Boolean).sort((a,b)=>a-b);
@@ -213,12 +251,23 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
         totalLearned={totalLearned} totalRead={totalRead} totalWords={totalWords}
         totalParts={totalParts} learnedParts={learnedParts} learnedSurahs={learnedSurahs}
         activeSurahs={activeSurahs} pctAyats={pctAyats} entries={entries} surahs={surahs}
+        globalMasteryPct={globalMasteryPct}
         onNavigate={onNavigate}
       />;
+      case "evolution": return (
+        <LearningEvolutionChart
+          learnData={learnData}
+          activity={activity}
+          surahs={surahs}
+          surahTextCache={surahTextCache}
+          goals={goals}
+          onNavigate={onNavigate}
+        />
+      );
       case "objectifs": return (
         <GoalsPanel goals={goals} todayAct={todayAct} weeklyTotal={weeklyTotal} streak={streak}
           goalAyatsPct={goalAyatsPct} goalPartsPct={goalPartsPct} weeklyPct={weeklyPct}
-          onSetGoal={onSetGoal} surahs={surahs} />
+          onSetGoal={onSetGoal} surahs={surahs} onOpenReminders={onOpenReminders} />
       );
       case "calendrier": return (
         <ActivityCalendar activity={activity} goals={goals} learnData={learnData} surahs={surahs} />
@@ -231,8 +280,10 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
               <div className="dash-surah-num">{a.num}</div>
               <div className="dash-surah-name">{a.meta?.englishName||`Sourate ${a.num}`}</div>
               <div className="dash-surah-ar">{a.meta?.name||""}</div>
-              <div className="dash-bar-track"><div className="dash-bar-fill" style={{width:`${Math.round(a.pct*100)}%`}}/></div>
-              <div className="dash-bar-pct">{Math.round(a.pct*100)}%</div>
+              <div className="dash-bar-track">
+                <div className="dash-bar-fill" style={{width:`${a.masteryPct}%`, background: masteryColor(a.masteryPct)}}/>
+              </div>
+              <div className="dash-bar-pct" style={{color: masteryColor(a.masteryPct)}}>{a.masteryPct}%</div>
             </div>
           ))}
         </div>
@@ -242,16 +293,17 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
           <div className="dash-donut-wrap">
             <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
               <div style={{position:"relative",width:80,height:80}}>
-                <DonutChart pct={pctAyats} color="var(--green2)" size={80} stroke={9}/>
+                <DonutChart pct={pctAyats} color={masteryColor(Math.round(pctAyats*100))} size={80} stroke={9}/>
                 <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",
-                  fontFamily:"'Cinzel',serif",fontSize:14,fontWeight:700,color:"var(--green2)"}}>
+                  fontFamily:"'Cinzel',serif",fontSize:14,fontWeight:700,color:masteryColor(Math.round(pctAyats*100))}}>
                   {Math.round(pctAyats*100)}%
                 </div>
               </div>
-              <div className="dash-ring-label">AYATS</div>
+              <div className="dash-ring-label">MAÎTRISE CORAN</div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8,flex:1}}>
               {[
+                {label:"Maîtrise totale", val:`${Math.round(pctAyats*100)}%`, color:masteryColor(Math.round(pctAyats*100))},
                 {label:"Appris",   val:totalLearned, color:"var(--green2)"},
                 {label:"En cours", val:entries.filter(([,v])=>!v.learned&&(v.readCount||0)>0).length, color:"var(--gold2)"},
                 {label:"Non lus",  val:Math.max(0,6236-totalLearned-entries.filter(([,v])=>!v.learned&&(v.readCount||0)>0).length), color:"var(--border2)"},
@@ -267,8 +319,21 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
         </div>
       );
       case "week": return (
-        <div className="dash-card">
-          <ActivityBarChart data={weekBars7} height={50} goalLine={goals?.dailyAyats||0} />
+        <div className="dash-card" style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between"}}>
+            <div style={{fontSize:9,color:"var(--text3)",letterSpacing:1}}>ACTIVITÉ SUR 7 JOURS</div>
+            <div style={{fontSize:12,fontFamily:"'Cinzel',serif",color:"var(--teal2)",fontWeight:600}}>
+              {weekBars7.reduce((s,d)=>s+d.read+d.learned,0)} ayats
+            </div>
+          </div>
+          <ActivityBarChart data={weekBars7} height={60} goalLine={goals?.dailyAyats||0} />
+          <div style={{display:"flex",justifyContent:"space-between",padding:"0 2px"}}>
+            {weekBars7.map((d,i)=>(
+              <div key={i} style={{flex:1,textAlign:"center",fontSize:8,color:"var(--text3)",fontFamily:"'Cinzel',serif"}}>
+                {d.label}
+              </div>
+            ))}
+          </div>
         </div>
       );
       case "heatmap": return (
@@ -469,7 +534,14 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
             {today.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).toUpperCase()}
           </div>
         </div>
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          {hiddenLayout.length > 0 && !editMode && (
+            <button onClick={showAllCharts} style={{
+              fontSize:8,letterSpacing:1.5,padding:"5px 10px",fontFamily:"'Cinzel',serif",
+              background:"rgba(62,184,160,.1)",border:"1px solid var(--teal)",color:"var(--teal2)",
+              borderRadius:6,cursor:"pointer"
+            }}>📊 AFFICHER TOUS LES GRAPHIQUES</button>
+          )}
           <button onClick={()=>setEditMode(v=>!v)} style={{
             fontSize:8,letterSpacing:2,padding:"5px 12px",fontFamily:"'Cinzel',serif",
             background:editMode?"rgba(201,168,76,.15)":"transparent",

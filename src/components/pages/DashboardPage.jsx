@@ -6,6 +6,7 @@ import { useSelector } from "react-redux";
 import { sel } from "../../store.js";
 import { DonutChart, MiniBarChart, KpiWidget, ActivityBarChart, GoalsPanel } from "../common/Charts.jsx";
 import { LearningEvolutionChart } from "../common/LearningEvolutionChart.jsx";
+import { MasteryTimelineWidget } from "../common/MasteryTimelineWidget.jsx";
 import { fetchSurahSimple } from "../../utils/reciterAudio.js";
 
 export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, onSetGoal, onRecordActivity, surahStats, surahTextCache = {}, onOpenReminders }) {
@@ -203,48 +204,6 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
     setDragIdx(null); setDragOver(null);
   };
 
-  // ── Mastery timeline ──────────────────────────────────────────────────────────
-  const [masteryTimelineSn, setMasteryTimelineSn] = useState(null); // null = all
-
-  const masteryTimeline = useMemo(() => {
-    const days = 30;
-    const points = [];
-    const targetSurahMeta = masteryTimelineSn ? surahs.find(s => s.number === masteryTimelineSn) : null;
-    const totalAyatsCount = targetSurahMeta ? (targetSurahMeta.numberOfAyahs || 1) : 6236;
-
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().slice(0, 10);
-      let masterySum = 0;
-      for (const [key, v] of Object.entries(learnData)) {
-        const [sn, an] = key.split(':').map(Number);
-        if (masteryTimelineSn && sn !== masteryTimelineSn) continue;
-        if (!v.learnedAt && !v.updatedAt) continue;
-        const itemDate = (v.learnedAt || v.updatedAt || '').slice(0, 10);
-        if (itemDate <= dateStr) {
-          const hist = v.reviseHistory || [];
-          const openOnDate = hist.some(e => {
-            const start = e.startDate?.slice(0, 10);
-            const end   = e.endDate?.slice(0, 10);
-            return start && start <= dateStr && (!end || end > dateStr);
-          });
-          if (!openOnDate) {
-            const text = surahTextCache[sn]?.[an];
-            masterySum += computeMastery(v, text);
-          }
-        }
-      }
-      const pct = totalAyatsCount > 0 ? Math.min(100, Math.round(masterySum / totalAyatsCount)) : 0;
-      points.push({ date: dateStr, label: d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short' }), learned: Math.round(masterySum), total: totalAyatsCount, pct });
-    }
-    return points;
-  }, [learnData, masteryTimelineSn, surahs, surahTextCache]);
-
-  const masteryTimelineSurahNums = useMemo(() => {
-    const sns = [...new Set(Object.keys(learnData).map(k => parseInt(k.split(':')[0])))].filter(Boolean).sort((a,b)=>a-b);
-    return sns;
-  }, [learnData]);
-
   const renderWidget = (id) => {
     switch(id) {
       case "kpis": return <KpiWidget
@@ -387,127 +346,14 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
           ))}
         </div>
       );
-      case "timeline": return (() => {
-        const W = 100, H = 60;
-        const pts = masteryTimeline;
-        // Y domain driven by the actual data range (percent mastery)
-        const yMin = Math.min(...pts.map(p => p.pct));
-        const yMax = Math.max(...pts.map(p => p.pct));
-        const yRange = (yMax - yMin) || 1;
-        // SVG polyline points
-        const toX = (i) => (i / (pts.length - 1)) * W;
-        const toY = (pct) => H - ((pct - yMin) / yRange) * H;
-        const yTicks = [0, .25, .5, .75, 1].map(f => yMin + f * yRange);
-        const linePoints = pts.map((p, i) => `${toX(i)},${toY(p.pct)}`).join(' ');
-        const fillPoints = `0,${H} ` + pts.map((p,i) => `${toX(i)},${toY(p.pct)}`).join(' ') + ` ${W},${H}`;
-        const latest = pts[pts.length - 1];
-        const first  = pts[0];
-        const delta  = latest.pct - first.pct;
-
-        return (
-          <div style={{ display:'flex', flexDirection:'column', gap:14, padding:'16px',
-            background:'var(--surface2)', borderRadius:12, border:'1px solid var(--border)' }}>
-            {/* Header + surah selector */}
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
-              <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                <div style={{ fontSize:9, letterSpacing:2, color:'var(--text3)' }}>MAÎTRISE DANS LE TEMPS</div>
-                <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
-                  <span style={{ fontSize:28, fontFamily:"'Cinzel',serif", color: masteryColor(latest.pct) }}>{latest.pct}%</span>
-                  <span style={{ fontSize:9, color: delta >= 0 ? 'var(--green)' : 'var(--red)',
-                    letterSpacing:1 }}>{delta >= 0 ? '▲' : '▼'} {Math.abs(delta)}% / 30j</span>
-                </div>
-              </div>
-              {/* Surah filter */}
-              <div style={{ display:'flex', gap:4, flexWrap:'wrap', maxWidth:260 }}>
-                <button onClick={() => setMasteryTimelineSn(null)} style={{
-                  fontSize:7, letterSpacing:1, padding:'2px 8px', borderRadius:4, cursor:'pointer',
-                  fontFamily:"'Cinzel',serif",
-                  background: masteryTimelineSn === null ? 'rgba(201,168,76,.15)' : 'transparent',
-                  border:`1px solid ${masteryTimelineSn === null ? 'var(--gold)' : 'rgba(255,255,255,.1)'}`,
-                  color: masteryTimelineSn === null ? 'var(--gold)' : 'var(--text3)' }}>TOUT</button>
-                {masteryTimelineSurahNums.slice(0, 10).map(sn => {
-                  const s = surahs.find(x => x.number === sn);
-                  return (
-                    <button key={sn} onClick={() => setMasteryTimelineSn(sn === masteryTimelineSn ? null : sn)} style={{
-                      fontSize:7, letterSpacing:1, padding:'2px 8px', borderRadius:4, cursor:'pointer',
-                      fontFamily:"'Cinzel',serif",
-                      background: masteryTimelineSn === sn ? `rgba(${masteryColor(latest.pct)}, .1)` : 'transparent',
-                      border:`1px solid ${masteryTimelineSn === sn ? masteryColor(latest.pct) : 'rgba(255,255,255,.1)'}`,
-                      color: masteryTimelineSn === sn ? masteryColor(latest.pct) : 'var(--text3)' }}>
-                      {s?.name || `S${sn}`}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Chart: Y-axis (% mastery) + SVG */}
-            <div style={{ display:'flex', gap:6 }}>
-              {/* Y-axis labels (percent mastery) */}
-              <div style={{ display:'flex', flexDirection:'column', justifyContent:'space-between',
-                height:90, flexShrink:0, textAlign:'right' }}>
-                {yTicks.slice().reverse().map((v,i) => (
-                  <span key={i} style={{ fontSize:6, color:'var(--text3)', letterSpacing:.5,
-                    fontFamily:"'Cinzel',serif" }}>{Math.round(v)}%</span>
-                ))}
-              </div>
-              <svg viewBox={`0 0 ${W} ${H}`} style={{ flex:1, width:'100%', height:90, overflow:'visible' }}
-                preserveAspectRatio="none">
-                {/* Grid lines at each y-tick (data-driven min/max) */}
-                {yTicks.map((v,i) => (
-                  <line key={i} x1="0" y1={toY(v)} x2={W} y2={toY(v)}
-                    stroke="rgba(255,255,255,.05)" strokeWidth=".5" />
-                ))}
-                {/* Fill area */}
-                <polygon points={fillPoints}
-                  fill={`${masteryColor(latest.pct)}22`} />
-                {/* Line */}
-                <polyline points={linePoints}
-                  fill="none" stroke={masteryColor(latest.pct)} strokeWidth="1.2"
-                  strokeLinecap="round" strokeLinejoin="round" />
-                {/* Dots every 5 days */}
-                {pts.filter((_,i) => i % 5 === 0 || i === pts.length-1).map((p,_,arr) => {
-                  const i = pts.indexOf(p);
-                  return (
-                    <circle key={i} cx={toX(i)} cy={toY(p.pct)} r="1.5"
-                      fill={masteryColor(p.pct)} />
-                  );
-                })}
-              </svg>
-            </div>
-
-            {/* X-axis labels */}
-            <div style={{ display:'flex', gap:6, marginTop:-8 }}>
-              <div style={{ width:22, flexShrink:0 }} />
-              <div style={{ flex:1, display:'flex', justifyContent:'space-between' }}>
-                {pts.filter((_,i) => i % 7 === 0 || i === pts.length-1).map((p,i) => (
-                  <div key={i} style={{ fontSize:6, color:'var(--text3)', letterSpacing:.5 }}>{p.label}</div>
-                ))}
-              </div>
-            </div>
-
-            {/* Recent learned */}
-            {recentlyLearned.length > 0 && (
-              <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                <div style={{ fontSize:8, letterSpacing:1.5, color:'var(--text3)' }}>DERNIERS AYATS APPRIS</div>
-                {recentlyLearned.map(([key,v]) => {
-                  const [sn,an] = key.split(':').map(Number);
-                  const sname = surahs.find(s=>s.number===sn)?.englishName||`S${sn}`;
-                  const d2 = new Date(v.learnedAt);
-                  return (
-                    <div key={key} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 10px',
-                      background:'var(--surface3)', borderRadius:6 }}>
-                      <div style={{ fontSize:9, color:'var(--green)', fontFamily:"'Cinzel',serif", flexShrink:0, width:28 }}>{an}</div>
-                      <div style={{ flex:1, fontSize:8, color:'var(--text2)', letterSpacing:.5 }}>{sname}</div>
-                      <div style={{ fontSize:7, color:'var(--text3)' }}>{d2.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })();
+      case "timeline": return (
+        <MasteryTimelineWidget
+          learnData={learnData}
+          surahs={surahs}
+          surahTextCache={surahTextCache}
+          onNavigate={onNavigate}
+        />
+      );
       case "citation": return (
         <div style={{padding:"20px",background:"rgba(201,168,76,.04)",border:"1px solid rgba(201,168,76,.12)",borderRadius:12,textAlign:"center",display:"flex",flexDirection:"column",gap:8}}>
           <div style={{fontFamily:"'Amiri Quran',serif",fontSize:24,color:"var(--gold)",opacity:.8,direction:"rtl"}}>خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ</div>

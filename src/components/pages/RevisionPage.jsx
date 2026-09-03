@@ -8,12 +8,14 @@ import { sel } from "../../store.js";
 import { RevisionEcritureMode } from "../modes/RevisionEcritureMode.jsx";
 import { TajweedExercice } from "../modes/TajweedExercice.jsx";
 import { splitArabicWords, splitArabicChars } from "../../utils/arabicUtils.js";
-import { computeMastery, MasteryBar, MasteryBadge } from "../common/Mastery.jsx";
+import { computeMastery, MasteryBar, MasteryBadge, masteryColor } from "../common/Mastery.jsx";
 import { LearningEvolutionChart } from "../common/LearningEvolutionChart.jsx";
+import { SurahAyatsMasteryRibbon } from "../common/SurahAyatsMasteryRibbon.jsx";
+import { getAyatRevisionInfo, REVISION_LEVEL_LEGEND } from "../../utils/ayatRevisionLevel.js";
 
 export function RevisionPage({ learnData, surahs, setLData, activity = {}, goals = {}, surahTextCache = {}, onNavigate, initialFilter }) {
   const { surahNum: urlSn, rangeFrom: urlRf, rangeTo: urlRt, qIdx: urlQIdx } = useParams();
-  const [filter, setFilter]         = useState(initialFilter || "carte"); // "carte" | "questions"
+  const [filter, setFilter]         = useState(initialFilter || "carte"); // "carte" | "exercices" | "toRevise" | "evolution" | "questions"
   const [openSurahs, setOpenSurahs] = useState({});    // surahNum → bool
   const [openAyat,   setOpenAyat]   = useState(null);  // "surahNum:ayatNum" | null
   const [ayatTab,    setAyatTab]    = useState({});    // key -> "ecriture" | "tajweed"
@@ -38,7 +40,7 @@ export function RevisionPage({ learnData, surahs, setLData, activity = {}, goals
         return { ...d, reviseHistory: h };
       });
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Construire la liste des ayats appris groupés par sourate
   const learnedBySurah = useMemo(() => {
@@ -82,7 +84,7 @@ export function RevisionPage({ learnData, surahs, setLData, activity = {}, goals
   };
 
   const filteredBySurah = useMemo(() => {
-    if (filter === "all") return learnedBySurah;
+    if (filter === "all" || filter === "exercices") return learnedBySurah;
     if (filter === "toRevise") {
       // Include ALL ayats (learned or not) that have toRevise flag
       const out = {};
@@ -192,12 +194,15 @@ export function RevisionPage({ learnData, surahs, setLData, activity = {}, goals
       {/* Filters */}
       <div className="rev-filter-row">
         {[
-          { id:"carte",     label:"📊 CARTE" },
-          { id:"evolution", label:"📈 ÉVOLUTION" },
+          { id:"carte",     label:"📊 CARTE & MAÎTRISE" },
+          { id:"exercices", label:`✏ EXERCICES (${totalLearned})` },
+          ...(totalToRevise > 0 ? [{ id:"toRevise", label:`🔖 À RÉVISER (${totalToRevise})`, color:"#ff7eb3" }] : []),
+          { id:"evolution", label:"📈 ÉVOLUTION (30J)" },
           { id:"questions", label:"❓ QUESTIONS" },
         ].map(f => (
           <button key={f.id}
-            className={`rev-filter-btn${filter===f.id?" active":""}`}
+            className={`rev-filter-btn${filter===f.id || (filter==="all" && f.id==="exercices")?" active":""}`}
+            style={f.color && (filter===f.id) ? { borderColor: f.color, color: f.color, background: 'rgba(255,126,179,0.12)' } : undefined}
             onClick={() => setFilter(f.id)}>
             {f.label}
           </button>
@@ -205,7 +210,13 @@ export function RevisionPage({ learnData, surahs, setLData, activity = {}, goals
       </div>
 
       {filter === "carte" && (
-        <LearningMapPage surahs={surahs} learnData={learnData} surahTextCache={surahTextCache} onNavigate={onNavigate} />
+        <LearningMapPage
+          surahs={surahs}
+          learnData={learnData}
+          surahTextCache={surahTextCache}
+          onNavigate={onNavigate}
+          setLData={setLData}
+        />
       )}
 
       {filter === "evolution" && (
@@ -233,7 +244,7 @@ export function RevisionPage({ learnData, surahs, setLData, activity = {}, goals
       {filter !== "questions" && filter !== "carte" && filter !== "evolution" && totalLearned === 0 && (
         <div className="rev-empty">
           Aucun ayat appris.<br />
-          Marquez des ayats comme appris dans l'onglet CORAN pour les retrouver ici.
+          Marquez des ayats comme appris dans l'onglet CORAN ou consultez la CARTE DE MAÎTRISE pour explorer tous les versets.
         </div>
       )}
 
@@ -244,50 +255,142 @@ export function RevisionPage({ learnData, surahs, setLData, activity = {}, goals
       {/* Surah blocks */}
       {(filter !== "questions" && filter !== "carte" && filter !== "evolution") && filteredSurahNums.map(sn => {
         const surahInfo  = surahs.find(s => s.number === sn);
-        const ayatItems  = filteredBySurah[sn] || [];
+        let ayatItems    = filteredBySurah[sn] || [];
         const isOpen     = !!openSurahs[sn];
+
+        // Ensure clicked ayat from ribbon is displayed in ayatItems
+        if (openAyat && openAyat.startsWith(`${sn}:`)) {
+          const selAn = Number(openAyat.split(":")[1]);
+          if (!ayatItems.some(x => x.ayatNum === selAn)) {
+            ayatItems = [...ayatItems, { surahNum: sn, ayatNum: selAn, ld: learnData[openAyat] || {} }];
+            ayatItems.sort((a, b) => a.ayatNum - b.ayatNum);
+          }
+        }
+
         const perfectCnt = ayatItems.filter(({ ld }) => getRevStatus(ld) === "perfect").length;
         const pct        = ayatItems.length > 0 ? Math.round((perfectCnt / ayatItems.length) * 100) : 0;
+        const toReviseCount = ayatItems.filter(({ ld }) => ld?.toRevise).length;
 
         return (
-          <div key={sn} className="rev-surah-block">
+          <div key={sn} className="rev-surah-block" style={{ marginBottom: 12 }}>
             {/* Surah header */}
             <div className="rev-surah-header" onClick={() => toggleSurah(sn)}>
               <div className="rev-surah-num">{sn}</div>
               <div className="rev-surah-name">
                 <div className="rev-surah-name-ar">{surahInfo?.name ?? `Sourate ${sn}`}</div>
                 <div className="rev-surah-name-en">{surahInfo?.englishName?.toUpperCase() ?? ""}</div>
-                <div className="rev-progress-bar" style={{ width: 120, marginTop: 6 }}>
+                <div className="rev-progress-bar" style={{ width: 130, marginTop: 6 }}>
                   <div className="rev-progress-fill" style={{ width:`${pct}%`, background: pct===100?"var(--green)":pct>0?"var(--gold)":"var(--border2)" }} />
                 </div>
               </div>
+
+              {toReviseCount > 0 && (
+                <div style={{
+                  fontSize: 8,
+                  color: '#ff7eb3',
+                  background: 'rgba(255, 126, 179, 0.15)',
+                  border: '1px solid rgba(255, 126, 179, 0.4)',
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  fontFamily: "'Cinzel',serif",
+                  fontWeight: 600,
+                  letterSpacing: 0.5,
+                  marginRight: 6
+                }}>
+                  🔖 {toReviseCount} À RÉVISER
+                </div>
+              )}
+
               <div className="rev-surah-badge" style={{ borderColor: pct===100?"var(--green)":"var(--border2)", color: pct===100?"var(--green)":"var(--text3)" }}>
                 {perfectCnt}/{ayatItems.length} PARFAIT{perfectCnt!==1?"S":""}
               </div>
               <span style={{ fontSize:12, color:"var(--text3)", marginLeft:4 }}>{isOpen ? "▲" : "▼"}</span>
             </div>
 
+            {/* Surah Ayats Mastery Ribbon - Displaying all ayats numbers with color depending on level of reviser */}
+            <div style={{ padding: isOpen ? '4px 16px 14px' : '0 16px 10px' }}>
+              <SurahAyatsMasteryRibbon
+                surah={surahInfo}
+                learnData={learnData}
+                surahTextCache={surahTextCache}
+                activeAyatNum={openAyat && openAyat.startsWith(`${sn}:`) ? Number(openAyat.split(':')[1]) : null}
+                compact={!isOpen}
+                onSelectAyat={(sNum, an) => {
+                  setOpenSurahs(p => ({ ...p, [sNum]: true }));
+                  setOpenAyat(`${sNum}:${an}`);
+                  setTimeout(() => {
+                    const el = document.getElementById(`rev-card-${sNum}-${an}`);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 80);
+                }}
+                onNavigate={onNavigate}
+                setLData={setLData}
+              />
+            </div>
+
             {/* Ayat list */}
             {isOpen && (
               <div className="rev-ayat-grid">
                 {ayatItems.map(({ surahNum: sNum, ayatNum: an, ld }) => {
-                  const key      = `${sNum}:${an}`;
-                  const status   = getRevStatus(ld);
-                  const attempts = ld.writingAttempts || [];
-                  const best     = attempts.length > 0 ? Math.max(...attempts.map(a => a.score)) : null;
+                  const key        = `${sNum}:${an}`;
+                  const attempts   = ld.writingAttempts || [];
+                  const best       = attempts.length > 0 ? Math.max(...attempts.map(a => a.score)) : null;
                   const isExpanded = openAyat === key;
-                  const text     = ayatTexts[key];
-                  const ayat     = makeAyat(sNum, an);
+                  const text       = ayatTexts[key];
+                  const ayat       = makeAyat(sNum, an);
+                  const revInfo    = getAyatRevisionInfo(ld, text);
 
                   return (
-                    <div key={key} className={`rev-ayat-card${isExpanded?" rev-ayat-active":""}`}>
+                    <div
+                      key={key}
+                      id={`rev-card-${sNum}-${an}`}
+                      className={`rev-ayat-card${isExpanded?" rev-ayat-active":""}`}
+                      style={{
+                        borderColor: isExpanded
+                          ? "var(--gold)"
+                          : revInfo.isToRevise
+                          ? "rgba(255, 126, 179, 0.6)"
+                          : revInfo.border,
+                        boxShadow: isExpanded
+                          ? "0 0 12px rgba(201,168,76,0.3)"
+                          : revInfo.glow !== "none"
+                          ? revInfo.glow
+                          : "none",
+                        transition: "all .2s ease",
+                      }}
+                    >
                       {/* Card header */}
                       <div className="rev-ayat-card-header" onClick={() => toggleAyat(key)}>
-                        <div className="rev-ayat-num">{an}</div>
-                        <div className="rev-ayat-text-preview">{text || "…"}</div>
-                        <div className={`rev-ayat-score-badge ${status}`}>
-                          {best !== null ? `${best}%` : statusLabel[status]}
+                        <div
+                          className="rev-ayat-num"
+                          style={{
+                            borderColor: revInfo.border,
+                            color: revInfo.color,
+                            fontWeight: 700,
+                            background: revInfo.bg,
+                          }}
+                        >
+                          {an}
                         </div>
+                        <div className="rev-ayat-text-preview">{text || "…"}</div>
+
+                        {/* Revision Level Badge */}
+                        <div
+                          className="rev-ayat-score-badge"
+                          style={{
+                            background: revInfo.bg,
+                            border: `1px solid ${revInfo.border}`,
+                            color: revInfo.color,
+                            fontFamily: "'Cinzel',serif",
+                            fontSize: 8.5,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          {best !== null ? `${best}% · ${revInfo.label}` : revInfo.label}
+                        </div>
+
                         <button
                           onClick={e => { e.stopPropagation(); onNavigate(sNum, an); }}
                           className="btn-small"

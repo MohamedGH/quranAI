@@ -123,12 +123,23 @@ export function UnknownPickQuestion({ q, onAnswer }) {
               </div>
             </div>
           ) : (
-            <button onClick={() => onAnswer(result)}
-              style={{ padding:'7px 22px', background:'var(--surface3)',
-                border:'1px solid var(--border2)', borderRadius:7, color:'var(--text3)',
-                fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
-              CONTINUER →
-            </button>
+            <div style={{ display:'flex', gap:8, marginTop:4 }}>
+              {!result && (
+                <button onClick={() => { setChecked(false); setSelected(new Set()); }}
+                  style={{ padding:'8px 16px', background:'transparent',
+                    border:'1px solid var(--teal)', borderRadius:7, color:'var(--teal2)',
+                    fontSize:9, letterSpacing:1.5, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
+                  ↺ RÉESSAYER
+                </button>
+              )}
+              <button onClick={() => onAnswer(result)}
+                style={{ padding:'9px 24px', background: result ? 'rgba(76,175,129,.18)' : 'rgba(224,90,90,.12)',
+                  border:'1px solid ' + (result ? 'var(--green)' : 'var(--red)'), borderRadius:7,
+                  color: result ? 'var(--green)' : 'var(--red)',
+                  fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
+                CONTINUER →
+              </button>
+            </div>
           )}
         </div>
       )}

@@ -1,6 +1,24 @@
 import React, { useState } from "react";
 import { splitArabicClusters } from "../../utils/arabicUtils.js";
 
+// Cache for static Quranic ayat letter breakdowns: Map<ayatText, { words, wordLetterCounts, totalLetters }>
+const textLetterCache = new Map();
+
+export function getTextLetterInfo(ayatText) {
+  if (!ayatText) return { words: [], wordLetterCounts: [], totalLetters: 0 };
+  let info = textLetterCache.get(ayatText);
+  if (!info) {
+    const words = ayatText.split(' ').filter(Boolean);
+    const wordLetterCounts = words.map(w => splitArabicClusters(w).length);
+    const totalLetters = wordLetterCounts.reduce((s, c) => s + c, 0);
+    info = { words, wordLetterCounts, totalLetters };
+    if (textLetterCache.size < 7000) {
+      textLetterCache.set(ayatText, info);
+    }
+  }
+  return info;
+}
+
 /**
  * Calculates letter breakdown for an Ayat:
  * - totalLetters: total letters (clusters) in the ayat
@@ -9,9 +27,7 @@ import { splitArabicClusters } from "../../utils/arabicUtils.js";
  * - masteryPct: (learnedLetters / totalLetters) * 100 (rounded, 0-100)
  */
 export function getAyatLetterStats(ld, ayatText) {
-  const words = ayatText ? ayatText.split(' ').filter(Boolean) : [];
-  const wordLetterCounts = words.map(w => splitArabicClusters(w).length);
-  const totalLetters = wordLetterCounts.reduce((s, c) => s + c, 0);
+  const { words, wordLetterCounts, totalLetters } = getTextLetterInfo(ayatText);
 
   if (!ld) {
     return { totalLetters, learnedLetters: 0, reviseLetters: 0, masteryPct: 0 };
@@ -99,6 +115,10 @@ export function getAyatLetterStats(ld, ayatText) {
 }
 
 export function computeMastery(ld, ayatText) {
+  if (!ld) return 0;
+  // Instant fast-paths to avoid unneeded calculations
+  if (ld.learned && !ld.toRevise) return 100;
+  if (!ld.learned && (!ld.parts || ld.parts.length === 0) && (!ld.wordsLearned || Object.keys(ld.wordsLearned).length === 0)) return 0;
   return getAyatLetterStats(ld, ayatText).masteryPct;
 }
 

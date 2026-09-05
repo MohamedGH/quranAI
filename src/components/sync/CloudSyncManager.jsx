@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useCallback } from "react";
 import { useSelector, shallowEqual } from "react-redux";
 import { sel } from "../../store.js";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { firebaseDb } from "../../firebase.js";
+import { firebaseDb, isFirebaseConfigured } from "../../firebase.js";
 import { DATA_KEYS, getDeviceId, mergeLearnData, mergeActivity, mergeCollections } from "../../utils/syncUtils.js";
 
 export function CloudSyncManager({ uid }) {
@@ -42,7 +42,7 @@ export function CloudSyncManager({ uid }) {
 
   // Save current local state to Firestore
   const pushToCloud = useCallback(async () => {
-    if (!uid || !firebaseDb || isSyncingRef.current) return;
+    if (!uid || !firebaseDb || !isFirebaseConfigured || isSyncingRef.current) return;
     isSyncingRef.current = true;
     try {
       const get = (k) => { try { const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : null; } catch { return null; } };
@@ -66,7 +66,7 @@ export function CloudSyncManager({ uid }) {
 
   // Initial pull from Firestore on sign-in
   useEffect(() => {
-    if (!uid || !firebaseDb) return;
+    if (!uid || !firebaseDb || !isFirebaseConfigured) return;
     let cancelled = false;
     async function pull() {
       try {
@@ -84,7 +84,7 @@ export function CloudSyncManager({ uid }) {
 
   // Debounced push on state changes
   useEffect(() => {
-    if (!uid) return;
+    if (!uid || !isFirebaseConfigured) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(pushToCloud, 3000);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };

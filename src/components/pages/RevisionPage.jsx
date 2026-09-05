@@ -7,6 +7,7 @@ import { useSelector } from "react-redux";
 import { sel } from "../../store.js";
 import { RevisionEcritureMode } from "../modes/RevisionEcritureMode.jsx";
 import { TajweedExercice } from "../modes/TajweedExercice.jsx";
+import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 import { splitArabicWords, splitArabicChars } from "../../utils/arabicUtils.js";
 import { computeMastery, MasteryBar, MasteryBadge, masteryColor } from "../common/Mastery.jsx";
 import { LearningEvolutionChart } from "../common/LearningEvolutionChart.jsx";
@@ -431,7 +432,9 @@ export function RevisionPage({ learnData, surahs, setLData, activity = {}, goals
                             />
                           )}
                           {text && (ayatTab[key]||"ecriture") === "tajweed" && (
-                            <TajweedExercice ayat={ayat} />
+                            <ErrorBoundary>
+                              <TajweedExercice ayat={ayat} />
+                            </ErrorBoundary>
                           )}
                         </div>
                       )}

@@ -76,10 +76,16 @@ export function CompareVerseQuestion({ q, onAnswer, globalNums }) {
 
   const allAssigned = shuffled.every((_, i) => assignments[i] !== undefined);
 
+  const isAllCorrect = checked && shuffled.every((e, i) => assignments[i] === e.sn);
+
   const check = () => {
     setChecked(true);
-    const correct = shuffled.every((e, i) => assignments[i] === e.sn);
-    onAnswer(correct);
+  };
+
+  const handleReset = () => {
+    setChecked(false);
+    setAssignments({});
+    setSelected(null);
   };
 
   return (
@@ -154,20 +160,45 @@ export function CompareVerseQuestion({ q, onAnswer, globalNums }) {
           })}
         </div>
       </div>
-      {!checked && allAssigned && (
-        <button onClick={check}
-          style={{ padding:'10px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-            background:'rgba(201,168,76,.12)', border:'1px solid var(--gold)', color:'var(--gold2)',
-            borderRadius:8, cursor:'pointer' }}>
-          ✓ VÉRIFIER
+      {!checked ? (
+        <button onClick={check} disabled={!allAssigned}
+          style={{ padding:'10px', fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif",
+            background: allAssigned ? 'rgba(201,168,76,.15)' : 'transparent',
+            border:'1px solid ' + (allAssigned ? 'var(--gold)' : 'var(--border2)'),
+            color: allAssigned ? 'var(--gold2)' : 'var(--text3)',
+            borderRadius:8, cursor: allAssigned ? 'pointer' : 'default', transition:'all .2s' }}>
+          ✓ VÉRIFIER ({Object.keys(assignments).length}/{shuffled.length})
         </button>
-      )}
-      {checked && (
-        <div style={{ textAlign:'center', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-          color: shuffled.every((_,i) => assignments[i] === shuffled[i].sn) ? 'var(--green)' : 'var(--red)',
-          padding:'8px', borderRadius:8,
-          background: shuffled.every((_,i) => assignments[i] === shuffled[i].sn) ? 'rgba(76,175,129,.08)' : 'rgba(229,115,115,.08)' }}>
-          {shuffled.every((_,i) => assignments[i] === shuffled[i].sn) ? '✓ CORRECT' : '✗ INCORRECT'}
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%' }}>
+          <div style={{
+            textAlign:'center', fontSize:11, letterSpacing:1.5, fontFamily:"'Cinzel',serif",
+            padding:'9px 14px', borderRadius:8,
+            color: isAllCorrect ? 'var(--green)' : 'var(--red)',
+            background: isAllCorrect ? 'rgba(76,175,129,.1)' : 'rgba(224,90,90,.1)',
+            border:'1px solid ' + (isAllCorrect ? 'var(--green)' : 'var(--red)')
+          }}>
+            {isAllCorrect ? '✓ TOUTES LES ASSOCIATIONS SONT EXACTES !' : '✗ CERTAINES ASSOCIATIONS SONT INCORRECTES'}
+          </div>
+
+          <div style={{ display:'flex', gap:8 }}>
+            {!isAllCorrect && (
+              <button onClick={handleReset}
+                style={{ padding:'9px 16px', fontSize:9, letterSpacing:1.5, fontFamily:"'Cinzel',serif",
+                  background:'transparent', border:'1px solid var(--teal)', color:'var(--teal2)',
+                  borderRadius:8, cursor:'pointer' }}>
+                ↺ RÉESSAYER
+              </button>
+            )}
+            <button onClick={() => onAnswer(isAllCorrect)}
+              style={{ flex:1, padding:'10px 18px', fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif",
+                background: isAllCorrect ? 'rgba(76,175,129,.18)' : 'rgba(224,90,90,.14)',
+                border:'1px solid ' + (isAllCorrect ? 'var(--green)' : 'var(--red)'),
+                color: isAllCorrect ? 'var(--green)' : 'var(--red)',
+                borderRadius:8, cursor:'pointer' }}>
+              CONTINUER →
+            </button>
+          </div>
         </div>
       )}
     </div>

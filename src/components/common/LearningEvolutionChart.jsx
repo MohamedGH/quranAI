@@ -59,7 +59,30 @@ export function LearningEvolutionChart({
     const count = rangeDaysCount;
     const now = new Date();
     const list = [];
-    const entries = Object.entries(learnData);
+
+    // Filter and precompute relevant items once outside the day loop
+    const relevantItems = [];
+    for (const [key, v] of Object.entries(learnData)) {
+      const colon = key.indexOf(":");
+      if (colon === -1) continue;
+      const sn = parseInt(key.slice(0, colon));
+      if (selectedSn && sn !== selectedSn) continue;
+      const an = parseInt(key.slice(colon + 1));
+      const lDate = v.learnedAt ? v.learnedAt.slice(0, 10) : null;
+      const uDate = v.updatedAt ? v.updatedAt.slice(0, 10) : null;
+      const text = surahTextCache[sn]?.[an];
+      const m = computeMastery(v, text);
+      const wCount = v.wordsLearned ? Object.keys(v.wordsLearned).length : 0;
+      const hist = v.reviseHistory;
+      relevantItems.push({
+        lDate,
+        uDate,
+        learned: !!v.learned,
+        wCount,
+        m,
+        hist: hist && hist.length > 0 ? hist : null,
+      });
+    }
 
     const targetSurahMeta = selectedSn ? surahs.find((s) => s.number === selectedSn) : null;
     const targetTotalAyats = targetSurahMeta ? (targetSurahMeta.numberOfAyahs || 1) : 6236;
@@ -77,38 +100,30 @@ export function LearningEvolutionChart({
       let newLearnedOnDate = 0;
       let updatedOnDate = 0;
 
-      for (const [key, v] of entries) {
-        const [sn, an] = key.split(":").map(Number);
-        if (selectedSn && sn !== selectedSn) continue;
-
-        const lDate = v.learnedAt ? v.learnedAt.slice(0, 10) : null;
-        const uDate = v.updatedAt ? v.updatedAt.slice(0, 10) : null;
-
-        if (lDate === dateStr) {
+      for (let j = 0; j < relevantItems.length; j++) {
+        const item = relevantItems[j];
+        if (item.lDate === dateStr) {
           newLearnedOnDate++;
         }
-        if (uDate === dateStr && lDate !== dateStr) {
+        if (item.uDate === dateStr && item.lDate !== dateStr) {
           updatedOnDate++;
         }
-
-        // Count as cumulative learned if learned on or before dateStr
-        if (v.learned && lDate && lDate <= dateStr) {
+        if (item.learned && item.lDate && item.lDate <= dateStr) {
           cumulativeLearned++;
-          cumulativeWords += Object.keys(v.wordsLearned || {}).length;
+          cumulativeWords += item.wCount;
         }
 
         // Mastery calculation on dateStr
-        if ((lDate && lDate <= dateStr) || (uDate && uDate <= dateStr)) {
-          const hist = v.reviseHistory || [];
-          const openOnDate = hist.some((e) => {
-            const start = e.startDate?.slice(0, 10);
-            const end = e.endDate?.slice(0, 10);
-            return start && start <= dateStr && (!end || end > dateStr);
-          });
-          if (!openOnDate) {
-            const text = surahTextCache[sn]?.[an];
-            cumulativeMasterySum += computeMastery(v, text);
+        if ((item.lDate && item.lDate <= dateStr) || (item.uDate && item.uDate <= dateStr)) {
+          if (item.hist) {
+            const openOnDate = item.hist.some((e) => {
+              const start = e.startDate?.slice(0, 10);
+              const end = e.endDate?.slice(0, 10);
+              return start && start <= dateStr && (!end || end > dateStr);
+            });
+            if (openOnDate) continue;
           }
+          cumulativeMasterySum += item.m;
         }
       }
 
@@ -117,7 +132,7 @@ export function LearningEvolutionChart({
       const actRead = act.ayatsRead || 0;
 
       const masteryPct = targetTotalAyats > 0
-        ? Math.min(100, Math.round((cumulativeMasterySum / targetTotalAyats) * (selectedSn ? 1 : 1)))
+        ? Math.min(100, Math.round(cumulativeMasterySum / targetTotalAyats))
         : 0;
 
       list.push({
@@ -236,35 +251,35 @@ export function LearningEvolutionChart({
 
   // Progression per Surah Matrix
   const surahProgressionList = useMemo(() => {
+    const map = {};
+    for (const [key, ld] of Object.entries(learnData)) {
+      const colon = key.indexOf(":");
+      if (colon === -1) continue;
+      const sn = parseInt(key.slice(0, colon));
+      const an = parseInt(key.slice(colon + 1));
+      if (!map[sn]) map[sn] = { learnedCount: 0, readCount: 0, toRevise: 0, masteryTotal: 0 };
+      if (ld.learned) map[sn].learnedCount++;
+      if (ld.toRevise) map[sn].toRevise++;
+      map[sn].readCount += ld.readCount || 0;
+      const text = surahTextCache[sn]?.[an];
+      map[sn].masteryTotal += computeMastery(ld, text);
+    }
+
     return surahs.map((s) => {
       const sn = s.number;
-      let learnedCount = 0;
-      let readCount = 0;
-      let toRevise = 0;
-      let masteryTotal = 0;
-
-      for (let an = 1; an <= s.numberOfAyahs; an++) {
-        const ld = learnData[`${sn}:${an}`];
-        if (ld) {
-          if (ld.learned) learnedCount++;
-          if (ld.toRevise) toRevise++;
-          readCount += ld.readCount || 0;
-          const text = surahTextCache[sn]?.[an];
-          masteryTotal += computeMastery(ld, text);
-        }
-      }
-
-      const pct = s.numberOfAyahs > 0 ? Math.round((learnedCount / s.numberOfAyahs) * 100) : 0;
-      const masteryPct = s.numberOfAyahs > 0 ? Math.round(masteryTotal / s.numberOfAyahs) : 0;
+      const st = map[sn] || { learnedCount: 0, readCount: 0, toRevise: 0, masteryTotal: 0 };
+      const numAyahs = s.numberOfAyahs || 1;
+      const pct = Math.round((st.learnedCount / numAyahs) * 100);
+      const masteryPct = Math.round(st.masteryTotal / numAyahs);
 
       return {
         ...s,
-        learnedCount,
-        readCount,
-        toRevise,
+        learnedCount: st.learnedCount,
+        readCount: st.readCount,
+        toRevise: st.toRevise,
         pct,
         masteryPct,
-        active: learnedCount > 0 || readCount > 0,
+        active: st.learnedCount > 0 || st.readCount > 0,
       };
     });
   }, [surahs, learnData, surahTextCache]);

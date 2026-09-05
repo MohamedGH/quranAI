@@ -16,6 +16,7 @@ import { ArabicHighlighted, PlayingArabicHighlighted } from "./components/common
 import { MasteryBar, MasteryBadge, MasteryDebug, computeMastery } from "./components/common/Mastery.jsx";
 import { RappelWidget } from "./components/common/RappelWidget.jsx";
 import { ScheduledRemindersModal } from "./components/common/ScheduledRemindersModal.jsx";
+import { HeaderToolsModal } from "./components/common/HeaderToolsModal.jsx";
 import { NotificationToast } from "./components/common/NotificationToast.jsx";
 import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
@@ -185,6 +186,8 @@ function AppInner({ currentUser, onSignOut }) {
   const enableAnimations     = useSelector(sel.enableAnimations);
   const enableHeavyCompute   = useSelector(sel.enableHeavyCompute);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [showHeaderToolsModal, setShowHeaderToolsModal] = useState(false);
+  const [headerToolsInitialTab, setHeaderToolsInitialTab] = useState('tools');
   const [showUserMenu, setShowUserMenu]         = useState(false);
   const userMenuRef                             = useRef(null);
 
@@ -372,12 +375,21 @@ function AppInner({ currentUser, onSignOut }) {
   // Part audio refs (not in Redux — updated 60fps, no need to re-render)
   const partAudioRef  = useRef(null);
   const partRafRef    = useRef(null);
+  const lastPartDispatchRef = useRef(0);
 
   const stopPartRaf = () => { if (partRafRef.current) { cancelAnimationFrame(partRafRef.current); partRafRef.current = null; } };
   const startPartRaf = () => {
     stopPartRaf();
     const tick = () => {
-      if (partAudioRef.current) setPartCurrentMs(partAudioRef.current.currentTime * 1000);
+      if (partAudioRef.current) {
+        const ms = partAudioRef.current.currentTime * 1000;
+        window.__quranPartMs = ms;
+        const now = performance.now();
+        if (now - lastPartDispatchRef.current >= 250) {
+          lastPartDispatchRef.current = now;
+          setPartCurrentMs(ms);
+        }
+      }
       partRafRef.current = requestAnimationFrame(tick);
     };
     partRafRef.current = requestAnimationFrame(tick);
@@ -432,6 +444,21 @@ function AppInner({ currentUser, onSignOut }) {
   const [showSurahInfo, setShowSurahInfo] = useState(false);
   const [showAyatJump, setShowAyatJump] = useState(false);
   const [surahTextCache, setSurahTextCache] = useState({}); // surahNum → { numberInSurah: text } — feeds mastery calc
+
+  // Escape key listener to close floating panels & quick actions
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowTajweedPanel(false);
+        setShowOptionsPanel(false);
+        setShowLangPanel(false);
+        setShowAyatJump(false);
+        setShowSurahInfo(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   const [ayatSearchInput, setAyatSearchInput] = useState("");
   const [autoPageFollow, setAutoPageFollow] = useState(true);
   const [translationLang, setTranslationLang] = useState(null); // null | 'fr'|'en'|'tr'…
@@ -521,6 +548,26 @@ function AppInner({ currentUser, onSignOut }) {
   }, [activePageCoran, pageMode]);
   useEffect(() => { ayats_ref.current = ayats; }, [ayats]);
   useEffect(() => { selSurah_ref.current = selectedSurah; }, [selectedSurah]);
+
+  // Infinite scroll pagination — progressively load ayats on demand instead of loading 286 verses at once
+  const handleAyatScroll = useCallback((e) => {
+    if (pageMode || !ayats || ayats.length === 0) return;
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 650) {
+      setRenderLimit(prev => {
+        if (prev >= ayats.length) return prev;
+        return Math.min(prev + 35, ayats.length);
+      });
+    }
+  }, [pageMode, ayats]);
+
+  // Keep renderLimit ahead of current active ayat during playback
+  useEffect(() => {
+    if (pageMode || !ayats || ayats.length === 0) return;
+    if (mainAyatIdx >= 0 && mainAyatIdx + 10 >= renderLimit) {
+      setRenderLimit(prev => Math.min(Math.max(prev, mainAyatIdx + 30), ayats.length));
+    }
+  }, [mainAyatIdx, pageMode, ayats, renderLimit]);
 
   // ── AUDIO PERSISTANCE APK / VEILLE MOBILE ────────────────────────
   // Stratégie multi-couches pour WebView Android :
@@ -749,20 +796,12 @@ function AppInner({ currentUser, onSignOut }) {
         ? Math.max(0, ayahList.findIndex(a => a.numberInSurah === savedAyatNum))
         : 0;
       // Start render window around the active ayat so it's visible immediately
-      const initialLimit = Math.max(30, restoredIdx + 15);
+      const initialLimit = Math.max(35, restoredIdx + 15);
       setRenderLimit(initialLimit);
       setAyats(ayahList); setLoadingAyats(false);
       setMainAyatIdx(restoredIdx);
       setactivePageCoran(null); // reset; will be derived from mainAyatIdx
       if (savedAyatNum != null) setOpenAyatNum(savedAyatNum);
-      // Expand remaining ayats progressively after first paint
-      const total = ayahList.length;
-      const expandChunk = (from) => {
-        if (from >= total) return;
-        const next = Math.min(from + 50, total);
-        requestAnimationFrame(() => { setRenderLimit(next); expandChunk(next); });
-      };
-      requestAnimationFrame(() => expandChunk(initialLimit));
       // Restore loop
       const savedLoop = loopBySurah[selectedSurah.number];
       if (savedLoop) {
@@ -829,9 +868,19 @@ function AppInner({ currentUser, onSignOut }) {
   }, [openAyatNum, selectedSurah?.number]);
 
   // RAF
+  const lastTimeDispatchRef = useRef(0);
   const startRaf = useCallback(() => {
     const tick = () => {
-      if (mainAudioRef.current) setMainCurrentMs(mainAudioRef.current.currentTime * 1000);
+      if (mainAudioRef.current) {
+        const ms = mainAudioRef.current.currentTime * 1000;
+        mainCurrentMsRef.current = ms;
+        const now = performance.now();
+        // Throttle Redux dispatch to 4Hz (every 250ms) to avoid high-frequency store churn
+        if (now - lastTimeDispatchRef.current >= 250) {
+          lastTimeDispatchRef.current = now;
+          setMainCurrentMs(ms);
+        }
+      }
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -973,6 +1022,10 @@ function AppInner({ currentUser, onSignOut }) {
     if (!n || !selectedSurah) return;
     const target = ayats.find(a => a.numberInSurah === n);
     if (!target) { showToast(`Ayat ${n} introuvable`, 'error'); return; }
+    const idx = ayats.indexOf(target);
+    if (idx >= 0 && idx + 10 >= renderLimit) {
+      setRenderLimit(Math.min(idx + 35, ayats.length));
+    }
     navigate(`/quran/${selectedSurah.number}/${n}`);
     setOpenAyatNum(n);
     if (pageMode && target.page != null) setactivePageCoran(target.page);
@@ -1343,14 +1396,22 @@ function AppInner({ currentUser, onSignOut }) {
     if (toFetch.length === 0) return;
     let cancelled = false;
     (async () => {
-      for (const sn of toFetch) {
-        try {
-          const arr = await fetchSurahSimple(sn); // [{num, text}]
-          if (cancelled) return;
-          const map = {};
-          arr.forEach(a => { map[a.num] = a.text; });
-          setSurahTextCache(c => c[sn] ? c : { ...c, [sn]: map });
-        } catch {}
+      const fetchedBatch = {};
+      // Fetch in parallel chunks of 4 to avoid blocking and batch into a single state update
+      for (let i = 0; i < toFetch.length; i += 4) {
+        if (cancelled) return;
+        const chunk = toFetch.slice(i, i + 4);
+        await Promise.all(chunk.map(async (sn) => {
+          try {
+            const arr = await fetchSurahSimple(sn); // [{num, text}]
+            const map = {};
+            arr.forEach(a => { map[a.num] = a.text; });
+            fetchedBatch[sn] = map;
+          } catch {}
+        }));
+      }
+      if (!cancelled && Object.keys(fetchedBatch).length > 0) {
+        setSurahTextCache(c => ({ ...c, ...fetchedBatch }));
       }
     })();
     return () => { cancelled = true; };
@@ -1431,169 +1492,57 @@ function AppInner({ currentUser, onSignOut }) {
             ))}
           </nav>
 
-          {/* Right Action buttons & User Menu */}
-          <div className="header-actions" ref={userMenuRef}>
-            {/* Arabic keyboard toggle (desktop only) */}
-            <button
-              className="voice-btn desktop-only-action"
-              onClick={() => setShowArabicKeyboard(v => {
-                const next = !v;
-                try { localStorage.setItem('quran_arabic_keyboard', next ? '1' : '0'); } catch {}
-                return next;
-              })}
-              title={showArabicKeyboard ? "Masquer clavier arabe" : "Afficher clavier arabe"}
-              style={{
-                background: showArabicKeyboard ? 'rgba(62,184,160,.18)' : undefined,
-                borderColor: showArabicKeyboard ? 'var(--teal)' : undefined,
-                color: showArabicKeyboard ? 'var(--teal2)' : undefined,
-              }}
-            >
-              ⌨️
-            </button>
-
+          {/* Right Action buttons & Compact Modal Hub */}
+          <div className="header-actions">
             {/* Voice Command Mic */}
             <button
+              id="header-voice-btn"
               className={`voice-btn${listening ? ' listening' : ''}`}
               onClick={toggleVoice}
-              title={listening ? "Arrêter écoute vocale" : "Commande vocale"}
+              title={listening ? "Arrêter écoute vocale" : "Commande vocale (Micro)"}
+              aria-label="Commande vocale"
             >
               🎤
             </button>
 
-            {/* Rappels programmés (Desktop & Mobile) */}
+            {/* Outils & Aides d'étude Modal Button */}
             <button
-              className="voice-btn"
-              onClick={() => setShowScheduledReminders(true)}
-              title="Rappels programmés de révision & mémorisation"
-              style={{
-                color: "var(--gold2)",
-                borderColor: "rgba(201,168,76,.3)",
+              id="header-tools-btn"
+              className={`header-tool-btn${showArabicKeyboard || showRappel ? ' active' : ''}`}
+              onClick={() => {
+                setHeaderToolsInitialTab('tools');
+                setShowHeaderToolsModal(true);
               }}
+              title="Outils & Aides d'étude (Clavier, Rappels, Options)"
+              aria-label="Outils d'étude"
             >
-              ⏰
+              <span className="tool-icon">⚡</span>
+              <span className="tool-label desktop-only">OUTILS</span>
+              {(showArabicKeyboard || showRappel) && (
+                <span className="tool-active-dot" title="Outil actif" />
+              )}
             </button>
 
-            {/* Rappel vocal (desktop only) */}
-            <button
-              className="voice-btn desktop-only-action"
-              onClick={() => setShowRappel(v => !v)}
-              title="Rappel vocal périodique"
-              style={{
-                background: showRappel ? 'rgba(201,168,76,.18)' : undefined,
-                borderColor: showRappel ? 'rgba(201,168,76,.5)' : undefined,
-                color: showRappel ? 'var(--gold2)' : undefined,
-              }}
-            >
-              🔔
-            </button>
-
-            {/* User Avatar & Dropdown */}
+            {/* User Avatar / Account Profile Modal Trigger */}
             {currentUser && (
-              <div style={{ position: 'relative' }}>
-                <button
-                  className={`header-user-btn${showUserMenu ? ' active' : ''}`}
-                  onClick={() => setShowUserMenu(v => !v)}
-                  title={currentUser.displayName || currentUser.email || "Mon compte"}
-                  aria-expanded={showUserMenu}
-                >
-                  {currentUser.photoURL ? (
-                    <img src={currentUser.photoURL} alt="avatar" className="header-avatar" />
-                  ) : (
-                    <div className="header-avatar-placeholder">
-                      {(currentUser.displayName || currentUser.email || "?")[0].toUpperCase()}
-                    </div>
-                  )}
-                </button>
-
-                {/* Mobile / Desktop Dropdown Menu */}
-                {showUserMenu && (
-                  <div className="header-user-menu">
-                    <div className="user-menu-header">
-                      <div className="user-menu-name">
-                        {currentUser.displayName || "Utilisateur"}
-                      </div>
-                      <div className="user-menu-email">
-                        {currentUser.email || ""}
-                      </div>
-                    </div>
-
-                    <button
-                      className="user-menu-item"
-                      onClick={() => {
-                        setShowArabicKeyboard(v => {
-                          const next = !v;
-                          try { localStorage.setItem('quran_arabic_keyboard', next ? '1' : '0'); } catch {}
-                          return next;
-                        });
-                        setShowUserMenu(false);
-                      }}
-                    >
-                      <div className="menu-left">
-                        <span>⌨️</span>
-                        <span>Clavier Arabe</span>
-                      </div>
-                      <span className={`user-menu-badge ${showArabicKeyboard ? 'on' : 'off'}`}>
-                        {showArabicKeyboard ? 'ON' : 'OFF'}
-                      </span>
-                    </button>
-
-                    <button
-                      className="user-menu-item"
-                      onClick={() => {
-                        setShowScheduledReminders(true);
-                        setShowUserMenu(false);
-                      }}
-                    >
-                      <div className="menu-left">
-                        <span>⏰</span>
-                        <span>Rappels Programmés</span>
-                      </div>
-                    </button>
-
-                    <button
-                      className="user-menu-item"
-                      onClick={() => {
-                        setShowRappel(v => !v);
-                        setShowUserMenu(false);
-                      }}
-                    >
-                      <div className="menu-left">
-                        <span>🔔</span>
-                        <span>Rappel Vocal</span>
-                      </div>
-                      <span className={`user-menu-badge ${showRappel ? 'on' : 'off'}`}>
-                        {showRappel ? 'ON' : 'OFF'}
-                      </span>
-                    </button>
-
-                    <button
-                      className="user-menu-item"
-                      onClick={() => {
-                        setShowOptionsModal(true);
-                        setShowUserMenu(false);
-                      }}
-                    >
-                      <div className="menu-left">
-                        <span>⚙</span>
-                        <span>Paramètres & Sync</span>
-                      </div>
-                    </button>
-
-                    <button
-                      className="user-menu-item logout"
-                      onClick={() => {
-                        setShowUserMenu(false);
-                        onSignOut();
-                      }}
-                    >
-                      <div className="menu-left">
-                        <span>⏏</span>
-                        <span>Se déconnecter</span>
-                      </div>
-                    </button>
+              <button
+                id="header-user-btn"
+                className="header-user-btn"
+                onClick={() => {
+                  setHeaderToolsInitialTab('account');
+                  setShowHeaderToolsModal(true);
+                }}
+                title={currentUser.displayName || currentUser.email || "Mon compte & Profil"}
+                aria-label="Mon compte"
+              >
+                {currentUser.photoURL ? (
+                  <img src={currentUser.photoURL} alt="avatar" className="header-avatar" />
+                ) : (
+                  <div className="header-avatar-placeholder">
+                    {(currentUser.displayName || currentUser.email || "?")[0].toUpperCase()}
                   </div>
                 )}
-              </div>
+              </button>
             )}
           </div>
         </header>
@@ -1675,9 +1624,46 @@ function AppInner({ currentUser, onSignOut }) {
 
           {/* Sidebar — always rendered, accessible via ☰ from any page */}
           <aside className={`sidebar${sidebarOpen ? ' open' : ''}${activePage !== 'quran' ? ' sidebar-floating' : ''}`}>
-            <div className="sidebar-search">
-              <input placeholder="RECHERCHER..." value={search} onChange={e => setSearch(e.target.value)} />
+            <div className="sidebar-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input
+                placeholder="RECHERCHER (NOM, N°)..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ paddingRight: search ? 30 : 12 }}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  title="Effacer la recherche"
+                  style={{
+                    position: 'absolute',
+                    right: 20,
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text3)',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    padding: 4,
+                    lineHeight: 1
+                  }}
+                >
+                  ✕
+                </button>
+              )}
             </div>
+            {search.trim() && (
+              <div style={{
+                padding: '4px 14px',
+                fontSize: 8,
+                letterSpacing: 1.2,
+                color: 'var(--gold2)',
+                background: 'rgba(201,168,76,.06)',
+                borderBottom: '1px solid var(--border)',
+                fontFamily: "'Cinzel', serif"
+              }}>
+                {filteredSurahs.length} SOURATE{filteredSurahs.length > 1 ? 'S' : ''} TROUVÉE{filteredSurahs.length > 1 ? 'S' : ''}
+              </div>
+            )}
             <div className="sidebar-list">
               {loadingSurahs
                 ? <div className="loading"><div className="loading-ring" /><span>CHARGEMENT</span></div>
@@ -1851,10 +1837,10 @@ function AppInner({ currentUser, onSignOut }) {
                   const unmarkAllLearned = () => ayats.forEach(a => setLData(selectedSurah.number, a.numberInSurah, d => ({ ...d, learned: false })));
                   return (
                 <div className="surah-header">
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:10,flexWrap:'wrap'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,flexWrap:'wrap',lineHeight:1.1}}>
                     <div className="surah-header-ornament">{selectedSurah.name}</div>
                     {selectedSurah.number !== 9 && (
-                      <div className="surah-header-bismillah" style={{fontFamily:"'Amiri Quran',serif",fontSize:18,color:'var(--gold)',direction:'rtl',opacity:.8,lineHeight:1.3}}>بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+                      <div className="surah-header-bismillah" style={{fontFamily:"'Amiri Quran',serif",fontSize:13,color:'var(--gold)',direction:'rtl',opacity:.8,lineHeight:1.1}}>بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
                     )}
                   </div>
                   <div className="surah-header-title">{selectedSurah.englishName.toUpperCase()} · <span style={{opacity:.6}}>{selectedSurah.englishNameTranslation?.toUpperCase()}</span> · {selectedSurah.numberOfAyahs} AYATS</div>
@@ -1889,8 +1875,8 @@ function AppInner({ currentUser, onSignOut }) {
                     const infoLabel = pageMode && curPage ? `PAGE ${curPage}` : `SOURATE`;
 
                     const pillBtnStyle = (active, activeColor='rgba(255,255,255,.2)') => ({
-                      display:'flex', alignItems:'center', gap:4,
-                      fontSize:8, letterSpacing:1, padding:'4px 10px', borderRadius:20,
+                      display:'flex', alignItems:'center', gap:3,
+                      fontSize:7.5, letterSpacing:.6, padding:'1px 7px', borderRadius:12, height:19,
                       fontFamily:"'Cinzel',serif", cursor:'pointer', whiteSpace:'nowrap',
                       background: active ? 'rgba(255,255,255,.06)' : 'transparent',
                       border:'1px solid ' + (active ? activeColor : 'rgba(255,255,255,.1)'),
@@ -1899,12 +1885,12 @@ function AppInner({ currentUser, onSignOut }) {
 
                     return (
                       <>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginTop:8,flexWrap:'wrap'}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:3,flexWrap:'wrap'}}>
                           {/* Mastery */}
-                          <div style={{display:'flex',alignItems:'center',gap:5,padding:'4px 11px',borderRadius:20,
+                          <div style={{display:'flex',alignItems:'center',gap:3,padding:'1px 6px',borderRadius:12,height:19,
                             border:`1px solid ${masteryColor(totalMasteryPct)}`,background:'rgba(255,255,255,.03)'}}>
-                            <span style={{fontSize:9}}>🎯</span>
-                            <span style={{fontSize:11,fontWeight:700,fontFamily:"'Cinzel',serif",color:masteryColor(totalMasteryPct)}}>{totalMasteryPct}%</span>
+                            <span style={{fontSize:8}}>🎯</span>
+                            <span style={{fontSize:9.5,fontWeight:700,fontFamily:"'Cinzel',serif",color:masteryColor(totalMasteryPct)}}>{totalMasteryPct}%</span>
                           </div>
 
                           {/* Info toggle (page/hizb/juz/mots/parties/inconnus pills) */}
@@ -1934,35 +1920,35 @@ function AppInner({ currentUser, onSignOut }) {
                         </div>
 
                         {showSurahInfo && (
-                          <div style={{display:'flex',flexWrap:'wrap',gap:6,justifyContent:'center',marginTop:8}}>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:4,justifyContent:'center',marginTop:4}}>
                             {pills.map(({ label: l, val, color }) => (
                               <div key={l} style={{
                                 display:'flex',flexDirection:'column',alignItems:'center',
                                 background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.08)',
-                                borderRadius:7,padding:'5px 12px',minWidth:52,
+                                borderRadius:5,padding:'3px 8px',minWidth:44,
                               }}>
-                                <div style={{fontSize:14,fontWeight:700,color,fontFamily:"'Cinzel',serif",lineHeight:1}}>{val}</div>
-                                <div style={{fontSize:7,letterSpacing:1.5,color:'var(--text3)',marginTop:3}}>{l}</div>
+                                <div style={{fontSize:11,fontWeight:700,color,fontFamily:"'Cinzel',serif",lineHeight:1}}>{val}</div>
+                                <div style={{fontSize:6.5,letterSpacing:1,color:'var(--text3)',marginTop:2}}>{l}</div>
                               </div>
                             ))}
                           </div>
                         )}
 
                         {showAyatJump && (
-                          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginTop:8}}>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:4}}>
                             <input type="number" min={1} max={selectedSurah.numberOfAyahs}
                               autoFocus
                               value={ayatSearchInput}
                               onChange={e => setAyatSearchInput(e.target.value)}
                               onKeyDown={e => { if (e.key === 'Enter') { jumpToAyatNumber(ayatSearchInput); setAyatSearchInput(''); setShowAyatJump(false); } }}
                               placeholder="N°"
-                              style={{width:56,textAlign:'center',background:'var(--surface3)',
-                                border:'1px solid var(--border2)',borderRadius:6,padding:'4px 6px',
-                                color:'var(--text)',fontSize:12,fontFamily:"'Cinzel',serif",outline:'none'}} />
+                              style={{width:48,height:20,textAlign:'center',background:'var(--surface3)',
+                                border:'1px solid var(--border2)',borderRadius:4,padding:'2px 4px',
+                                color:'var(--text)',fontSize:11,fontFamily:"'Cinzel',serif",outline:'none'}} />
                             <button onClick={() => { jumpToAyatNumber(ayatSearchInput); setAyatSearchInput(''); setShowAyatJump(false); }}
-                              style={{fontSize:8,letterSpacing:1,padding:'5px 10px',fontFamily:"'Cinzel',serif",
+                              style={{fontSize:7.5,letterSpacing:.5,padding:'2px 7px',height:20,fontFamily:"'Cinzel',serif",
                                 background:'rgba(200,120,255,.08)',border:'1px solid #c878ff',color:'#c878ff',
-                                borderRadius:6,cursor:'pointer'}}>
+                                borderRadius:4,cursor:'pointer'}}>
                               🔎 ALLER
                             </button>
                           </div>
@@ -1976,122 +1962,216 @@ function AppInner({ currentUser, onSignOut }) {
 
                 {(() => {
                   const anyTj = showQalqala||showMadd||showIzhar||showIdgham;
+                  const activeTjCount = [showQalqala, showMadd, showIzhar, showIdgham].filter(Boolean).length;
                   const anyOpt = announceNum||spellCheck||showParts||pageMode;
+                  const activeOptCount = [announceNum, spellCheck, showParts, pageMode].filter(Boolean).length;
+                  const langLabel = translationLang ? (TRANS_LABELS[translationLang] || translationLang.toUpperCase()) : "LANGUE";
+
                   return (
                 <div className="ts-global-bar">
+                  {/* Backdrop to close floating panels on outside click */}
+                  {(showTajweedPanel || showOptionsPanel || showLangPanel) && (
+                    <div
+                      onClick={() => { setShowTajweedPanel(false); setShowOptionsPanel(false); setShowLangPanel(false); }}
+                      style={{ position: "fixed", inset: 0, zIndex: 25, background: "transparent" }}
+                    />
+                  )}
+
                   <button onClick={() => setShowTsBar(!showTsBar)}
-                    style={{ display:"flex", alignItems:"center", gap:6, background:"transparent", border:"1px solid var(--border2)", borderRadius:"var(--radius-sm)", padding:"3px 10px", cursor:"pointer", flexShrink:0 }}>
-                    <span className="ts-global-label">⚡ TS</span>
-                    <span className="ts-global-count">{loadedCount}/{ayats.length}</span>
-                    <span style={{ fontSize:8, color:"var(--text3)", marginLeft:2 }}>{showTsBar ? "▲" : "▼"}</span>
+                    style={{ display:"flex", alignItems:"center", gap:4, background:"transparent", border:"1px solid var(--border2)", borderRadius:"var(--radius-sm)", padding:"1px 6px", height:20, cursor:"pointer", flexShrink:0 }}>
+                    <span className="ts-global-label" style={{fontSize:8,letterSpacing:.5}}>⚡ TS</span>
+                    <span className="ts-global-count" style={{fontSize:8}}>{loadedCount}/{ayats.length}</span>
+                    <span style={{ fontSize:7, color:"var(--text3)", marginLeft:1 }}>{showTsBar ? "▲" : "▼"}</span>
                   </button>
+
+                  {/* TAJWEED POPOVER */}
                   <div className="panel-row">
-                  <button onClick={() => setShowTajweedPanel(v => !v)}
-                    style={{ display:"flex", alignItems:"center", gap:5,
-                      background: showTajweedPanel ? "rgba(255,255,255,.06)" : anyTj ? "rgba(91,200,245,.08)" : "transparent",
-                      border: "1px solid " + (anyTj ? "#5bc8f5" : showTajweedPanel ? "rgba(255,255,255,.15)" : "var(--border2)"),
-                      borderRadius:"var(--radius-sm)", padding:"3px 10px", cursor:"pointer", flexShrink:0,
-                      color: anyTj ? "#5bc8f5" : "var(--text3)",
-                      fontSize:9, letterSpacing:"1px", fontFamily:"Cinzel,serif", transition:"all .2s" }}>
-                    تجويد <span style={{fontSize:7,marginLeft:2}}>{showTajweedPanel ? "▲" : "▼"}</span>
-                  </button>
-                  {showTajweedPanel && (
-                    <div className="panel-expand" style={{ left:0, right:0, minWidth:0 }}>
-                    <div className="tajweed-panel" style={{ flexWrap:'wrap', gap:6, padding:'8px 12px' }}>
-                      {[
-                        { toggle: toggleQalqala, on: showQalqala, label: "قلقلة", color: "#5bc8f5", bg: "rgba(91,200,245,.1)" },
-                        { toggle: toggleMadd,    on: showMadd,    label: "مَدّ",   color: "#f09de0", bg: "rgba(240,157,224,.1)" },
-                        { toggle: toggleIzhar,   on: showIzhar,   label: "إظهار", color: "#4caf81", bg: "rgba(76,175,129,.1)" },
-                        { toggle: toggleIdgham,  on: showIdgham,  label: "إدغام", color: "#ffd166", bg: "rgba(255,209,102,.1)" },
-                      ].map(({toggle,on,label,color,bg}) => (
-                        <button key={label} onClick={toggle}
-                          style={{ display:"flex", alignItems:"center", background: on ? bg : "transparent",
-                            border: "1px solid " + (on ? color : "rgba(255,255,255,.1)"),
-                            borderRadius:"var(--radius-sm)", padding:"3px 9px", cursor:"pointer", flexShrink:0,
-                            color: on ? color : "var(--text3)", fontSize:10, fontFamily:"Cinzel,serif", transition:"all .2s" }}>
-                          {label}
-                        </button>
-                      ))}
-                    </div></div>
-                  )}
+                    <button onClick={() => { setShowTajweedPanel(v => !v); setShowOptionsPanel(false); setShowLangPanel(false); }}
+                      style={{ display:"flex", alignItems:"center", gap:3,
+                        background: showTajweedPanel ? "rgba(91,200,245,.15)" : anyTj ? "rgba(91,200,245,.08)" : "transparent",
+                        border: "1px solid " + (anyTj ? "#5bc8f5" : showTajweedPanel ? "rgba(255,255,255,.2)" : "var(--border2)"),
+                        borderRadius:"var(--radius-sm)", padding:"1px 6px", height:20, cursor:"pointer", flexShrink:0,
+                        color: anyTj ? "#5bc8f5" : "var(--text3)",
+                        fontSize:8, letterSpacing:".5px", fontFamily:"Cinzel,serif", transition:"all .2s" }}>
+                      تجويد{activeTjCount > 0 ? ` (${activeTjCount})` : ''} <span style={{fontSize:6.5,marginLeft:1}}>{showTajweedPanel ? "▲" : "▼"}</span>
+                    </button>
+                    {showTajweedPanel && (
+                      <div className="panel-expand">
+                        <div className="tajweed-panel">
+                          <div className="panel-header-title">
+                            <span style={{ fontSize:8, letterSpacing:1, color:'var(--gold2)', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                              RÈGLES DE TAJWEED {activeTjCount > 0 ? `(${activeTjCount}/4)` : ''}
+                            </span>
+                            <button
+                              onClick={() => setShowTajweedPanel(false)}
+                              title="Fermer"
+                              style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:11, padding:'0 2px' }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <div className="panel-items-row">
+                            {[
+                              { toggle: toggleQalqala, on: showQalqala, label: "قلقلة", sub: "Qalqala", color: "#38bdf8", bg: "rgba(56,189,248,.14)" },
+                              { toggle: toggleMadd,    on: showMadd,    label: "مَدّ",   sub: "Madd",    color: "#fb923c", bg: "rgba(251,146,60,.14)" },
+                              { toggle: toggleIzhar,   on: showIzhar,   label: "إظهار", sub: "Idh-har", color: "#34d399", bg: "rgba(52,211,153,.14)" },
+                              { toggle: toggleIdgham,  on: showIdgham,  label: "إدgham", sub: "Idgham",  color: "#fbbf24", bg: "rgba(251,191,36,.14)" },
+                            ].map(({toggle,on,label,sub,color,bg}) => (
+                              <button key={label} onClick={toggle}
+                                id={`tajweed-toggle-${sub.toLowerCase()}`}
+                                style={{ display:"flex", alignItems:"center", gap:3, background: on ? bg : "rgba(255,255,255,.03)",
+                                  border: "1px solid " + (on ? color : "rgba(255,255,255,.1)"),
+                                  borderRadius:"var(--radius-sm)", padding:"2px 6px", height:22, cursor:"pointer", flexShrink:0,
+                                  color: on ? color : "var(--text3)", fontSize:8.5, transition:"all .15s" }}>
+                                <span style={{ width:5, height:5, borderRadius:"50%", background: on ? color : "var(--text3)" }} />
+                                <span style={{ fontFamily:"'Scheherazade New',serif", fontSize:12 }}>{label}</span>
+                                <span style={{ fontSize:7, opacity:0.8 }}>({sub})</span>
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => {
+                                const any = showQalqala || showMadd || showIzhar || showIdgham;
+                                if (any) {
+                                  if (showQalqala) toggleQalqala();
+                                  if (showMadd) toggleMadd();
+                                  if (showIzhar) toggleIzhar();
+                                  if (showIdgham) toggleIdgham();
+                                } else {
+                                  if (!showQalqala) toggleQalqala();
+                                  if (!showMadd) toggleMadd();
+                                  if (!showIzhar) toggleIzhar();
+                                  if (!showIdgham) toggleIdgham();
+                                }
+                              }}
+                              style={{
+                                marginLeft: 'auto',
+                                background: 'transparent',
+                                border: '1px dashed var(--border2)',
+                                borderRadius: 'var(--radius-sm)',
+                                padding: '2px 7px',
+                                height: 22,
+                                cursor: 'pointer',
+                                fontSize: 8,
+                                letterSpacing: .5,
+                                color: 'var(--gold)',
+                                fontFamily: "'Cinzel', serif"
+                              }}
+                            >
+                              {anyTj ? '✕ COUPER' : '✓ TOUT ACTIVER'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {/* OPTIONS POPOVER */}
                   <div className="panel-row">
-                  <button onClick={() => setShowOptionsPanel(v => !v)}
-                    style={{ display:"flex", alignItems:"center", gap:5,
-                      background: showOptionsPanel ? "rgba(255,255,255,.06)" : anyOpt ? "rgba(201,168,76,.08)" : "transparent",
-                      border: "1px solid " + (anyOpt ? "var(--gold)" : showOptionsPanel ? "rgba(255,255,255,.15)" : "var(--border2)"),
-                      borderRadius:"var(--radius-sm)", padding:"3px 10px", cursor:"pointer", flexShrink:0,
-                      color: anyOpt ? "var(--gold2)" : "var(--text3)",
-                      fontSize:9, letterSpacing:"1px", fontFamily:"Cinzel,serif", transition:"all .2s" }}>
-                    OPTIONS <span style={{fontSize:7,marginLeft:2}}>{showOptionsPanel ? "▲" : "▼"}</span>
-                  </button>
-                  {showOptionsPanel && (
-                    <div className="panel-expand" style={{ left:0, right:0, minWidth:0 }}>
-                    <div className="tajweed-panel" style={{ flexWrap:'wrap', gap:6, padding:'8px 12px' }}>
-                      {[
-                        { toggle: toggleAnnounceNum, on: announceNum, label: "🔢 N°",      color: "var(--teal2)",  bg: "rgba(62,184,160,.12)" },
-                        { toggle: toggleSpellCheck,  on: spellCheck,  label: "✔ ORTHO",   color: "var(--gold2)",  bg: "rgba(201,168,76,.1)" },
-                        { toggle: toggleShowParts,   on: showParts,   label: "✂ PARTIES", color: "var(--gold2)",  bg: "rgba(201,168,76,.1)" },
-                        { toggle: () => { setPageMode(v=>!v); setactivePageCoran(null); }, on: pageMode, label: "📖 PAGE", color: "#c878ff", bg: "rgba(200,120,255,.12)" },
-                        ...(pageMode ? [{ toggle: () => setAutoPageFollow(v=>!v), on: autoPageFollow, label: "⇄ SUIVI", color: "#c878ff", bg: "rgba(200,120,255,.12)" }] : []),
-                      ].map(({toggle,on,label,color,bg}) => (
-                        <button key={label} onClick={toggle}
-                          style={{ display:"flex", alignItems:"center", background: on ? bg : "transparent",
-                            border: "1px solid " + (on ? color : "rgba(255,255,255,.1)"),
-                            borderRadius:"var(--radius-sm)", padding:"3px 9px", cursor:"pointer", flexShrink:0,
-                            color: on ? color : "var(--text3)", fontSize:9, fontFamily:"Cinzel,serif", transition:"all .2s" }}>
-                          {label}
-                        </button>
-                      ))}
-                      <button onClick={()=>navigate('/quran/book')}
-                        style={{display:"flex",alignItems:"center",background:"rgba(201,168,76,.07)",
-                          border:"1px solid rgba(201,168,76,.28)",borderRadius:"var(--radius-sm)",
-                          padding:"3px 9px",cursor:"pointer",flexShrink:0,
-                          color:"var(--gold2)",fontSize:9,fontFamily:"Cinzel,serif"}}>📖 CSS</button>
-                      <button onClick={()=>navigate('/quran/book3d')}
-                        style={{display:"flex",alignItems:"center",background:"rgba(201,168,76,.13)",
-                          border:"1px solid rgba(201,168,76,.45)",borderRadius:"var(--radius-sm)",
-                          padding:"3px 9px",cursor:"pointer",flexShrink:0,
-                          color:"var(--gold)",fontSize:9,fontFamily:"Cinzel,serif"}}>✨ 3D</button>
-                    </div>
-                    </div>
-                  )}
+                    <button onClick={() => { setShowOptionsPanel(v => !v); setShowTajweedPanel(false); setShowLangPanel(false); }}
+                      style={{ display:"flex", alignItems:"center", gap:3,
+                        background: showOptionsPanel ? "rgba(201,168,76,.15)" : anyOpt ? "rgba(201,168,76,.08)" : "transparent",
+                        border: "1px solid " + (anyOpt ? "var(--gold)" : showOptionsPanel ? "rgba(255,255,255,.2)" : "var(--border2)"),
+                        borderRadius:"var(--radius-sm)", padding:"1px 6px", height:20, cursor:"pointer", flexShrink:0,
+                        color: anyOpt ? "var(--gold2)" : "var(--text3)",
+                        fontSize:8, letterSpacing:".5px", fontFamily:"Cinzel,serif", transition:"all .2s" }}>
+                      OPTIONS{activeOptCount > 0 ? ` (${activeOptCount})` : ''} <span style={{fontSize:6.5,marginLeft:1}}>{showOptionsPanel ? "▲" : "▼"}</span>
+                    </button>
+                    {showOptionsPanel && (
+                      <div className="panel-expand">
+                        <div className="tajweed-panel">
+                          <div className="panel-header-title">
+                            <span style={{ fontSize:8, letterSpacing:1, color:'var(--gold2)', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                              OPTIONS D'AFFICHAGE ET LECTURE
+                            </span>
+                            <button
+                              onClick={() => setShowOptionsPanel(false)}
+                              title="Fermer"
+                              style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:11, padding:'0 2px' }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <div className="panel-items-row">
+                            {[
+                              { toggle: toggleAnnounceNum, on: announceNum, label: "🔢 N°",      color: "var(--teal2)",  bg: "rgba(62,184,160,.14)" },
+                              { toggle: toggleSpellCheck,  on: spellCheck,  label: "✔ ORTHO",   color: "var(--gold2)",  bg: "rgba(201,168,76,.12)" },
+                              { toggle: toggleShowParts,   on: showParts,   label: "✂ PARTIES", color: "var(--gold2)",  bg: "rgba(201,168,76,.12)" },
+                              { toggle: () => { setPageMode(v=>!v); setactivePageCoran(null); }, on: pageMode, label: "📖 PAGE", color: "#c878ff", bg: "rgba(200,120,255,.14)" },
+                              ...(pageMode ? [{ toggle: () => setAutoPageFollow(v=>!v), on: autoPageFollow, label: "⇄ SUIVI", color: "#c878ff", bg: "rgba(200,120,255,.14)" }] : []),
+                            ].map(({toggle,on,label,color,bg}) => (
+                              <button key={label} onClick={toggle}
+                                style={{ display:"flex", alignItems:"center", background: on ? bg : "rgba(255,255,255,.03)",
+                                  border: "1px solid " + (on ? color : "rgba(255,255,255,.1)"),
+                                  borderRadius:"var(--radius-sm)", padding:"2px 7px", height:22, cursor:"pointer", flexShrink:0,
+                                  color: on ? color : "var(--text3)", fontSize:8.5, fontFamily:"Cinzel,serif", transition:"all .15s" }}>
+                                {label}
+                              </button>
+                            ))}
+                            <button onClick={()=>{ setShowOptionsPanel(false); navigate('/quran/book'); }}
+                              style={{display:"flex",alignItems:"center",background:"rgba(201,168,76,.08)",
+                                border:"1px solid rgba(201,168,76,.3)",borderRadius:"var(--radius-sm)",
+                                padding:"2px 7px",height:22,cursor:"pointer",flexShrink:0,
+                                color:"var(--gold2)",fontSize:8.5,fontFamily:"Cinzel,serif"}}>📖 CSS</button>
+                            <button onClick={()=>{ setShowOptionsPanel(false); navigate('/quran/book3d'); }}
+                              style={{display:"flex",alignItems:"center",background:"rgba(201,168,76,.15)",
+                                border:"1px solid rgba(201,168,76,.5)",borderRadius:"var(--radius-sm)",
+                                padding:"2px 7px",height:22,cursor:"pointer",flexShrink:0,
+                                color:"var(--gold)",fontSize:8.5,fontFamily:"Cinzel,serif"}}>✨ 3D</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {/* LANGUES button */}
-                  <div style={{ position:"relative", flexShrink:0 }}>
-                  <button onClick={() => setShowLangPanel(v => !v)}
-                    style={{ display:"flex", alignItems:"center", gap:5,
-                      background: showLangPanel ? "rgba(255,255,255,.06)" : translationLang ? "rgba(91,200,245,.08)" : "transparent",
-                      border: "1px solid " + (translationLang ? "#5bc8f5" : showLangPanel ? "rgba(255,255,255,.15)" : "var(--border2)"),
-                      borderRadius:"var(--radius-sm)", padding:"3px 10px", cursor:"pointer", flexShrink:0,
-                      color: translationLang ? "#5bc8f5" : "var(--text3)",
-                      fontSize:9, letterSpacing:"1px", fontFamily:"Cinzel,serif", transition:"all .2s" }}>
-                    🌐 LANGUE <span style={{fontSize:7,marginLeft:2}}>{showLangPanel ? "▲" : "▼"}</span>
-                  </button>
-                  {showLangPanel && (
-                    <div className="panel-expand" style={{ left:0, right:0, minWidth:0 }}>
-                    <div className="tajweed-panel" style={{ flexWrap:'wrap', gap:6, padding:'8px 12px' }}>
-                      {Object.entries(TRANS_LABELS).map(([lang, label]) => (
-                        <button key={lang} onClick={() => setTranslationLang(t => t === lang ? null : lang)}
-                          style={{ display:"flex", alignItems:"center", flexShrink:0,
-                            background: translationLang === lang ? 'rgba(91,200,245,.12)' : 'transparent',
-                            border:`1px solid ${translationLang === lang ? '#5bc8f5' : 'rgba(255,255,255,.08)'}`,
-                            borderRadius:5, padding:'5px 12px', cursor:'pointer',
-                            color: translationLang === lang ? '#5bc8f5' : 'var(--text3)',
-                            fontSize:10, fontFamily:"Cinzel,serif", transition:'all .15s',
-                            boxShadow: translationLang === lang ? '0 0 6px rgba(91,200,245,.2)' : 'none' }}>
-                          {label}
-                        </button>
-                      ))}
-                      {translationLang && (
-                        <button onClick={() => setTranslationLang(null)}
-                          style={{ fontSize:9, padding:'5px 10px', borderRadius:5, cursor:'pointer',
-                            background:'rgba(229,115,115,.1)', border:'1px solid rgba(229,115,115,.3)',
-                            color:'var(--red)', fontFamily:"Cinzel,serif" }}>✕ OFF</button>
-                      )}
-                    </div>
-                    </div>
-                  )}
+
+                  {/* LANGUES POPOVER */}
+                  <div className="panel-row" style={{ flexShrink:0 }}>
+                    <button onClick={() => { setShowLangPanel(v => !v); setShowTajweedPanel(false); setShowOptionsPanel(false); }}
+                      style={{ display:"flex", alignItems:"center", gap:3,
+                        background: showLangPanel ? "rgba(91,200,245,.15)" : translationLang ? "rgba(91,200,245,.08)" : "transparent",
+                        border: "1px solid " + (translationLang ? "#5bc8f5" : showLangPanel ? "rgba(255,255,255,.2)" : "var(--border2)"),
+                        borderRadius:"var(--radius-sm)", padding:"1px 6px", height:20, cursor:"pointer", flexShrink:0,
+                        color: translationLang ? "#5bc8f5" : "var(--text3)",
+                        fontSize:8, letterSpacing:".5px", fontFamily:"Cinzel,serif", transition:"all .2s" }}>
+                      🌐 {langLabel} <span style={{fontSize:6.5,marginLeft:1}}>{showLangPanel ? "▲" : "▼"}</span>
+                    </button>
+                    {showLangPanel && (
+                      <div className="panel-expand panel-expand-right">
+                        <div className="tajweed-panel">
+                          <div className="panel-header-title">
+                            <span style={{ fontSize:8, letterSpacing:1, color:'var(--teal2)', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                              TRADUCTION DU CORAN
+                            </span>
+                            <button
+                              onClick={() => setShowLangPanel(false)}
+                              title="Fermer"
+                              style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:11, padding:'0 2px' }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <div className="panel-items-row">
+                            {Object.entries(TRANS_LABELS).map(([lang, label]) => (
+                              <button key={lang} onClick={() => setTranslationLang(t => t === lang ? null : lang)}
+                                style={{ display:"flex", alignItems:"center", flexShrink:0,
+                                  background: translationLang === lang ? 'rgba(91,200,245,.15)' : 'rgba(255,255,255,.03)',
+                                  border:`1px solid ${translationLang === lang ? '#5bc8f5' : 'rgba(255,255,255,.1)'}`,
+                                  borderRadius:4, padding:'2px 8px', height:22, cursor:'pointer',
+                                  color: translationLang === lang ? '#5bc8f5' : 'var(--text3)',
+                                  fontSize:9, fontFamily:"Cinzel,serif", transition:'all .15s',
+                                  boxShadow: translationLang === lang ? '0 0 8px rgba(91,200,245,.25)' : 'none' }}>
+                                {label}
+                              </button>
+                            ))}
+                            {translationLang && (
+                              <button onClick={() => setTranslationLang(null)}
+                                style={{ fontSize:8, padding:'2px 7px', height:22, borderRadius:4, cursor:'pointer',
+                                  background:'rgba(229,115,115,.12)', border:'1px solid rgba(229,115,115,.35)',
+                                  color:'var(--red)', fontFamily:"Cinzel,serif", marginLeft:'auto' }}>✕ OFF</button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {showTsBar && (
                     <>
@@ -2199,8 +2279,15 @@ function AppInner({ currentUser, onSignOut }) {
                   );
                 })()}
 
-                <div className="ayat-scroll" onContextMenu={handleAyatContextMenu}>
-                  <audio ref={partAudioRef} style={{ display: "none" }} onEnded={() => { setTimeout(() => { setPlayingPart(null); setPartCurrentMs(0); stopPartRaf(); }, 250); }} />
+                <div className="ayat-scroll" onContextMenu={handleAyatContextMenu} onScroll={handleAyatScroll}>
+                  <audio
+                    ref={el => {
+                      partAudioRef.current = el;
+                      window.__quranPartAudio = el;
+                    }}
+                    style={{ display: "none" }}
+                    onEnded={() => { setTimeout(() => { setPlayingPart(null); setPartCurrentMs(0); stopPartRaf(); }, 250); }}
+                  />
                   {loadingAyats
                     ? <div className="loading"><div className="loading-ring" /><span>CHARGEMENT</span></div>
                     : <>{tsVersion > -1 && (playStateVer >= 0) && (loopStateVer >= 0) && (() => {
@@ -2743,7 +2830,24 @@ function AppInner({ currentUser, onSignOut }) {
           </>
         )}
 
-        {/* COLLECTION MODAL */}
+        {/* HEADER TOOLS & ACCOUNT MODAL */}
+        <HeaderToolsModal
+          isOpen={showHeaderToolsModal}
+          onClose={() => setShowHeaderToolsModal(false)}
+          currentUser={currentUser}
+          onSignOut={onSignOut}
+          showArabicKeyboard={showArabicKeyboard}
+          setShowArabicKeyboard={setShowArabicKeyboard}
+          showRappel={showRappel}
+          setShowRappel={setShowRappel}
+          onOpenScheduledReminders={() => setShowScheduledReminders(true)}
+          onOpenOptionsModal={() => setShowOptionsModal(true)}
+          toggleVoice={toggleVoice}
+          listening={listening}
+          initialTab={headerToolsInitialTab}
+        />
+
+        {/* OPTIONS & SETTINGS MODAL */}
         {showOptionsModal && (
           <OptionsModal
             onClose={() => setShowOptionsModal(false)}
@@ -2791,6 +2895,7 @@ function AppInner({ currentUser, onSignOut }) {
         <audio
           ref={el => {
             mainAudioRef.current = el;
+            window.__quranMainAudio = el;
             if (el) el._ayatNum = currentMainAyat?.numberInSurah;
           }}
           src={audioUrl(currentMainAyat)}
@@ -3099,7 +3204,7 @@ export default function App() {
       <HashRouter>
         <CloudSyncManager uid={user.uid} />
         <SyncConsole />
-        <AppInner currentUser={user} onSignOut={() => signOut(firebaseAuth).then(() => setUser(null))} />
+        <AppInner currentUser={user} onSignOut={() => signOut(firebaseAuth).catch(() => {}).finally(() => setUser(null))} />
       </HashRouter>
     </Provider>
   );

@@ -2,21 +2,27 @@ import { useNavigate } from "react-router-dom";
 import { fetchSurahDefault } from "../../utils/reciterAudio.js";
 import React, { useState, useEffect } from "react";
 import { QuestionsMode } from "../questions/QuestionsMode.jsx";
+import { getAyatRevisionInfo, REVISION_LEVEL_LEGEND } from "../../utils/ayatRevisionLevel.js";
+import { SurahAyatsMasteryRibbon } from "../common/SurahAyatsMasteryRibbon.jsx";
 
-export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum, initialRangeFrom, initialRangeTo, initialQIdx }) {
+export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum, initialRangeFrom, initialRangeTo, initialQIdx, initialPreset }) {
   const Q_PAGE_KEY = 'quran_questions_page_session';
   const loadSession = () => { try { return JSON.parse(localStorage.getItem(Q_PAGE_KEY)) || {}; } catch { return {}; } };
   const saveSession = (d) => { try { localStorage.setItem(Q_PAGE_KEY, JSON.stringify(d)); } catch {} };
   const clearPageSession = () => { try { localStorage.removeItem(Q_PAGE_KEY); } catch {} };
 
-  const ALL_Q_TYPES = ["first_word","last_word","missing_word","next_verse","previous_verse","verse_number","find_ayat","reconstruct","compare_verse","find_surah","unknown_word","unknown_pick","page_structure","revise_word","revise_part"];
+  const ALL_Q_TYPES = ["first_contact","first_word","last_word","missing_word","next_verse","previous_verse","verse_number","find_ayat","reconstruct","compare_verse","find_surah","unknown_word","unknown_pick","page_structure","revise_word","revise_part"];
+
+  const isFirstContactAyat = (v) => !v?.learned && ((v?.readCount || 0) > 0 || v?.firstContact || (v?.parts?.length || 0) > 0);
 
   const saved = React.useMemo(() => initialSurahNum ? {} : loadSession(), []);
 
   const [selectedSn,     setSelectedSn]     = React.useState(initialSurahNum ?? saved.selectedSn ?? null);
   const [rangeFrom,      setRangeFrom]      = React.useState(initialRangeFrom ?? saved.rangeFrom ?? "1");
   const [rangeTo,        setRangeTo]        = React.useState(initialRangeTo ?? saved.rangeTo ?? "");
+  const [onlyFirstContact, setOnlyFirstContact] = React.useState(initialPreset === 'first_contact' || (saved.onlyFirstContact ?? false));
   const [selectedQTypes, setSelectedQTypes] = React.useState(() => {
+    if (initialPreset === 'first_contact') return new Set(["first_contact", "first_word", "missing_word", "reconstruct"]);
     if (saved.selectedQTypes) return new Set(saved.selectedQTypes);
     return new Set(ALL_Q_TYPES);
   });
@@ -31,6 +37,9 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
   const [qPageData,      setQPageData]      = React.useState({}); // sn -> [{numberInSurah, page}]
   const [showAvancement, setShowAvancement] = React.useState(true);
   const [showPlage,       setShowPlage]      = React.useState(true);
+  const [surahTab,       setSurahTab]       = React.useState(initialPreset === 'first_contact' ? "first_contact" : "auto"); // "auto" | "learned" | "first_contact" | "all"
+  const [surahSearch,    setSurahSearch]    = React.useState("");
+  const [avancementMode, setAvancementMode] = React.useState("ribbon"); // "ribbon" | "grid"
 
   const ensureQPageData = React.useCallback((sn) => {
     if (!sn || qPageData[sn]) return;
@@ -50,10 +59,33 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
   const [started, setStarted] = React.useState(!!(initialSurahNum && initialRangeFrom));
   const qNavigate = useNavigate();
 
-  const availableSurahs = React.useMemo(() =>
+  const learnedSurahs = React.useMemo(() =>
     surahs.filter(s => Object.keys(learnData).some(k => k.startsWith(s.number + ":") && learnData[k].learned))
       .sort((a,b) => a.number - b.number),
   [surahs, learnData]);
+
+  const firstContactSurahs = React.useMemo(() =>
+    surahs.filter(s => Object.keys(learnData).some(k => {
+      if (!k.startsWith(s.number + ":")) return false;
+      return isFirstContactAyat(learnData[k]);
+    })).sort((a,b) => a.number - b.number),
+  [surahs, learnData]);
+
+  const availableSurahs = learnedSurahs;
+
+  const activeTab = surahTab === "auto" ? (learnedSurahs.length > 0 ? "learned" : "all") : surahTab;
+
+  const displayedSurahs = React.useMemo(() => {
+    const baseList = activeTab === "learned" ? learnedSurahs : (activeTab === "first_contact" ? firstContactSurahs : surahs);
+    if (!surahSearch.trim()) return baseList;
+    const q = surahSearch.trim().toLowerCase();
+    return baseList.filter(s =>
+      String(s.number).includes(q) ||
+      s.englishName?.toLowerCase().includes(q) ||
+      s.englishNameTranslation?.toLowerCase().includes(q) ||
+      s.name?.includes(q)
+    );
+  }, [activeTab, learnedSurahs, firstContactSurahs, surahs, surahSearch]);
 
   const surahInfo = surahs.find(s => s.number === selectedSn);
   const maxAyat   = surahInfo?.numberOfAyahs ?? 1;
@@ -69,20 +101,38 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
   const multiItems = React.useMemo(() => {
     if (multiSns.length === 0) return null;
     const items = [];
+    const isFC = onlyFirstContact || (selectedQTypes instanceof Set && selectedQTypes.has('first_contact'));
     multiSns.forEach(sn => {
       const si = surahs.find(s => s.number === sn);
       const max = si?.numberOfAyahs ?? 1;
       const r = multiRanges[sn];
       const from = r ? Math.max(1, parseInt(r.from) || 1) : 1;
       const to   = r ? Math.min(max, parseInt(r.to) || max) : max;
-      const learned = Object.keys(learnData).filter(k => k.startsWith(sn + ':') && learnData[k].learned);
-      learned.forEach(k => {
-        const num = parseInt(k.split(':')[1]);
-        if (num >= from && num <= to) items.push({ sn, ayatNum: num });
-      });
+      if (isFC) {
+        let count = 0;
+        for (let num = from; num <= to; num++) {
+          const ld = learnData[`${sn}:${num}`];
+          if (!ld?.learned) { items.push({ sn, ayatNum: num }); count++; }
+        }
+        if (count === 0) {
+          for (let num = from; num <= to; num++) items.push({ sn, ayatNum: num });
+        }
+      } else {
+        const learned = Object.keys(learnData).filter(k => k.startsWith(sn + ':') && learnData[k].learned);
+        if (learned.length > 0) {
+          learned.forEach(k => {
+            const num = parseInt(k.split(':')[1]);
+            if (num >= from && num <= to) items.push({ sn, ayatNum: num });
+          });
+        } else {
+          for (let num = from; num <= to; num++) {
+            items.push({ sn, ayatNum: num });
+          }
+        }
+      }
     });
     return items;
-  }, [multiSns, multiRanges, surahs, learnData]);
+  }, [multiSns, multiRanges, surahs, learnData, onlyFirstContact, selectedQTypes]);
 
   React.useEffect(() => {
     if (!selectedSn) return;
@@ -219,15 +269,138 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div style={{ fontSize:9, letterSpacing:3, color:"var(--text3)" }}>CHOISIR UNE SOURATE</div>
           <button onClick={() => { setMultiSns([]); setStage("multi"); }}
-            style={{ fontSize:8, letterSpacing:1, padding:"4px 12px", fontFamily:"'Cinzel',serif",
+            style={{ fontSize:8, letterSpacing:1, padding:"5px 14px", fontFamily:"'Cinzel',serif",
               background:"rgba(62,184,160,.08)", border:"1px solid var(--teal)", color:"var(--teal)", borderRadius:20, cursor:"pointer" }}>
             ＋ MULTI SOURATES
           </button>
         </div>
+
+        {/* Search bar */}
+        <div style={{ position:"relative", width:"100%" }}>
+          <input
+            type="text"
+            placeholder="🔍 Rechercher par nom ou numéro..."
+            value={surahSearch}
+            onChange={e => setSurahSearch(e.target.value)}
+            style={{
+              width:"100%",
+              padding:"9px 34px 9px 12px",
+              background:"var(--surface2)",
+              border:"1px solid var(--border)",
+              borderRadius:8,
+              fontSize:11,
+              color:"var(--text1)",
+              fontFamily:"'Cinzel',serif",
+              outline:"none"
+            }}
+          />
+          {surahSearch && (
+            <button
+              onClick={() => setSurahSearch("")}
+              style={{
+                position:"absolute",
+                right:10,
+                top:"50%",
+                transform:"translateY(-50%)",
+                background:"transparent",
+                border:"none",
+                color:"var(--text3)",
+                fontSize:12,
+                cursor:"pointer"
+              }}>
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Filter tabs */}
+        <div style={{ display:"flex", gap:6 }}>
+          <button
+            onClick={() => setSurahTab("learned")}
+            style={{
+              flex:1,
+              padding:"6px 8px",
+              borderRadius:6,
+              cursor:"pointer",
+              fontFamily:"'Cinzel',serif",
+              fontSize:8,
+              letterSpacing:0.5,
+              border: activeTab === "learned" ? "1px solid var(--teal)" : "1px solid var(--border2)",
+              background: activeTab === "learned" ? "rgba(62,184,160,.12)" : "transparent",
+              color: activeTab === "learned" ? "var(--teal2)" : "var(--text3)"
+            }}>
+            Apprises ({learnedSurahs.length})
+          </button>
+          <button
+            onClick={() => setSurahTab("first_contact")}
+            style={{
+              flex:1,
+              padding:"6px 8px",
+              borderRadius:6,
+              cursor:"pointer",
+              fontFamily:"'Cinzel',serif",
+              fontSize:8,
+              letterSpacing:0.5,
+              border: activeTab === "first_contact" ? "1px solid #5bc8f5" : "1px solid var(--border2)",
+              background: activeTab === "first_contact" ? "rgba(91,200,245,.15)" : "transparent",
+              color: activeTab === "first_contact" ? "#5bc8f5" : "var(--text3)"
+            }}>
+            🌱 1er Contact ({firstContactSurahs.length})
+          </button>
+          <button
+            onClick={() => setSurahTab("all")}
+            style={{
+              flex:1,
+              padding:"6px 8px",
+              borderRadius:6,
+              cursor:"pointer",
+              fontFamily:"'Cinzel',serif",
+              fontSize:8,
+              letterSpacing:0.5,
+              border: activeTab === "all" ? "1px solid var(--gold)" : "1px solid var(--border2)",
+              background: activeTab === "all" ? "rgba(201,168,76,.12)" : "transparent",
+              color: activeTab === "all" ? "var(--gold2)" : "var(--text3)"
+            }}>
+            Toutes ({surahs.length})
+          </button>
+        </div>
+
+        {/* Premier Contact Quick Launch Banner */}
+        <button onClick={() => {
+          if (firstContactSurahs.length > 0) {
+            const firstS = firstContactSurahs[0].number;
+            setSelectedSn(firstS);
+            const ans = Object.entries(learnData)
+              .filter(([k, v]) => k.startsWith(firstS + ':') && isFirstContactAyat(v))
+              .map(([k]) => parseInt(k.split(':')[1])).filter(n => !isNaN(n)).sort((a,b)=>a-b);
+            setRangeFrom(String(ans[0] || 1));
+            setRangeTo(String(ans[ans.length - 1] || 7));
+          } else {
+            setSelectedSn(1);
+            setRangeFrom("1");
+            setRangeTo("7");
+          }
+          setOnlyFirstContact(true);
+          setSelectedQTypes(new Set(["first_contact", "first_word", "missing_word", "reconstruct"]));
+          setStage("range");
+        }}
+          style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+            padding:"12px 16px", borderRadius:10, cursor:"pointer",
+            background:"rgba(91,200,245,.08)", border:"1px solid #5bc8f5", color:"#5bc8f5" }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:2, textAlign:"left" }}>
+            <span style={{ fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif", fontWeight:600 }}>🌱 QUIZ PREMIER CONTACT</span>
+            <span style={{ fontSize:7, letterSpacing:1, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>
+              {firstContactSurahs.length > 0
+                ? `${Object.values(learnData).filter(isFirstContactAyat).length} AYATS EN DÉCOUVERTE · ${firstContactSurahs.length} SOURATE${firstContactSurahs.length > 1 ? 'S' : ''}`
+                : "DÉCOUVRIR ET TESTER UN VERSET (AUCUN PRÉREQUIS)"}
+            </span>
+          </div>
+          <span style={{ fontSize:18 }}>→</span>
+        </button>
+
         {toReviseSns.length > 0 && (
           <button onClick={() => {
             setMultiSns(toReviseSns);
-            // set multiRanges to only the toRevise ayats per surah
             const ranges = {};
             toReviseSns.forEach(sn => {
               const ans = Object.entries(learnData)
@@ -250,23 +423,53 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
             <span style={{ fontSize:18 }}>→</span>
           </button>
         )}
-        {availableSurahs.length === 0 && (
-          <div style={{ fontSize:10, color:"var(--text3)", letterSpacing:1 }}>Aucune sourate apprise.</div>
+
+        {displayedSurahs.length === 0 && (
+          <div style={{ padding:"24px", textAlign:"center", fontSize:10, color:"var(--text3)", letterSpacing:1 }}>
+            {activeTab === "learned"
+              ? "Aucune sourate marquée comme apprise pour le moment."
+              : activeTab === "first_contact"
+              ? "Aucun verset en premier contact pour le moment. Tu peux lancer le quiz sur n'importe quel verset !"
+              : "Aucune sourate trouvée."}
+          </div>
         )}
-        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-          {availableSurahs.map(s => {
+
+        <div style={{ display:"flex", flexDirection:"column", gap:6, maxHeight:"65vh", overflowY:"auto", paddingRight:2 }}>
+          {displayedSurahs.map(s => {
             const learned = Object.keys(learnData).filter(k => k.startsWith(s.number + ":") && learnData[k].learned).length;
+            const revCount = Object.keys(learnData).filter(k => k.startsWith(s.number + ":") && learnData[k].toRevise).length;
             return (
               <button key={s.number} onClick={() => { setSelectedSn(s.number); setRangeFrom("1"); setRangeTo(""); setStage("range"); }}
                 style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-                  padding:"10px 14px", background:"var(--surface2)", border:"1px solid var(--border)",
-                  borderRadius:8, cursor:"pointer", textAlign:"left" }}>
-                <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-                  <span style={{ fontSize:9, letterSpacing:1, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>{s.englishName.toUpperCase()}</span>
+                  padding:"11px 14px", background:"var(--surface2)", border:"1px solid var(--border)",
+                  borderRadius:8, cursor:"pointer", textAlign:"left", transition:"border .15s" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ width:28, height:28, borderRadius:6, background:"var(--surface3)", border:"1px solid var(--border2)",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:10, fontFamily:"'Cinzel',serif", color:"var(--teal2)", fontWeight:700 }}>
+                    {s.number}
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                    <span style={{ fontSize:10, letterSpacing:1, color:"var(--text1)", fontFamily:"'Cinzel',serif", fontWeight:600 }}>
+                      {s.englishName.toUpperCase()}
+                    </span>
+                    <span style={{ fontSize:8, color:"var(--text3)" }}>
+                      {s.englishNameTranslation} · {s.numberOfAyahs} versets
+                    </span>
+                  </div>
                 </div>
                 <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontSize:8, color:"var(--teal)", fontFamily:"'Cinzel',serif" }}>{learned} appris</span>
-                  <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:18, color:"var(--gold)" }}>{s.name}</span>
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:2 }}>
+                    {revCount > 0 && (
+                      <span style={{ fontSize:7, color:"#ff7eb3", background:"rgba(255,126,179,0.15)", padding:"1px 5px", borderRadius:4 }}>
+                        🔖 {revCount}
+                      </span>
+                    )}
+                    <span style={{ fontSize:8, color: learned > 0 ? "var(--teal)" : "var(--text3)", fontFamily:"'Cinzel',serif" }}>
+                      {learned > 0 ? `${learned}/${s.numberOfAyahs} appris` : "0 appris"}
+                    </span>
+                  </div>
+                  <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:20, color:"var(--gold)" }}>{s.name}</span>
                 </div>
               </button>
             );
@@ -565,15 +768,19 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                           const an = item.an;
                           const inRange  = an >= from && an <= to;
                           const ldEntry  = learnData[`${sn}:${an}`] || {};
-                          const isRevise = !!ldEntry.toRevise;
+                          const revInfo  = getAyatRevisionInfo(ldEntry);
                           return (
-                            <div key={an} style={{ width:16, height:16, borderRadius:3, fontSize:6, cursor:"default",
-                              display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Cinzel',serif",
-                              background: isRevise ? "rgba(201,168,76,.18)" : "var(--surface3)",
-                              border:`1px solid ${isRevise ? "var(--gold)" : inRange ? "rgba(255,255,255,.15)" : "var(--border)"}`,
-                              color: isRevise ? "var(--gold)" : inRange ? "var(--text2)" : "var(--text3)",
-                              fontWeight: isRevise ? 700 : 400,
-                              boxShadow: isRevise ? "0 0 5px rgba(201,168,76,.3)" : "none" }}>
+                            <div key={an}
+                              title={`${si?.englishName} : Verset ${an} · ${revInfo.label}${inRange ? ' (Dans la sélection)' : ''}`}
+                              style={{ width:18, height:18, borderRadius:3, fontSize:7, cursor:"default",
+                                display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Cinzel',serif",
+                                background: inRange
+                                  ? (revInfo.levelId === 'unlearned' ? 'rgba(255,255,255,0.06)' : revInfo.bg)
+                                  : (revInfo.levelId !== 'unlearned' ? revInfo.bg : "var(--surface3)"),
+                                border:`1px solid ${inRange ? (revInfo.border || "rgba(255,255,255,.2)") : "var(--border)"}`,
+                                color: inRange ? revInfo.color : (revInfo.levelId !== 'unlearned' ? revInfo.color : "var(--text3)"),
+                                fontWeight: (revInfo.isToRevise || inRange) ? 600 : 400,
+                                boxShadow: (inRange && revInfo.glow !== 'none') ? revInfo.glow : "none" }}>
                               {an}
                             </div>
                           );
@@ -583,6 +790,16 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                   </div>
                 );
               })}
+            </div>
+
+            {/* Comprehensive mastery level legend */}
+            <div style={{ display:"flex", gap:10, marginTop:4, flexWrap:"wrap", paddingTop:8, borderTop:"1px solid var(--border)" }}>
+              {REVISION_LEVEL_LEGEND.map(({ id, label, color, bg, border }) => (
+                <div key={id} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                  <div style={{ width:10, height:10, borderRadius:2, background:bg, border:`1px solid ${border}` }} />
+                  <span style={{ fontSize:7, color:"var(--text3)", letterSpacing:.5 }}>{label}</span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -686,12 +903,13 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
     };
 
     const TYPE_LABELS = {
+      first_contact:"🌱 Premier contact (découverte)",
       first_word:"Premier mot", last_word:"Dernier mot", missing_word:"Mot manquant",
       next_verse:"Verset suivant", previous_verse:"Verset précédent",
       verse_number:"Numéro du verset", find_ayat:"Trouver le verset",
       reconstruct:"Reconstituer", compare_verse:"Comparer sourates",
       find_surah:"Trouver la sourate",
-        unknown_word:"Mot inconnu manquant", unknown_pick:"Identifier les mots inconnus",
+      unknown_word:"Mot inconnu manquant", unknown_pick:"Identifier les mots inconnus",
     };
     const toggle = (t) => setSelectedQTypes(prev => {
       const next = new Set(prev);
@@ -709,74 +927,137 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
           <span style={{ fontSize:9, color:"var(--text3)", letterSpacing:1 }}>{multiSns.length > 0 ? `${multiItems?.length ?? 0} ayats` : `${maxAyat} VERSETS`}</span>
         </div>
 
-        {/* Ayat progress grid — grouped by page */}
+        {/* Ayat progress and mastery ribbon */}
         <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10, overflow:"hidden" }}>
-          <div onClick={() => setShowAvancement(v => !v)}
-            style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", cursor:"pointer" }}>
-            <div style={{ fontSize:8, letterSpacing:2, color:"var(--text3)" }}>AVANCEMENT</div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", borderBottom: showAvancement ? "1px solid var(--border)" : "none" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ fontSize:8, letterSpacing:2, color:"var(--text3)" }}>AVANCEMENT & MAÎTRISE</div>
+              <div style={{ display:"flex", gap:4 }}>
+                <button
+                  onClick={() => { setAvancementMode("ribbon"); setShowAvancement(true); }}
+                  style={{ fontSize:7, letterSpacing:1, padding:"2px 8px", borderRadius:4, cursor:"pointer",
+                    fontFamily:"'Cinzel',serif",
+                    border: avancementMode === "ribbon" ? "1px solid var(--teal)" : "1px solid var(--border2)",
+                    background: avancementMode === "ribbon" ? "rgba(62,184,160,.15)" : "transparent",
+                    color: avancementMode === "ribbon" ? "var(--teal2)" : "var(--text3)" }}>
+                  RUBAN MAÎTRISE
+                </button>
+                <button
+                  onClick={() => { setAvancementMode("grid"); setShowAvancement(true); }}
+                  style={{ fontSize:7, letterSpacing:1, padding:"2px 8px", borderRadius:4, cursor:"pointer",
+                    fontFamily:"'Cinzel',serif",
+                    border: avancementMode === "grid" ? "1px solid var(--gold)" : "1px solid var(--border2)",
+                    background: avancementMode === "grid" ? "rgba(201,168,76,.15)" : "transparent",
+                    color: avancementMode === "grid" ? "var(--gold2)" : "var(--text3)" }}>
+                  GRILLE COMPACTE
+                </button>
+              </div>
+            </div>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              {showAvancement && <div style={{ fontSize:8, color:"var(--text3)", letterSpacing:1 }}>
-                {clickPhase === "from" ? "CLIQUER : DÉBUT" : `DÉBUT ${rfN} — CLIQUER : FIN`}
-              </div>}
-              <span style={{ fontSize:9, color:"var(--text3)" }}>{showAvancement ? '▲' : '▼'}</span>
+              {showAvancement && (
+                <div style={{ fontSize:8, color:"var(--text3)", letterSpacing:1 }}>
+                  {clickPhase === "from" ? "CLIQUER : DÉBUT" : `DÉBUT ${rfN} — CLIQUER : FIN`}
+                </div>
+              )}
+              <button
+                onClick={() => setShowAvancement(v => !v)}
+                style={{ background:"transparent", border:"none", color:"var(--text3)", cursor:"pointer", fontSize:10 }}>
+                {showAvancement ? '▲' : '▼'}
+              </button>
             </div>
           </div>
+
           {showAvancement && (
-            <div style={{ padding:"0 14px 14px" }}>
-              {(() => {
-                const pd = qPageData[selectedSn];
-                if (!pd) { ensureQPageData(selectedSn); }
-                const items = [];
-                if (pd?.length) {
-                  let lastPage = null;
-                  pd.forEach(({ numberInSurah: an, page }) => {
-                    if (page !== lastPage) { items.push({ type:'badge', page }); lastPage = page; }
-                    items.push({ type:'cell', an });
-                  });
-                } else { Array.from({ length: maxAyat }, (_, i) => i+1).forEach(an => items.push({ type:'cell', an })); }
-                return (
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:3, alignItems:'center' }}>
-                    {items.map((item, i) => {
-                      if (item.type === 'badge') return (
-                        <span key={`p${item.page}-${i}`} style={{ fontSize:6, letterSpacing:1, color:'#c878ff',
-                          fontFamily:"'Cinzel',serif", padding:'0 3px',
-                          borderLeft: i > 0 ? '1px solid rgba(200,120,255,.2)' : 'none',
-                          marginLeft: i > 0 ? 3 : 0, lineHeight:'20px' }}>P{item.page}</span>
-                      );
-                      const an = item.an;
-                      const score = getAyatQScore(an); const inRange = an>=rfN&&an<=rtN; const isFrom=an===rfN; const isTo=an===rtN;
-                      const ldEntry  = learnData[`${selectedSn}:${an}`] || {};
-                      const isRevise = !!ldEntry.toRevise;
-                      return (
-                        <div key={an} onClick={e=>{e.stopPropagation();handleDotClick(an);}}
-                          title={`${an}${isRevise?' 🔖':''}${score===null?'':`  ${score>=1?"✓":score>0?"~":"✗"}`}`}
-                          style={{ width:20,height:20,borderRadius:4,cursor:"pointer",
-                            background: isRevise ? "rgba(201,168,76,.18)" : "var(--surface3)",
-                            border:`1px solid ${isFrom||isTo ? "var(--gold2)" : isRevise ? "var(--gold)" : inRange ? "rgba(255,255,255,.15)" : "var(--border)"}`,
-                            boxShadow: isRevise ? "0 0 6px rgba(201,168,76,.35)" : isFrom||isTo ? "0 0 0 2px var(--gold)" : "none",
-                            display:"flex",alignItems:"center",justifyContent:"center",
-                            fontSize:7, color: isRevise ? "var(--gold)" : inRange ? "var(--text2)" : "var(--text3)",
-                            fontWeight: isRevise ? 700 : 400,
-                            fontFamily:"'Cinzel',serif",transition:"all .1s" }}>
-                          {an}
-                        </div>
-                      );
-                    })}
+            <div style={{ padding:"12px 14px" }}>
+              {avancementMode === "ribbon" ? (
+                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  <SurahAyatsMasteryRibbon
+                    surah={surahInfo}
+                    learnData={learnData}
+                    surahTextCache={{ [selectedSn]: Object.fromEntries((ayatList||[]).map(an => [an, ayatTexts[`${selectedSn}:${an}`]])) }}
+                    pageDataForSurah={qPageData[selectedSn]}
+                    activeAyatNum={parseInt(rangeFrom) || 1}
+                    onSelectAyat={(sn, an) => {
+                      handleDotClick(an);
+                    }}
+                    setLData={setLData}
+                    compact={false}
+                    showFilter={true}
+                  />
+                  <div style={{ fontSize:7, color:"var(--text3)", textAlign:"center", letterSpacing:1, fontFamily:"'Cinzel',serif" }}>
+                    💡 Cliquez sur un verset pour définir le début ({rfN}) ou la fin ({rtN}) de la plage d'entraînement
                   </div>
-                );
-              })()}
-              <div style={{ display:"flex", gap:10, marginTop:8, flexWrap:"wrap" }}>
-                {[
-                  { color:"var(--gold)",    bg:"rgba(201,168,76,.18)", label:"🔖 À réviser" },
-                  { color:"rgba(201,168,76,.5)", bg:"var(--surface3)", label:"Dans la plage" },
-                  { color:"var(--border)",  bg:"var(--surface3)",      label:"Non sélectionné" },
-                ].map(({ color, bg, label }) => (
-                  <div key={label} style={{ display:"flex", alignItems:"center", gap:4 }}>
-                    <div style={{ width:10, height:10, borderRadius:2, background:bg, border:`1px solid ${color}` }} />
-                    <span style={{ fontSize:7, color:"var(--text3)", letterSpacing:.5 }}>{label}</span>
+                </div>
+              ) : (
+                <div>
+                  {(() => {
+                    const pd = qPageData[selectedSn];
+                    if (!pd) { ensureQPageData(selectedSn); }
+                    const items = [];
+                    if (pd?.length) {
+                      let lastPage = null;
+                      pd.forEach(({ numberInSurah: an, page }) => {
+                        if (page !== lastPage) { items.push({ type:'badge', page }); lastPage = page; }
+                        items.push({ type:'cell', an });
+                      });
+                    } else { Array.from({ length: maxAyat }, (_, i) => i+1).forEach(an => items.push({ type:'cell', an })); }
+                    return (
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems:'center' }}>
+                        {items.map((item, i) => {
+                          if (item.type === 'badge') return (
+                            <span key={`p${item.page}-${i}`} style={{ fontSize:6, letterSpacing:1, color:'#c878ff',
+                              fontFamily:"'Cinzel',serif", padding:'0 3px',
+                              borderLeft: i > 0 ? '1px solid rgba(200,120,255,.2)' : 'none',
+                              marginLeft: i > 0 ? 3 : 0, lineHeight:'22px' }}>P{item.page}</span>
+                          );
+                          const an = item.an;
+                          const inRange = an >= rfN && an <= rtN;
+                          const isFrom  = an === rfN;
+                          const isTo    = an === rtN;
+                          const ldEntry = learnData[`${selectedSn}:${an}`] || {};
+                          const revInfo = getAyatRevisionInfo(ldEntry);
+
+                          return (
+                            <div key={an} onClick={e => { e.stopPropagation(); handleDotClick(an); }}
+                              title={`Verset ${an} · ${revInfo.label}${inRange ? ' (Dans la sélection)' : ''}`}
+                              style={{ width:24, height:24, borderRadius:5, cursor:"pointer",
+                                background: inRange
+                                  ? (revInfo.levelId === 'unlearned' ? 'rgba(255,255,255,0.06)' : revInfo.bg)
+                                  : (revInfo.levelId !== 'unlearned' ? revInfo.bg : "var(--surface3)"),
+                                border: (isFrom || isTo)
+                                  ? "2px solid var(--gold2)"
+                                  : inRange
+                                    ? `1px solid ${revInfo.border || 'rgba(255,255,255,.2)'}`
+                                    : "1px solid var(--border)",
+                                boxShadow: (isFrom || isTo)
+                                  ? "0 0 8px var(--gold)"
+                                  : (inRange && revInfo.glow !== 'none')
+                                    ? revInfo.glow
+                                    : "none",
+                                display:"flex", alignItems:"center", justifyContent:"center",
+                                fontSize:8,
+                                color: inRange ? revInfo.color : (revInfo.levelId !== 'unlearned' ? revInfo.color : "var(--text3)"),
+                                fontWeight: (isFrom || isTo || revInfo.isToRevise) ? 700 : 500,
+                                fontFamily:"'Cinzel',serif", transition:"all .15s" }}>
+                              {an}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Comprehensive mastery level legend */}
+                  <div style={{ display:"flex", gap:10, marginTop:10, flexWrap:"wrap", paddingTop:8, borderTop:"1px solid var(--border)" }}>
+                    {REVISION_LEVEL_LEGEND.map(({ id, label, color, bg, border }) => (
+                      <div key={id} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                        <div style={{ width:10, height:10, borderRadius:2, background:bg, border:`1px solid ${border}` }} />
+                        <span style={{ fontSize:7, color:"var(--text3)", letterSpacing:.5 }}>{label}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -898,11 +1179,13 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
               background:"rgba(201,168,76,.12)", border:"1px solid var(--gold)", color:"var(--gold2)",
               borderRadius:9, cursor:"pointer", marginTop:4 }}>
             {(() => {
+              const hasFC = onlyFirstContact || (selectedQTypes instanceof Set && selectedQTypes.has('first_contact'));
               const learnedInRange = ayatList.filter(an => learnData[`${selectedSn}:${an}`]?.learned);
-              const toReviseInRange = learnedInRange.filter(an => learnData[`${selectedSn}:${an}`]?.toRevise);
-              const uniqueAyats = onlyRevise ? toReviseInRange : learnedInRange;
-              const count = uniqueAyats.length;
-              return `❓ LANCER (${count} AYAT${count > 1 ? 'S' : ''})`;
+              const fcInRange = ayatList.filter(an => isFirstContactAyat(learnData[`${selectedSn}:${an}`]));
+              const toReviseInRange = (hasFC ? ayatList : learnedInRange).filter(an => learnData[`${selectedSn}:${an}`]?.toRevise);
+              const basePool = onlyRevise ? toReviseInRange : (hasFC ? (fcInRange.length > 0 ? fcInRange : ayatList) : learnedInRange);
+              const count = basePool.length;
+              return `❓ LANCER (${count > 0 ? `${count} AYAT${count > 1 ? 'S' : ''}` : `${ayatList.length} AYATS EN DÉCOUVERTE`})`;
             })()}
           </button>
         </div>

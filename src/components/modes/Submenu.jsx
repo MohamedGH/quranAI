@@ -10,8 +10,10 @@ import { InfoMode } from "./InfoMode.jsx";
 import { AideMemoireMode } from "./AideMemoireMode.jsx";
 import { RevisionEcritureMode } from "./RevisionEcritureMode.jsx";
 import { TajweedExercice } from "./TajweedExercice.jsx";
+import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 
 export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive }) {
+  const [copied, setCopied] = useState(false);
   return (
     <div className="submenu" onClick={e => e.stopPropagation()}>
 
@@ -46,35 +48,55 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
           color: ayatLoopActive ? "var(--teal2)" : "var(--text3)",
           transition:"all .15s",
         }} title="Lire en boucle">↺</button>
+        <button
+          onClick={() => {
+            const textToCopy = `${ayat.text || ''}\n[Sourate ${surahNum}:${ayat.numberInSurah}]`;
+            try { navigator.clipboard.writeText(textToCopy); } catch {}
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1600);
+          }}
+          title={copied ? "Copié !" : "Copier le texte et la référence"}
+          style={{
+            flexShrink:0, padding:"6px 10px", fontSize:12, cursor:"pointer",
+            background: copied ? "rgba(62,184,160,.18)" : "transparent",
+            border: "none", borderBottom: copied ? "2px solid var(--teal)" : "2px solid transparent",
+            color: copied ? "var(--teal2)" : "var(--text3)",
+            transition:"all .15s",
+          }}
+        >
+          {copied ? "✓" : "📋"}
+        </button>
       </div>
       <div className="submenu-content">
-        {submenuMode === "lecture"
-          ? <LectureMode ayat={ayat} surahNum={surahNum} audioUrl={audioUrl} isMainPlaying={isMainPlaying} timestamps={timestamps} onLoadTimestamps={onLoadTimestamps} onUpdateTimestamps={onUpdateTimestamps} onLocalPlay={onLocalPlay} />
-          : submenuMode === "decouverte"
-          ? <DecouverteMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} audioUrl={audioUrl} timestamps={timestamps} />
-          : submenuMode === "apprentissage"
-          ? <ApprentissageMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} timestamps={timestamps} audioUrl={audioUrl}
-              isSelectingThisAyat={partSelectAyat === ayat.numberInSurah}
-              partSelectStep={partSelectStep}
-              onStartPartCreate={onStartPartCreate}
-              clickMode={aideMemoireClickMode} setClickMode={setAideMemoireClickMode} />
-          : submenuMode === "infos"
-          ? <InfoMode ayat={ayat} ld={ld} setLData={setLData} surahNum={surahNum} />
-          : submenuMode === "memoire"
-          ? <AideMemoireMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} clickMode={aideMemoireClickMode} setClickMode={setAideMemoireClickMode} spellCheck={spellCheck} />
-          : submenuMode === "revision"
-          ? <RevisionEcritureMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} spellCheck={spellCheck} />
-          : submenuMode === "tajweed"
-          ? <TajweedExercice ayat={ayat} />
-          : submenuMode === "reviser"
-          ? <ToRevisePanel ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} />
-          : <AyatCollectionsTab
-              surahNum={surahNum} ayatNum={ayat.numberInSurah}
-              collections={collections}
-              ayatInCollections={ayatInCollections}
-              onOpenModal={onOpenCollModal}
-            />
-        }
+        <ErrorBoundary>
+          {submenuMode === "lecture"
+            ? <LectureMode ayat={ayat} surahNum={surahNum} audioUrl={audioUrl} isMainPlaying={isMainPlaying} timestamps={timestamps} onLoadTimestamps={onLoadTimestamps} onUpdateTimestamps={onUpdateTimestamps} onLocalPlay={onLocalPlay} />
+            : submenuMode === "decouverte"
+            ? <DecouverteMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} audioUrl={audioUrl} timestamps={timestamps} />
+            : submenuMode === "apprentissage"
+            ? <ApprentissageMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} timestamps={timestamps} audioUrl={audioUrl}
+                isSelectingThisAyat={partSelectAyat === ayat.numberInSurah}
+                partSelectStep={partSelectStep}
+                onStartPartCreate={onStartPartCreate}
+                clickMode={aideMemoireClickMode} setClickMode={setAideMemoireClickMode} />
+            : submenuMode === "infos"
+            ? <InfoMode ayat={ayat} ld={ld} setLData={setLData} surahNum={surahNum} />
+            : submenuMode === "memoire"
+            ? <AideMemoireMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} clickMode={aideMemoireClickMode} setClickMode={setAideMemoireClickMode} spellCheck={spellCheck} />
+            : submenuMode === "revision"
+            ? <RevisionEcritureMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} spellCheck={spellCheck} />
+            : submenuMode === "tajweed"
+            ? <TajweedExercice ayat={ayat} />
+            : submenuMode === "reviser"
+            ? <ToRevisePanel ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} />
+            : <AyatCollectionsTab
+                surahNum={surahNum} ayatNum={ayat.numberInSurah}
+                collections={collections}
+                ayatInCollections={ayatInCollections}
+                onOpenModal={onOpenCollModal}
+              />
+          }
+        </ErrorBoundary>
       </div>
 
     </div>

@@ -1,7 +1,7 @@
 import { ActivityCalendar } from "../common/Charts.jsx";
 import { ExportImport } from "../sync/ExportImport.jsx";
 import { masteryColor, computeMastery } from "../common/Mastery.jsx";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { sel } from "../../store.js";
 import { DonutChart, MiniBarChart, KpiWidget, ActivityBarChart, GoalsPanel } from "../common/Charts.jsx";
@@ -12,6 +12,15 @@ import { fetchSurahSimple } from "../../utils/reciterAudio.js";
 export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, onSetGoal, onRecordActivity, surahStats, surahTextCache = {}, onOpenReminders }) {
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
+  const [readySecondary, setReadySecondary] = useState(false);
+
+  // Mount secondary heavy charts right after initial paint to ensure instantaneous page response
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setReadySecondary(true);
+    }, 40);
+    return () => clearTimeout(timer);
+  }, []);
 
   // ── Compute stats from learnData ──
   const entries = useMemo(() => Object.entries(learnData), [learnData]);
@@ -28,20 +37,31 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
     .sort(([,a],[,b]) => (b.learnedAt > a.learnedAt ? 1 : -1))
     .slice(0, 5), [entries]);
 
-  const recentlyUpdated = entries
+  const recentlyUpdated = useMemo(() => entries
     .filter(([,v]) => v.updatedAt)
     .sort(([,a],[,b]) => (b.updatedAt > a.updatedAt ? 1 : -1))
-    .slice(0, 3);
+    .slice(0, 3), [entries]);
 
   // Weekly progress using timestamps
-  const now7 = new Date(); now7.setDate(now7.getDate() - 7);
-  const learnedThisWeek = entries.filter(([,v]) => v.learnedAt && new Date(v.learnedAt) > now7).length;
-  const updatedThisWeek = entries.filter(([,v]) => v.updatedAt && new Date(v.updatedAt) > now7).length;
+  const { learnedThisWeek, updatedThisWeek } = useMemo(() => {
+    const now7 = new Date();
+    now7.setDate(now7.getDate() - 7);
+    let l = 0;
+    let u = 0;
+    for (const [, v] of entries) {
+      if (v.learnedAt && new Date(v.learnedAt) > now7) l++;
+      if (v.updatedAt && new Date(v.updatedAt) > now7) u++;
+    }
+    return { learnedThisWeek: l, updatedThisWeek: u };
+  }, [entries]);
 
   const surahProgress = useMemo(() => {
     const sp = {};
     entries.forEach(([key, v]) => {
-      const [sNum, aNum] = key.split(":").map(Number);
+      const colon = key.indexOf(":");
+      if (colon === -1) return;
+      const sNum = parseInt(key.slice(0, colon));
+      const aNum = parseInt(key.slice(colon + 1));
       if (!sp[sNum]) sp[sNum] = { learned:0, total:0, read:0, masterySum:0 };
       sp[sNum].total++;
       if (v.learned) sp[sNum].learned++;
@@ -90,16 +110,10 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
   const medinan  = activeSurahs.filter(a=>a.meta?.revelationType==="Medinan").length;
   const totalAyats = 6236;
 
-  // Unified global mastery: sum of all ayat masteries in the Quran / 6236
+  // Unified global mastery derived directly from pre-aggregated surahProgress without redundant looping
   const totalMasterySum = useMemo(() => {
-    let sum = 0;
-    for (const [key, v] of entries) {
-      const [sn, an] = key.split(':').map(Number);
-      const text = surahTextCache[sn]?.[an];
-      sum += computeMastery(v, text);
-    }
-    return sum;
-  }, [entries, surahTextCache]);
+    return Object.values(surahProgress).reduce((sum, sp) => sum + (sp.masterySum || 0), 0);
+  }, [surahProgress]);
 
   const globalMasteryPct = totalAyats > 0 ? (totalMasterySum / totalAyats) / 100 : 0;
   const pctAyats   = globalMasteryPct;
@@ -213,7 +227,7 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
         globalMasteryPct={globalMasteryPct}
         onNavigate={onNavigate}
       />;
-      case "evolution": return (
+      case "evolution": return readySecondary ? (
         <LearningEvolutionChart
           learnData={learnData}
           activity={activity}
@@ -222,14 +236,28 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
           goals={goals}
           onNavigate={onNavigate}
         />
+      ) : (
+        <div className="dash-card" style={{ minHeight: 240, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: "var(--text3)" }}>
+            <div className="loading-ring" style={{ width: 22, height: 22, borderTopColor: "var(--gold)" }} />
+            <span style={{ fontSize: 11, letterSpacing: 0.5 }}>Chargement de l'évolution...</span>
+          </div>
+        </div>
       );
       case "objectifs": return (
         <GoalsPanel goals={goals} todayAct={todayAct} weeklyTotal={weeklyTotal} streak={streak}
           goalAyatsPct={goalAyatsPct} goalPartsPct={goalPartsPct} weeklyPct={weeklyPct}
           onSetGoal={onSetGoal} surahs={surahs} onOpenReminders={onOpenReminders} />
       );
-      case "calendrier": return (
+      case "calendrier": return readySecondary ? (
         <ActivityCalendar activity={activity} goals={goals} learnData={learnData} surahs={surahs} />
+      ) : (
+        <div className="dash-card" style={{ minHeight: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: "var(--text3)" }}>
+            <div className="loading-ring" style={{ width: 22, height: 22, borderTopColor: "var(--teal)" }} />
+            <span style={{ fontSize: 11, letterSpacing: 0.5 }}>Chargement du calendrier...</span>
+          </div>
+        </div>
       );
       case "sourates": return (
         <div className="dash-card">
@@ -346,13 +374,20 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
           ))}
         </div>
       );
-      case "timeline": return (
+      case "timeline": return readySecondary ? (
         <MasteryTimelineWidget
           learnData={learnData}
           surahs={surahs}
           surahTextCache={surahTextCache}
           onNavigate={onNavigate}
         />
+      ) : (
+        <div className="dash-card" style={{ minHeight: 240, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, color: "var(--text3)" }}>
+            <div className="loading-ring" style={{ width: 22, height: 22, borderTopColor: "var(--gold)" }} />
+            <span style={{ fontSize: 11, letterSpacing: 0.5 }}>Chargement de la chronologie...</span>
+          </div>
+        </div>
       );
       case "citation": return (
         <div style={{padding:"20px",background:"rgba(201,168,76,.04)",border:"1px solid rgba(201,168,76,.12)",borderRadius:12,textAlign:"center",display:"flex",flexDirection:"column",gap:8}}>

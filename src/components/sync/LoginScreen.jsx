@@ -168,6 +168,24 @@ export function LoginScreen({ onLoggedIn }) {
             {mode === "login" ? "S'inscrire" : "Se connecter"}
           </span>
         </div>
+
+        {/* Offline / Guest Mode */}
+        <div style={{marginTop:18, paddingTop:16, borderTop:"1px solid var(--border)", textAlign:"center"}}>
+          <button
+            type="button"
+            onClick={() => onLoggedIn({ uid: "offline_user", displayName: "Invité", isOffline: true })}
+            style={{
+              background:"transparent", border:"1px solid var(--border2)",
+              borderRadius:8, padding:"8px 14px", color:"var(--text2)",
+              fontSize:9.5, letterSpacing:1.5, cursor:"pointer",
+              fontFamily:"'Cinzel',serif", transition:"all .2s",
+            }}
+            onMouseOver={e=>{ e.currentTarget.style.borderColor="var(--gold)"; e.currentTarget.style.color="var(--gold)"; }}
+            onMouseOut={e=>{ e.currentTarget.style.borderColor="var(--border2)"; e.currentTarget.style.color="var(--text2)"; }}
+          >
+            CONTINUER SANS COMPTE (HORS-LIGNE)
+          </button>
+        </div>
       </div>
     </div>
   );

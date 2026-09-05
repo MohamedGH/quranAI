@@ -1,5 +1,5 @@
 import { OfflineLoader } from "../common/OfflineLoader.jsx";
-import { firebaseAuth, firebaseDb } from "../../firebase.js";
+import { firebaseAuth, firebaseDb, isFirebaseConfigured } from "../../firebase.js";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { getDeviceId, mergeLearnData, mergeActivity, mergeCollections } from "../../utils/syncUtils.js";
 import React, { useState } from "react";
@@ -101,6 +101,10 @@ export function ExportImport() {
 
   // ── Cloud Sync ──────────────────────────────────────────────────────
   const handleCloudSave = async () => {
+    if (!isFirebaseConfigured) {
+      setCloudStatus({ type:"err", msg:"Mode hors-ligne : les données sont enregistrées localement sur cet appareil." });
+      return;
+    }
     const uid = getCurrentUserId();
     if (!uid) { setCloudStatus({ type:"err", msg:"Non connecté." }); return; }
     setCloudSaving(true);
@@ -126,6 +130,10 @@ export function ExportImport() {
   };
 
   const handleCloudRestore = async () => {
+    if (!isFirebaseConfigured) {
+      setCloudStatus({ type:"err", msg:"Mode hors-ligne : les données sont gérées localement." });
+      return;
+    }
     const uid = getCurrentUserId();
     if (!uid) { setCloudStatus({ type:"err", msg:"Non connecté." }); return; }
     setCloudRestoring(true);

@@ -6,6 +6,7 @@ import { splitArabicWords, splitArabicChars } from "../../utils/arabicUtils.js";
 import { useToRevise } from "../../utils/toRevise.js";
 import { ToRevisePanel } from "../revision/ToRevisePanel.jsx";
 import { MasteryBadge } from "../common/Mastery.jsx";
+import { FirstContactQuestion } from "../questions/FirstContactQuestion.jsx";
 
 export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timestamps }) {
   const words = ayat.text ? ayat.text.split(' ').filter(Boolean) : [];
@@ -13,6 +14,7 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
   const [markMode, setMarkMode]         = React.useState(false); // toggles 🔖 marking UI
   const [expandedWord, setExpandedWord] = React.useState(null);  // letter drill-down
   const [playingWord, setPlayingWord]   = React.useState(null);  // index currently playing
+  const [showQuiz, setShowQuiz]         = React.useState(false); // inline first contact quiz
   const audioRef = React.useRef(null);
   const seqTokenRef = React.useRef(0); // cancels a stale sequential playback when superseded
 
@@ -332,6 +334,60 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
               border: '1px solid var(--border2)', borderRadius: 8,
               color: 'var(--text3)', fontSize: 9, letterSpacing: 1,
               fontFamily: "'Cinzel',serif", cursor: 'pointer' }}>TOUT</button>
+        )}
+      </div>
+
+      {/* Quiz Premier Contact Button & Drawer */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+        <button
+          onClick={() => setShowQuiz(v => !v)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            padding: '10px 16px',
+            borderRadius: 8,
+            border: showQuiz ? '1px solid #5bc8f5' : '1px solid rgba(91,200,245,.35)',
+            background: showQuiz ? 'rgba(91,200,245,.18)' : 'rgba(91,200,245,.08)',
+            color: '#5bc8f5',
+            fontFamily: "'Cinzel',serif",
+            fontSize: 9,
+            letterSpacing: 1.5,
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all .2s'
+          }}
+        >
+          <span>🌱 {showQuiz ? 'MASQUER LE QUIZ PREMIER CONTACT' : 'TESTER AVEC LE QUIZ PREMIER CONTACT'}</span>
+          <span style={{ fontSize: 11 }}>{showQuiz ? '▲' : '▼'}</span>
+        </button>
+
+        {showQuiz && (
+          <div style={{ marginTop: 6 }}>
+            <FirstContactQuestion
+              q={{
+                sn: surahNum,
+                ayatNum: ayat.numberInSurah,
+                text: ayat.text,
+                words
+              }}
+              globalNums={{ [`${surahNum}:${ayat.numberInSurah}`]: ayat.number }}
+              ayatTexts={{ [`${surahNum}:${ayat.numberInSurah}`]: ayat.text }}
+              inlineMode={true}
+              onClose={() => setShowQuiz(false)}
+              onAnswer={(correct) => {
+                if (correct && setLData) {
+                  setLData(surahNum, ayat.numberInSurah, {
+                    firstContact: true,
+                    firstContactDate: new Date().toISOString(),
+                    readCount: Math.max(1, (ld?.readCount || 0) + 1)
+                  });
+                }
+                setShowQuiz(false);
+              }}
+            />
+          </div>
         )}
       </div>
     </div>

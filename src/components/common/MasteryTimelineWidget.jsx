@@ -27,22 +27,22 @@ export function MasteryTimelineWidget({
   const surahStatsMap = useMemo(() => {
     const map = {};
     surahs.forEach((s) => {
-      const sn = s.number;
-      let learnedCount = 0;
-      let masterySum = 0;
-      const total = s.numberOfAyahs || 1;
+      map[s.number] = { learnedCount: 0, total: s.numberOfAyahs || 1, masterySum: 0, pct: 0 };
+    });
 
-      for (let an = 1; an <= total; an++) {
-        const key = `${sn}:${an}`;
-        const ld = learnData[key];
-        if (ld) {
-          if (ld.learned) learnedCount++;
-          const text = surahTextCache[sn]?.[an];
-          masterySum += computeMastery(ld, text);
-        }
-      }
-      const pct = Math.min(100, Math.round(masterySum / total));
-      map[sn] = { learnedCount, total, pct };
+    for (const [key, ld] of Object.entries(learnData)) {
+      const colon = key.indexOf(":");
+      if (colon === -1) continue;
+      const sn = parseInt(key.slice(0, colon));
+      const an = parseInt(key.slice(colon + 1));
+      if (!map[sn]) continue;
+      if (ld.learned) map[sn].learnedCount++;
+      const text = surahTextCache[sn]?.[an];
+      map[sn].masterySum += computeMastery(ld, text);
+    }
+
+    Object.values(map).forEach((st) => {
+      st.pct = Math.min(100, Math.round(st.masterySum / st.total));
     });
     return map;
   }, [surahs, learnData, surahTextCache]);
@@ -63,7 +63,10 @@ export function MasteryTimelineWidget({
     let totalLearned = 0;
     let totalMasterySum = 0;
     Object.entries(learnData).forEach(([key, v]) => {
-      const [sn, an] = key.split(":").map(Number);
+      const colon = key.indexOf(":");
+      if (colon === -1) return;
+      const sn = parseInt(key.slice(0, colon));
+      const an = parseInt(key.slice(colon + 1));
       if (v?.learned) totalLearned++;
       const text = surahTextCache[sn]?.[an];
       totalMasterySum += computeMastery(v, text);
@@ -77,7 +80,26 @@ export function MasteryTimelineWidget({
   const timelinePoints = useMemo(() => {
     const points = [];
     const totalAyatsCount = currentSurahMeta ? (currentSurahMeta.numberOfAyahs || 1) : 6236;
-    const entries = Object.entries(learnData);
+
+    // Filter and pre-compute relevant entries once outside the daily loop
+    const parsedEntries = [];
+    for (const [key, v] of Object.entries(learnData)) {
+      const colon = key.indexOf(":");
+      if (colon === -1) continue;
+      const sn = parseInt(key.slice(0, colon));
+      if (selectedSn && sn !== selectedSn) continue;
+      const an = parseInt(key.slice(colon + 1));
+      const itemDate = (v.learnedAt || v.updatedAt || "1970-01-01").slice(0, 10);
+      const text = surahTextCache[sn]?.[an];
+      const m = computeMastery(v, text);
+      const hist = v.reviseHistory;
+      parsedEntries.push({
+        itemDate,
+        m,
+        learned: !!v.learned,
+        hist: hist && hist.length > 0 ? hist : null,
+      });
+    }
 
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date();
@@ -86,25 +108,19 @@ export function MasteryTimelineWidget({
       let masterySum = 0;
       let countLearned = 0;
 
-      for (const [key, v] of entries) {
-        const [sn, an] = key.split(":").map(Number);
-        if (selectedSn && sn !== selectedSn) continue;
-
-        // If marked learned or updated on or before this date
-        const itemDate = (v.learnedAt || v.updatedAt || "1970-01-01").slice(0, 10);
-        if (itemDate <= dateStr) {
-          const hist = v.reviseHistory || [];
-          const openOnDate = hist.some((e) => {
-            const start = e.startDate?.slice(0, 10);
-            const end = e.endDate?.slice(0, 10);
-            return start && start <= dateStr && (!end || end > dateStr);
-          });
-          if (!openOnDate) {
-            const text = surahTextCache[sn]?.[an];
-            const m = computeMastery(v, text);
-            masterySum += m;
-            if (v.learned) countLearned++;
+      for (let j = 0; j < parsedEntries.length; j++) {
+        const item = parsedEntries[j];
+        if (item.itemDate <= dateStr) {
+          if (item.hist) {
+            const openOnDate = item.hist.some((e) => {
+              const start = e.startDate?.slice(0, 10);
+              const end = e.endDate?.slice(0, 10);
+              return start && start <= dateStr && (!end || end > dateStr);
+            });
+            if (openOnDate) continue;
           }
+          masterySum += item.m;
+          if (item.learned) countLearned++;
         }
       }
 

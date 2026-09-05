@@ -12,6 +12,7 @@ import { UnknownWordQuestion } from "./UnknownWordQuestion.jsx";
 import { UnknownPickQuestion } from "./UnknownPickQuestion.jsx";
 import { RevisePartQuestion } from "./RevisePartQuestion.jsx";
 import { PageStructureQuestion } from "./PageStructureQuestion.jsx";
+import { FirstContactQuestion } from "./FirstContactQuestion.jsx";
 import { QAyatPlayer } from "../audio/QAyatPlayer.jsx";
 import { TextAnswerInput } from "../common/TextAnswerInput.jsx";
 
@@ -27,6 +28,7 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
 
   const [results,   setResults]   = React.useState(() => saved?.results ?? []);
   const [revealed,  setRevealed]  = React.useState(false);
+  const [lastAutoGrade, setLastAutoGrade] = React.useState(null);
   const [done,      setDone]      = React.useState(false);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [emptyTimeout, setEmptyTimeout] = React.useState(false);
@@ -56,6 +58,7 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
 
   React.useEffect(() => {
     setRevealed(false);
+    setLastAutoGrade(null);
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
     setIsPlaying(false);
   }, [currentQId]);
@@ -84,6 +87,20 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
             const surahObj  = surahs.find(s => s.number === effectiveSn);
             const surahLabel = surahObj ? `${surahObj.englishName} · ${surahObj.name}` : `S.${effectiveSn}`;
             const vLabel = `verset ${ayatNum} · ${surahLabel}`;
+
+            // 0. Premier contact
+            if (words.length > 0) {
+                qs.push({
+                    id: `${effectiveSn}:${ayatNum}:first_contact`,
+                    sn: effectiveSn, type: "first_contact",
+                    ayatNum,
+                    question: `Quiz Premier Contact · ${vLabel}`,
+                    answer: text,
+                    text,
+                    words,
+                    surahName: surahLabel
+                });
+            }
 
             // 1. Premier mot
             if (words.length > 0) {
@@ -402,7 +419,7 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
         let filtered = activeTypes ? qs.filter(q => activeTypes.has(q.type)) : qs;
         qs.length = 0; filtered.forEach(q => qs.push(q));
 
-        const TYPE_ORDER = ["first_word","last_word","missing_word","next_verse","previous_verse","verse_number","find_ayat","reconstruct","compare_verse","find_surah","unknown_word","unknown_pick","page_structure","revise_word","revise_part"];
+        const TYPE_ORDER = ["first_contact","first_word","last_word","missing_word","next_verse","previous_verse","verse_number","find_ayat","reconstruct","compare_verse","find_surah","unknown_word","unknown_pick","page_structure","revise_word","revise_part"];
 
         if (randomize) {
           // Restore saved shuffle order only if IDs match exactly
@@ -479,6 +496,8 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
 
   const answer = (correct, removeRevise = false) => {
     if (!q) return;
+    setRevealed(false);
+    setLastAutoGrade(null);
     const r = { sn: q.sn ?? selectedSn, ayatNum: q.ayatNum, qId: q.id, correct };
     setResults(prev => [...prev, r]);
     setLData(q.sn ?? selectedSn, q.ayatNum, d => {
@@ -486,6 +505,13 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
       delete qs2['undefined'];
       qs2[q.id] = [...(qs2[q.id] || []).slice(-4), correct ? 1 : 0];
       const patch = { ...d, questionScores: qs2 };
+      if (q.type === 'first_contact' && correct) {
+        patch.firstContact = true;
+        patch.firstContactDate = new Date().toISOString();
+        if (!patch.readCount || patch.readCount < 1) {
+          patch.readCount = 1;
+        }
+      }
       if (removeRevise) {
         patch.toRevise = false;
         const hist = [...(d.reviseHistory || [])];
@@ -537,7 +563,7 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
   if (activeQuestions.length === 0) {
     if (_items.length === 0) return (
       <div style={{ padding:'20px', textAlign:'center', fontSize:9, color:'var(--text3)', letterSpacing:1 }}>
-        AUCUN AYAT APPRIS DANS LA PLAGE SÉLECTIONNÉE
+        AUCUN AYAT CORRESPONDANT DANS LA PLAGE SÉLECTIONNÉE
         <button onClick={onDone} style={{ display:'block', margin:'16px auto 0', fontSize:9, letterSpacing:2,
           fontFamily:"'Cinzel',serif", padding:'7px 18px', border:'1px solid var(--border2)',
           background:'transparent', color:'var(--text3)', borderRadius:6, cursor:'pointer' }}>← RETOUR</button>
@@ -684,45 +710,63 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
         background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:12 }}>
         {/* Ayat number + mastery + audio */}
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <div style={{ fontFamily:"'Cinzel',serif", fontSize:40, fontWeight:700, color:'var(--teal2)', lineHeight:1 }}>{q.ayatNum}</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-            <div style={{ fontSize:8, color:'var(--text3)', letterSpacing:1 }}>{surahInfo?.englishName?.toUpperCase()}</div>
+          <div style={{ fontFamily:"'Cinzel',serif", fontSize:38, fontWeight:700, color:'var(--teal2)', lineHeight:1 }}>{q.ayatNum}</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+              <span style={{ fontSize:9, color:'var(--text3)', letterSpacing:1, fontFamily:"'Cinzel',serif" }}>
+                {(surahs.find(s => s.number === qSn)?.englishName || surahInfo?.englishName || '').toUpperCase()}
+              </span>
+              {surahs.find(s => s.number === qSn)?.name && (
+                <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:14, color:'var(--gold)' }}>
+                  {surahs.find(s => s.number === qSn)?.name}
+                </span>
+              )}
+            </div>
             <MasteryBadge pct={computeMastery(ldQ)} />
           </div>
           {qAudioUrl && (
             <button onClick={toggleAudio}
-              style={{ width:44, height:44, borderRadius:'50%', border:'none',
+              style={{ width:42, height:42, borderRadius:'50%', border:'none',
                 background: isPlaying ? 'rgba(62,184,160,.25)' : 'rgba(62,184,160,.1)',
-                color:'var(--teal2)', fontSize:19, cursor:'pointer',
+                color:'var(--teal2)', fontSize:18, cursor:'pointer',
                 display:'flex', alignItems:'center', justifyContent:'center',
                 boxShadow: isPlaying ? '0 0 0 3px rgba(62,184,160,.3)' : 'none',
                 transition:'all .2s' }}>
-              {isPlaying ? '▊▊' : '▶'}
+              {isPlaying ? '⏸' : '▶'}
             </button>
           )}
         </div>
         {/* Question */}
-        <div style={{ textAlign:'center' }}>
-          <div style={{ fontSize:9, letterSpacing:2, color:'var(--text3)', marginBottom:6 }}>QUESTION</div>
-          <div style={{ fontSize:11, letterSpacing:1, color:'var(--gold2)', fontFamily:"'Cinzel',serif" }}>{q.question}</div>
-              </div>
-              {/* Arabic excerpt for find_ayat only — find_surah renders it internally */}
-              {q.questionData && q.type !== 'find_surah' && q.type !== 'unknown_word' && q.type !== 'unknown_pick' && q.type !== 'revise_word' && q.type !== 'revise_part' && (
-                <div style={{ fontFamily:"'Amiri Quran',serif", fontSize:22, direction:'rtl',
-                  textAlign:'center', color:'var(--text1)', padding:'12px 16px',
-                  background:'var(--surface3)', borderRadius:9,
-                  border:'1px solid var(--border)', lineHeight:2.2, width:'100%' }}>
-                  {q.questionData}
-                </div>
-              )}
+        <div style={{ textAlign:'center', width:'100%' }}>
+          <div style={{ fontSize:8, letterSpacing:2, color:'var(--text3)', marginBottom:6 }}>QUESTION</div>
+          <div style={{ fontSize:12, letterSpacing:1, color:'var(--gold2)', fontFamily:"'Cinzel',serif", lineHeight:1.5 }}>{q.question}</div>
+        </div>
+        {/* Arabic excerpt for find_ayat only — find_surah renders it internally */}
+        {q.questionData && q.type !== 'find_surah' && q.type !== 'unknown_word' && q.type !== 'unknown_pick' && q.type !== 'revise_word' && q.type !== 'revise_part' && (
+          <div style={{ fontFamily:"'Amiri Quran',serif", fontSize:22, direction:'rtl',
+            textAlign:'center', color:'var(--text1)', padding:'12px 16px',
+            background:'var(--surface3)', borderRadius:9,
+            border:'1px solid var(--border)', lineHeight:2.2, width:'100%' }}>
+            {q.questionData}
+          </div>
+        )}
         {/* Previous result hint */}
         {lastCorrect !== null && (
           <div style={{ fontSize:8, color:lastCorrect?'var(--green)':'var(--red)', letterSpacing:1 }}>
-            {lastCorrect ? '✓ Correct la dernière fois' : '✗ Incorrect la dernière fois'}
+            {lastCorrect ? '✓ Réussi la dernière fois' : '✗ Erreur la dernière fois'}
           </div>
         )}
         {/* Question type dispatch */}
-        {q.type === 'compare_verse' ? (
+        {q.type === 'first_contact' ? (
+          <FirstContactQuestion
+            key={q.id}
+            q={q}
+            onAnswer={answer}
+            globalNums={globalNums}
+            timestamps={timestamps}
+            ayatTexts={ayatTexts}
+          />
+        ) : q.type === 'compare_verse' ? (
           <CompareVerseQuestion q={q} onAnswer={answer} globalNums={globalNums} />
         ) : q.type === 'find_surah' ? (
           <FindSurahQuestion q={q} surahs={surahs} onAnswer={answer} />
@@ -746,10 +790,21 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
         ) : !revealed ? (
           <TextAnswerInput
             q={q}
-            onReveal={(autoCorrect) => { if (autoCorrect !== null) { answer(autoCorrect); } else { setRevealed(true); } }}
+            onInspect={(grade) => {
+              setLastAutoGrade(grade);
+              setRevealed(true);
+            }}
+            onReveal={(autoCorrect) => {
+              if (autoCorrect !== null) {
+                answer(autoCorrect);
+              } else {
+                setLastAutoGrade(null);
+                setRevealed(true);
+              }
+            }}
           />
         ) : (
-          <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:10 }}>
+          <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:12 }}>
             {/* Arabic text with parts + timestamps + word/part click audio */}
             <QAyatPlayer
               ayatText={ayatText}
@@ -759,23 +814,45 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
               learnData={ldQ}
             />
             {/* Answer highlight */}
-            <div style={{ padding:'10px 14px', background:'rgba(201,168,76,.07)', borderRadius:8,
+            <div style={{ padding:'12px 14px', background:'rgba(201,168,76,.07)', borderRadius:9,
               border:'1px solid var(--gold)', textAlign:'center' }}>
-              <div style={{ fontSize:8, color:'var(--text3)', letterSpacing:1, marginBottom:4 }}>RÉPONSE</div>
-              <div style={{ fontFamily:"'Amiri Quran',serif", fontSize:18, color:'var(--gold2)', direction:'rtl' }}>{q.answer}</div>
+              <div style={{ fontSize:8, color:'var(--text3)', letterSpacing:1.5, marginBottom:4 }}>RÉPONSE ATTENDUE</div>
+              <div style={{ fontFamily:"'Amiri Quran',serif", fontSize:20, color:'var(--gold2)', direction:'rtl', lineHeight:1.8 }}>{q.answer}</div>
               {q.hint && <div style={{ fontSize:9, color:'var(--text3)', marginTop:6, direction:'rtl', fontFamily:"'Amiri Quran',serif" }}>{q.hint}</div>}
             </div>
-            {/* Self-assess override buttons */}
-            <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:4 }}>
-              <button onClick={() => answer(false)}
-                style={{ flex:1, padding:'9px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-                  background:'rgba(224,90,90,.08)', border:'1px solid var(--red)', color:'var(--red)',
-                  borderRadius:8, cursor:'pointer' }}>✗ INCORRECT</button>
-              <button onClick={() => answer(true)}
-                style={{ flex:1, padding:'9px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
-                  background:'rgba(76,175,129,.12)', border:'1px solid var(--green)', color:'var(--green)',
-                  borderRadius:8, cursor:'pointer' }}>✓ CORRECT</button>
-            </div>
+
+            {/* Post-reveal decision buttons */}
+            {lastAutoGrade !== null ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:8, width:'100%' }}>
+                <button onClick={() => answer(lastAutoGrade)}
+                  style={{ width:'100%', padding:'11px', fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif",
+                    background: lastAutoGrade ? 'rgba(76,175,129,.18)' : 'rgba(224,90,90,.15)',
+                    border:'1px solid ' + (lastAutoGrade ? 'var(--green)' : 'var(--red)'),
+                    color: lastAutoGrade ? 'var(--green)' : 'var(--red)',
+                    borderRadius:8, cursor:'pointer' }}>
+                  {lastAutoGrade ? '✓ ENREGISTRER COMME EXACT — SUIVANT →' : '✗ ENREGISTRER COMME INCORRECT — SUIVANT →'}
+                </button>
+                <div style={{ display:'flex', justifyContent:'center' }}>
+                  <button onClick={() => answer(!lastAutoGrade)}
+                    style={{ padding:'5px 12px', fontSize:8, letterSpacing:1, fontFamily:"'Cinzel',serif",
+                      background:'transparent', border:'1px solid var(--border2)', color:'var(--text3)',
+                      borderRadius:6, cursor:'pointer' }}>
+                    {lastAutoGrade ? 'Changer pour : ✗ Incorrect' : 'Changer pour : ✓ Correct'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:4 }}>
+                <button onClick={() => answer(false)}
+                  style={{ flex:1, padding:'10px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
+                    background:'rgba(224,90,90,.08)', border:'1px solid var(--red)', color:'var(--red)',
+                    borderRadius:8, cursor:'pointer' }}>✗ INCORRECT</button>
+                <button onClick={() => answer(true)}
+                  style={{ flex:1, padding:'10px', fontSize:9, letterSpacing:2, fontFamily:"'Cinzel',serif",
+                    background:'rgba(76,175,129,.12)', border:'1px solid var(--green)', color:'var(--green)',
+                    borderRadius:8, cursor:'pointer' }}>✓ CORRECT</button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -8,7 +8,19 @@ export function PageStructureQuestion({ q, onAnswer, ayatTexts, globalNums, time
   const audioRefs = React.useRef({});
 
   const check = () => {
-    const ok = input.trim() === q.answer.trim();
+    const toAscii = str => String(str || '').replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).trim();
+    const cleanIn = toAscii(input);
+    const cleanAns = toAscii(q.answer);
+    let ok = cleanIn.toLowerCase() === cleanAns.toLowerCase();
+
+    // If answer contains numbers, check if extracted numbers match
+    if (!ok) {
+      const inNums = (cleanIn.match(/\d+/g) || []).map(Number).sort((a,b) => a - b);
+      const ansNums = (cleanAns.match(/\d+/g) || []).map(Number).sort((a,b) => a - b);
+      if (inNums.length > 0 && inNums.length === ansNums.length) {
+        ok = inNums.every((n, i) => n === ansNums[i]);
+      }
+    }
     setCorrect(ok); setChecked(true);
   };
 
@@ -120,12 +132,23 @@ export function PageStructureQuestion({ q, onAnswer, ayatTexts, globalNums, time
               {relevantAyatNums.map(n => <AyatCard key={n} ayatNum={n} />)}
             </div>
           )}
-          <button onClick={() => onAnswer(correct)}
-            style={{ padding:'7px 22px', background:'var(--surface3)',
-              border:'1px solid var(--border2)', borderRadius:7, color:'var(--text3)',
-              fontSize:9, letterSpacing:1, fontFamily:"'Cinzel',serif", cursor:'pointer', marginTop:4 }}>
-            CONTINUER →
-          </button>
+          <div style={{ display:'flex', gap:8, marginTop:6 }}>
+            {!correct && (
+              <button onClick={() => { setChecked(false); setInput(''); }}
+                style={{ padding:'8px 16px', background:'transparent',
+                  border:'1px solid var(--teal)', borderRadius:7, color:'var(--teal2)',
+                  fontSize:9, letterSpacing:1.5, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
+                ↺ RÉESSAYER
+              </button>
+            )}
+            <button onClick={() => onAnswer(correct)}
+              style={{ padding:'9px 24px', background: correct ? 'rgba(76,175,129,.18)' : 'rgba(224,90,90,.12)',
+                border:'1px solid ' + (correct ? 'var(--green)' : 'var(--red)'), borderRadius:7,
+                color: correct ? 'var(--green)' : 'var(--red)',
+                fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif", cursor:'pointer' }}>
+              CONTINUER →
+            </button>
+          </div>
         </div>
       )}
     </div>

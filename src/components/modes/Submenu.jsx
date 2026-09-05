@@ -12,7 +12,7 @@ import { RevisionEcritureMode } from "./RevisionEcritureMode.jsx";
 import { TajweedExercice } from "./TajweedExercice.jsx";
 import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 
-export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive }) {
+export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive, translationLang, ayatTranslation, wbwWords }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="submenu" onClick={e => e.stopPropagation()}>
@@ -78,7 +78,10 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
                 isSelectingThisAyat={partSelectAyat === ayat.numberInSurah}
                 partSelectStep={partSelectStep}
                 onStartPartCreate={onStartPartCreate}
-                clickMode={aideMemoireClickMode} setClickMode={setAideMemoireClickMode} />
+                clickMode={aideMemoireClickMode} setClickMode={setAideMemoireClickMode}
+                translationLang={translationLang}
+                ayatTranslation={ayatTranslation}
+                wbwWords={wbwWords} />
             : submenuMode === "infos"
             ? <InfoMode ayat={ayat} ld={ld} setLData={setLData} surahNum={surahNum} />
             : submenuMode === "memoire"

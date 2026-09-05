@@ -1,9 +1,13 @@
 import { RecitationChecker } from "../modes/RecitationChecker.jsx";
 import React, { useState, useMemo } from "react";
 import { PartAudioPlayer } from "./PartAudioPlayer.jsx";
+import { getPartTranslation } from "../../utils/translationUtils.js";
 
-export function PartItem({ part, pi, words, timestamps, audioUrl, update }) {
+export function PartItem({ part, pi, allParts, words, timestamps, audioUrl, update, translationLang, ayatTranslation, wbwWords, onOpenDebug }) {
   const [learningStep, setLearningStep] = useState(0); // 0=idle 1=écoute(audio+texte) 2=mémo(audio sans texte) 3=récit
+  const [isEditingTranslation, setIsEditingTranslation] = useState(false);
+  const [editTransText, setEditTransText] = useState("");
+
   const fakeAyat = useMemo(() => ({ text: part.text, numberInSurah: part.id }), [part.text, part.id]);
 
   const STEPS = [
@@ -14,6 +18,38 @@ export function PartItem({ part, pi, words, timestamps, audioUrl, update }) {
   ];
   const btnStep = learningStep < 3 ? STEPS[learningStep] : STEPS[3];
   const advance = () => setLearningStep(s => s >= 3 ? 0 : s + 1);
+
+  // Traduction spécifique de cette partie dans la langue sélectionnée (fr, de, es, ru, en, etc.)
+  const displayTranslation = useMemo(() => {
+    return getPartTranslation({
+      part,
+      allParts,
+      totalWords: words?.length || (part.text ? part.text.split(" ").filter(Boolean).length : 0),
+      ayatTranslation,
+      translationLang,
+      wbwWords,
+      words,
+    });
+  }, [part, allParts, words, ayatTranslation, translationLang, wbwWords]);
+
+  const saveEditedTranslation = () => {
+    const text = editTransText.trim();
+    const langKey = translationLang || 'custom';
+    update(d => ({
+      ...d,
+      parts: d.parts.map(p => {
+        if (p.id !== part.id) return p;
+        return {
+          ...p,
+          customTranslations: { ...(p.customTranslations || {}), [langKey]: text },
+          manualTranslations: { ...(p.manualTranslations || {}), [langKey]: text },
+          translations: { ...(p.translations || {}), [langKey]: text },
+          translation: text,
+        };
+      })
+    }));
+    setIsEditingTranslation(false);
+  };
 
   return (
     <div className={`part-item${part.learned ? " part-learned" : ""}`}>
@@ -61,6 +97,120 @@ export function PartItem({ part, pi, words, timestamps, audioUrl, update }) {
           textAlign:'center', fontSize:8, letterSpacing:2, color:'rgba(255,209,102,.35)',
           fontFamily:"'Cinzel',serif" }}>
           TEXTE MASQUÉ — RÉCITEZ DE MÉMOIRE
+        </div>
+      )}
+
+      {/* Traduction spécifique de la partie quand activée */}
+      {(translationLang || displayTranslation) && (
+        <div className="part-translation" style={{
+          margin: '0 12px 8px',
+          padding: '6px 10px',
+          borderRadius: 6,
+          background: 'rgba(91,200,245,.06)',
+          border: '1px solid rgba(91,200,245,.2)',
+          fontSize: 10.5,
+          color: 'rgba(91,200,245,.9)',
+          fontStyle: 'italic',
+          lineHeight: 1.55,
+          direction: translationLang === 'ur' ? 'rtl' : 'ltr',
+        }}>
+          {isEditingTranslation ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontStyle: 'normal' }}>
+              <input
+                type="text"
+                value={editTransText}
+                onChange={e => setEditTransText(e.target.value)}
+                placeholder="Traduction de cette partie..."
+                autoFocus
+                style={{
+                  width: '100%',
+                  background: 'var(--surface2)',
+                  border: '1px solid #5bc8f5',
+                  borderRadius: 4,
+                  padding: '4px 8px',
+                  color: '#fff',
+                  fontSize: 11,
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setIsEditingTranslation(false)}
+                  style={{
+                    fontSize: 8, padding: '2px 8px', borderRadius: 4,
+                    background: 'transparent', border: '1px solid var(--border2)',
+                    color: 'var(--text3)', cursor: 'pointer', fontFamily: "'Cinzel',serif"
+                  }}>
+                  ANNULER
+                </button>
+                <button
+                  onClick={saveEditedTranslation}
+                  style={{
+                    fontSize: 8, padding: '2px 8px', borderRadius: 4,
+                    background: 'rgba(91,200,245,.2)', border: '1px solid #5bc8f5',
+                    color: '#5bc8f5', cursor: 'pointer', fontFamily: "'Cinzel',serif"
+                  }}>
+                  ENREGISTRER
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+              <div>
+                <span style={{
+                  fontSize: 8,
+                  fontFamily: "'Cinzel',serif",
+                  letterSpacing: 1,
+                  color: '#5bc8f5',
+                  display: 'inline-block',
+                  marginRight: 6,
+                  fontStyle: 'normal',
+                  fontWeight: 700,
+                }}>
+                  🌐 PARTIE {pi + 1} {translationLang ? `(${translationLang.toUpperCase()})` : ''} :
+                </span>
+                {displayTranslation || <span style={{ opacity: 0.6 }}>(Traduction non disponible)</span>}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                {onOpenDebug && (
+                  <button
+                    onClick={onOpenDebug}
+                    title="Inspecter le calcul de découpage de la traduction (Debug UI)"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(91,200,245,.8)',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      padding: '1px 3px',
+                      borderRadius: 3,
+                    }}
+                  >
+                    🔬
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setEditTransText(displayTranslation || "");
+                    setIsEditingTranslation(true);
+                  }}
+                  title="Modifier la traduction de cette partie"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'rgba(91,200,245,.7)',
+                    cursor: 'pointer',
+                    fontSize: 10,
+                    padding: '1px 4px',
+                    borderRadius: 3,
+                  }}
+                >
+                  ✎
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

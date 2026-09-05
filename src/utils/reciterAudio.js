@@ -117,6 +117,32 @@ export async function fetchSurahTranslation(sn, lang) {
   idbSetQuran(idbKey, result).catch(() => {});
   return result;
 }
+
+// fetchSurahWbw(sn, lang) → { [numberInSurah]: [word1Trans, word2Trans, ...] } cached in IDB
+export async function fetchSurahWbw(sn, lang = 'fr') {
+  if (!lang) return {};
+  const idbKey = `wbw:${lang}:${sn}`;
+  try { const c = await idbGetQuran(idbKey); if (c && Object.keys(c).length > 0) return c; } catch {}
+  try {
+    const r = await fetch(`https://api.quran.com/api/v4/verses/by_chapter/${sn}?words=true&language=${encodeURIComponent(lang)}&word_translation_language=${encodeURIComponent(lang)}&per_page=300`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const verses = j.verses || [];
+    const result = {};
+    verses.forEach(v => {
+      const realWords = (v.words || []).filter(w => w.char_type_name !== 'end');
+      result[v.verse_number] = realWords.map(w => {
+        const t = w.translation?.text || '';
+        return t.replace(/<[^>]*>?/gm, '').trim();
+      });
+    });
+    idbSetQuran(idbKey, result).catch(() => {});
+    return result;
+  } catch (err) {
+    console.warn("fetchSurahWbw error:", err);
+    return {};
+  }
+}
 export async function fetchAyats(n) {
   const idbKey = `alafasy:${n}`;
   try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}

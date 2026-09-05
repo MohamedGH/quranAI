@@ -52,9 +52,10 @@ import { AideMemoireMode } from "./components/modes/AideMemoireMode.jsx";
 import { parseVoiceCommand, SURAH_NAMES } from "./utils/voiceCommand.js";
 import { normalizeArabic, diffRecitation } from "./utils/recitationDiff.js";
 import { splitArabicWords, splitArabicChars, splitArabicClusters, stripDiacritics, wordTranslit, calcDifficulty, calcPhase, arabicRoot, ARABIC_ROOTS } from "./utils/arabicUtils.js";
+import { segmentAyatTranslation } from "./utils/translationUtils.js";
 import {
   API, AUDIO_CDN_ROOT, RECITATORS, TRANS_EDITIONS, TRANS_LABELS,
-  fetchSurahs, fetchSurahTranslation, fetchAyats, fetchSurahSimple, fetchSurahDefault,
+  fetchSurahs, fetchSurahTranslation, fetchSurahWbw, fetchAyats, fetchSurahSimple, fetchSurahDefault,
   fetchSurahMeta, fetchAyahMeta, fetchQuranPage, fetchPageMeta,
   loadTimestampsForSurah, fixChars, getAudioBase, getReciterBitrate, getGlobalRecitator, setGlobalRecitator,
   fetchOfficialBitrates, markBitrateBad, setReciterBitrate, bitrateOrderFor, quranMemCache, parseTimestampsFile
@@ -461,8 +462,17 @@ function AppInner({ currentUser, onSignOut }) {
   }, []);
   const [ayatSearchInput, setAyatSearchInput] = useState("");
   const [autoPageFollow, setAutoPageFollow] = useState(true);
-  const [translationLang, setTranslationLang] = useState(null); // null | 'fr'|'en'|'tr'…
+  const [translationLang, setTranslationLang] = useState(() => {
+    try { return localStorage.getItem('quran_trans_lang') || null; } catch { return null; }
+  }); // null | 'fr'|'en'|'tr'…
+  useEffect(() => {
+    try {
+      if (translationLang) localStorage.setItem('quran_trans_lang', translationLang);
+      else localStorage.removeItem('quran_trans_lang');
+    } catch {}
+  }, [translationLang]);
   const [translations, setTranslations] = useState({}); // { 'fr:2': [{numberInSurah, text}] }
+  const [wbwTranslations, setWbwTranslations] = useState({}); // { 'fr:2': { [ayahNum]: [word1, word2] } }
   const [activePageCoran,  setactivePageCoran]  = useState(null);
   React.useEffect(() => { try { localStorage.setItem('quran_page_mode', JSON.stringify(pageMode)); } catch {} }, [pageMode]);
   const rafRef       = useRef(null);
@@ -513,10 +523,16 @@ function AppInner({ currentUser, onSignOut }) {
   useEffect(() => {
     if (!translationLang || !selectedSurah) return;
     const key = `${translationLang}:${selectedSurah.number}`;
-    if (translations[key]) return;
-    fetchSurahTranslation(selectedSurah.number, translationLang).then(data => {
-      setTranslations(p => ({ ...p, [key]: data }));
-    }).catch(() => {});
+    if (!translations[key]) {
+      fetchSurahTranslation(selectedSurah.number, translationLang).then(data => {
+        setTranslations(p => ({ ...p, [key]: data }));
+      }).catch(() => {});
+    }
+    if (!wbwTranslations[key]) {
+      fetchSurahWbw(selectedSurah.number, translationLang).then(data => {
+        setWbwTranslations(p => ({ ...p, [key]: data }));
+      }).catch(() => {});
+    }
   }, [translationLang, selectedSurah?.number]);
 
   // pageMode: auto-change page when mainAyatIdx moves to a different page, then scroll to ayat
@@ -2135,7 +2151,7 @@ function AppInner({ currentUser, onSignOut }) {
                       🌐 {langLabel} <span style={{fontSize:6.5,marginLeft:1}}>{showLangPanel ? "▲" : "▼"}</span>
                     </button>
                     {showLangPanel && (
-                      <div className="panel-expand panel-expand-right">
+                      <div className="panel-expand">
                         <div className="tajweed-panel">
                           <div className="panel-header-title">
                             <span style={{ fontSize:8, letterSpacing:1, color:'var(--teal2)', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
@@ -2395,8 +2411,25 @@ function AppInner({ currentUser, onSignOut }) {
                           const clampedFrom = Math.max(from, nextAvail);
                           const indices = []; for (let i = clampedFrom; i <= to; i++) indices.push(i);
                           if (indices.length === 0) return;
+                          const ayatTransText = translationLang && translations[`${translationLang}:${selectedSurah.number}`]
+                            ? (translations[`${translationLang}:${selectedSurah.number}`].find(t => t.numberInSurah === ayat.numberInSurah)?.text || "")
+                            : "";
+                          const curWbw = wbwTranslations[`${translationLang}:${selectedSurah.number}`]?.[ayat.numberInSurah];
+                          const newPartObj = {
+                            id: Date.now(),
+                            wordIndices: indices,
+                            text: indices.map(i => ayatWords[i]).join(" "),
+                            learned: !!ld?.learned
+                          };
+                          const allPartsSimulated = [...(ld?.parts || []), newPartObj];
+                          const autoTrans = ayatTransText
+                            ? segmentAyatTranslation(ayatTransText, indices, ayatWords.length, allPartsSimulated, curWbw, ayatWords, translationLang || 'fr')
+                            : (curWbw ? indices.map(i => curWbw[i]).filter(Boolean).join(" ") : "");
                           setLData(selectedSurah.number, ayat.numberInSurah, d => ({
-                            ...d, parts: [...(d.parts || []), { id: Date.now(), wordIndices: indices, text: indices.map(i => ayatWords[i]).join(" "), learned: !!d.learned }]
+                            ...d, parts: [...(d.parts || []), {
+                              ...newPartObj,
+                              translations: translationLang && autoTrans ? { [translationLang]: autoTrans } : {},
+                            }]
                           }));
                           const newNext = to + 1;
                           if (newNext < ayatWords.length) {
@@ -2780,6 +2813,9 @@ function AppInner({ currentUser, onSignOut }) {
                               setAideMemoireClickMode={(m)=>setAideMemoireClickModes(prev=>({...prev,[ayat.numberInSurah]:m}))}
                               spellCheck={spellCheck}
                               ayatLoopActive={loopActive && loopStartNum === ayat.numberInSurah && loopEndNum === ayat.numberInSurah}
+                              translationLang={translationLang}
+                              ayatTranslation={translations[`${translationLang}:${selectedSurah.number}`]?.find(t => t.numberInSurah === ayat.numberInSurah)?.text}
+                              wbwWords={wbwTranslations[`${translationLang}:${selectedSurah.number}`]?.[ayat.numberInSurah] || null}
                               onSetLoop={() => {
                                 const idx = ayats.findIndex(a => a.numberInSurah === ayat.numberInSurah);
                                 if (idx === -1) return;

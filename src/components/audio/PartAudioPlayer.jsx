@@ -35,30 +35,44 @@ export function PartAudioPlayer({ part, words, timestamps, audioUrl, autoPlay, h
 
   const play = useCallback((loop, fromMs) => {
     const audio = audioRef.current;
-    if (!audio || !timeRange) return;
-    const startAt = fromMs ?? timeRange.startMs;
-    audio.currentTime = startAt / 1000;
-    audio.play().catch(() => {});
-    setPlaying(true);
-    stopRaf();
-    const tick = () => {
-      if (!audioRef.current) return;
-      const ms = audioRef.current.currentTime * 1000;
-      setCurrentMs(ms);
-      if (ms >= timeRange.endMs) {
-        if (loop) {
-          audioRef.current.currentTime = timeRange.startMs / 1000;
-          audioRef.current.play().catch(() => {});
-          rafRef.current = requestAnimationFrame(tick);
+    if (!audio) return;
+    if (timeRange) {
+      const startAt = fromMs ?? timeRange.startMs;
+      audio.currentTime = startAt / 1000;
+      audio.play().catch(() => {});
+      setPlaying(true);
+      stopRaf();
+      const tick = () => {
+        if (!audioRef.current) return;
+        const ms = audioRef.current.currentTime * 1000;
+        setCurrentMs(ms);
+        if (ms >= timeRange.endMs) {
+          if (loop) {
+            audioRef.current.currentTime = timeRange.startMs / 1000;
+            audioRef.current.play().catch(() => {});
+            rafRef.current = requestAnimationFrame(tick);
+          } else {
+            stop();
+          }
         } else {
-          stop();
+          rafRef.current = requestAnimationFrame(tick);
         }
-      } else {
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } else if (audioUrl) {
+      audio.currentTime = fromMs != null ? fromMs / 1000 : (audio.currentTime || 0);
+      audio.play().catch(() => {});
+      setPlaying(true);
+      stopRaf();
+      const tick = () => {
+        if (!audioRef.current) return;
+        const ms = audioRef.current.currentTime * 1000;
+        setCurrentMs(ms);
         rafRef.current = requestAnimationFrame(tick);
-      }
-    };
-    rafRef.current = requestAnimationFrame(tick);
-  }, [timeRange, stop, stopRaf]);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    }
+  }, [timeRange, audioUrl, stop, stopRaf]);
 
   const playFromWord = useCallback((wi) => {
     if (!timestamps?.words) return;
@@ -72,16 +86,16 @@ export function PartAudioPlayer({ part, words, timestamps, audioUrl, autoPlay, h
   useEffect(() => () => { stopRaf(); audioRef.current?.pause(); }, [stopRaf]);
 
   // auto-start when mounted with autoPlay prop
-  useEffect(() => { if (autoPlay && timeRange) { setTimeout(() => play(true), 80); } }, [autoPlay, !!timeRange]);
+  useEffect(() => { if (autoPlay) { setTimeout(() => play(true), 80); } }, [autoPlay, play]);
 
-  if (!timeRange) return (
+  if (!timeRange && !audioUrl) return (
     <div style={{ fontSize:8, color:"var(--text3)", letterSpacing:1, padding:"4px 0" }}>
-      Aucun timestamp — chargez un fichier JSON dans l'onglet ÉCOUTER
+      Aucun audio disponible
     </div>
   );
 
-  const durationMs = timeRange.endMs - timeRange.startMs;
-  const progress   = durationMs > 0 ? Math.min(1, Math.max(0, (currentMs - timeRange.startMs) / durationMs)) : 0;
+  const durationMs = timeRange ? (timeRange.endMs - timeRange.startMs) : ((audioRef.current?.duration || 0) * 1000);
+  const progress   = durationMs > 0 ? Math.min(1, Math.max(0, (timeRange ? (currentMs - timeRange.startMs) : currentMs) / durationMs)) : 0;
 
   return (
     <div>

@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { CreatePartFromAudio } from "../audio/CreatePartFromAudio.jsx";
 import { PartItem } from "../audio/PartItem.jsx";
+import { PartAudioPlayer } from "../audio/PartAudioPlayer.jsx";
 import { RecitationChecker } from "./RecitationChecker.jsx";
+import { TranslationDebugModal } from "../debug/TranslationDebugModal.jsx";
 import { arabicRoot } from "../../utils/arabicUtils.js";
+import { segmentAyatTranslation } from "../../utils/translationUtils.js";
 
-export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, audioUrl, isSelectingThisAyat, partSelectStep, onStartPartCreate, clickMode, setClickMode }) {
+export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, audioUrl, isSelectingThisAyat, partSelectStep, onStartPartCreate, clickMode, setClickMode, translationLang, ayatTranslation, wbwWords }) {
   const words  = ayat.text ? ayat.text.split(" ").filter(Boolean) : [];
   const update = fn => setLData(surahNum, ayat.numberInSurah, fn);
   const allWordsLearned = words.length > 0 && words.every((_, i) => ld.wordsLearned?.[i]);
@@ -13,6 +16,26 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
 
   const [showCreateAudio, setShowCreateAudio] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
+  const [showDebugModal, setShowDebugModal] = useState(false);
+
+  // Workflow complet pour l'ayat principale (Écouter, Mémoriser, Réciter)
+  const [mainLearningStep, setMainLearningStep] = useState(0); // 0=idle 1=écoute(audio+texte) 2=mémo(audio sans texte) 3=récit
+  const fullAyatPart = useMemo(() => ({
+    id: `full-${ayat.numberInSurah}`,
+    text: ayat.text,
+    wordIndices: words.map((_, i) => i),
+    learned: !!ld.learned,
+    recitAttempts: ld.recitAttempts || [],
+  }), [ayat.text, ayat.numberInSurah, words, ld.learned, ld.recitAttempts]);
+
+  const STEPS = [
+    { label: '① ÉCOUTER',   color: '#5bc8f5', bg: 'rgba(91,200,245,.12)' },
+    { label: '② MÉMORISER', color: '#ffd166', bg: 'rgba(255,209,102,.12)' },
+    { label: '③ RÉCITER',   color: '#c878ff', bg: 'rgba(200,120,255,.12)' },
+    { label: '↺ RESET',     color: 'var(--text3)', bg: 'transparent' },
+  ];
+  const btnMainStep = mainLearningStep < 3 ? STEPS[mainLearningStep] : STEPS[3];
+  const advanceMain = () => setMainLearningStep(s => s >= 3 ? 0 : s + 1);
 
   const wordsInParts = useMemo(() => {
     const s = new Set();
@@ -33,7 +56,28 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
   }, [timestamps, wordsInParts]);
 
   const handleCreateFromAudio = ({ wordIndices, text }) => {
-    update(d => ({ ...d, parts: [...(d.parts || []), { id: Date.now(), wordIndices, text, learned: !!d.learned }] }));
+    const existingParts = ld.parts || [];
+    const newPart = {
+      id: Date.now(),
+      wordIndices,
+      text,
+      learned: !!ld.learned,
+    };
+    const allPartsSimulated = [...existingParts, newPart];
+    const autoTrans = ayatTranslation
+      ? segmentAyatTranslation(ayatTranslation, wordIndices, words.length, allPartsSimulated, wbwWords, words, translationLang || 'fr')
+      : (translationLang === 'en' && wbwWords && wordIndices ? wordIndices.map(i => wbwWords[i]).filter(Boolean).join(" ") : "");
+
+    update(d => ({
+      ...d,
+      parts: [
+        ...(d.parts || []),
+        {
+          ...newPart,
+          translations: translationLang && autoTrans ? { [translationLang]: autoTrans } : {},
+        }
+      ]
+    }));
   };
 
   return (
@@ -51,6 +95,112 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
         })}>{ld.learned ? "✓ APPRIS" : "MARQUER COMME APPRIS"}</button>
         {ld.parts?.length > 0 &&
           <button className="btn-small" onClick={() => update(d => ({ ...d, parts: [], wordsLearned: {} }))}>RÉINITIALISER</button>}
+      </div>
+
+      {/* ── Workflow Ayat Principale (Écouter, Mémoriser, Réciter) ── */}
+      <div style={{ border:"1px solid var(--border)", borderRadius:8, overflow:"hidden", background:"var(--surface)", marginBottom:10 }}>
+        <div style={{
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"8px 12px", background:"var(--surface2)", borderBottom:"1px solid var(--border)"
+        }}>
+          <div style={{ fontSize:9, letterSpacing:2, color:"var(--gold2)", fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+            AYAT PRINCIPALE · {words.length} MOTS
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <button onClick={advanceMain} style={{
+              fontSize:8, letterSpacing:1, padding:'3px 10px', borderRadius:6, cursor:'pointer',
+              fontFamily:"'Cinzel',serif", transition:'all .2s',
+              background: btnMainStep.bg, border:`1px solid ${btnMainStep.color}`, color: btnMainStep.color,
+            }}>{btnMainStep.label}</button>
+            <button className={`btn-small${ld.learned ? " done" : ""}`}
+              onClick={() => update(d => {
+                const newLearned = !d.learned;
+                return {
+                  ...d,
+                  learned: newLearned,
+                  parts: newLearned ? (d.parts || []).map(p => ({ ...p, learned: true })) : d.parts,
+                };
+              })}>
+              {ld.learned ? "✓ APPRIS" : "APPRIS"}
+            </button>
+          </div>
+        </div>
+
+        {/* Progress bar steps 1-3 */}
+        {mainLearningStep > 0 && (
+          <div style={{ display:'flex', gap:4, padding:'6px 12px 0' }}>
+            {STEPS.slice(0,3).map((s,i) => (
+              <div key={i} style={{ flex:1, height:3, borderRadius:2, transition:'background .3s',
+                background: i < mainLearningStep ? s.color : 'rgba(255,255,255,.08)' }} />
+            ))}
+          </div>
+        )}
+
+        {/* Audio player & text synchronisé de l'ayat principale */}
+        {mainLearningStep < 3 && (
+          <div style={{ padding: mainLearningStep === 0 ? "8px 12px 10px" : "6px 12px 8px" }}>
+            <PartAudioPlayer
+              key={`main-step-${mainLearningStep}`}
+              part={fullAyatPart}
+              words={words}
+              timestamps={timestamps}
+              audioUrl={audioUrl}
+              autoPlay={mainLearningStep > 0}
+              hideText={mainLearningStep === 2}
+            />
+          </div>
+        )}
+
+        {/* Step 2: Texte masqué pour mémorisation */}
+        {mainLearningStep === 2 && (
+          <div style={{ margin:'0 12px 8px', padding:'8px', borderRadius:6,
+            background:'rgba(255,209,102,.04)', border:'1px dashed rgba(255,209,102,.2)',
+            textAlign:'center', fontSize:8, letterSpacing:2, color:'rgba(255,209,102,.4)',
+            fontFamily:"'Cinzel',serif" }}>
+            TEXTE MASQUÉ — RÉCITEZ DE MÉMOIRE
+          </div>
+        )}
+
+        {/* Step 3: Vérificateur de récitation pour l'ayat principale */}
+        {mainLearningStep === 3 && (
+          <div style={{ padding:"4px 12px 12px" }}>
+            <RecitationChecker ayat={ayat} attempts={ld.recitAttempts||[]} saveScore={s => update(d => ({
+              ...d,
+              recitAttempts: [...(d.recitAttempts||[]).slice(-49), s],
+              ...(s.score === 100 ? { learned: true } : {})
+            }))} />
+          </div>
+        )}
+
+        {/* Traduction de l'ayat principale quand activée */}
+        {ayatTranslation && (
+          <div style={{
+            margin: '0 12px 10px',
+            padding: '6px 10px',
+            borderRadius: 6,
+            background: 'rgba(91,200,245,.06)',
+            border: '1px solid rgba(91,200,245,.2)',
+            fontSize: 10.5,
+            color: 'rgba(91,200,245,.9)',
+            fontStyle: 'italic',
+            lineHeight: 1.55,
+            direction: translationLang === 'ur' ? 'rtl' : 'ltr',
+          }}>
+            <span style={{
+              fontSize: 8,
+              fontFamily: "'Cinzel',serif",
+              letterSpacing: 1,
+              color: '#5bc8f5',
+              display: 'inline-block',
+              marginRight: 6,
+              fontStyle: 'normal',
+              fontWeight: 700,
+            }}>
+              🌐 TRADUCTION {translationLang ? `(${translationLang.toUpperCase()})` : ''} :
+            </span>
+            {ayatTranslation}
+          </div>
+        )}
       </div>
 
       <div style={{ border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
@@ -91,6 +241,15 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
                   🎵 CRÉER VIA AUDIO
                 </button>
               )}
+              <button
+                id="btn-open-trad-debug"
+                className="btn-small"
+                style={{ borderColor: "rgba(91, 200, 245, 0.4)", color: "#5bc8f5", display: "inline-flex", alignItems: "center", gap: 4 }}
+                onClick={() => setShowDebugModal(true)}
+                title="Tester et diagnostiquer le fonctionnement du découpage de traduction"
+              >
+                🔬 DEBUG TRAD
+              </button>
             </div>
 
             {isSelectingThisAyat && (
@@ -114,7 +273,20 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
             )}
 
             {(ld.parts || []).map((part, pi) => (
-              <PartItem key={part.id} part={part} pi={pi} words={words} timestamps={timestamps} audioUrl={audioUrl} update={update} />
+              <PartItem
+                key={part.id}
+                part={part}
+                pi={pi}
+                allParts={ld.parts || []}
+                words={words}
+                timestamps={timestamps}
+                audioUrl={audioUrl}
+                update={update}
+                translationLang={translationLang}
+                ayatTranslation={ayatTranslation}
+                wbwWords={wbwWords}
+                onOpenDebug={() => setShowDebugModal(true)}
+              />
             ))}
             {ld.parts?.length === 0 && !isSelectingThisAyat && !showCreateAudio && (
               <div style={{ fontSize: 9, color: "var(--text3)", letterSpacing: 1 }}>
@@ -124,7 +296,20 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
           </div>
         )}
       </div>
-      <RecitationChecker ayat={ayat} attempts={ld.recitAttempts||[]} saveScore={s => update(d => ({ ...d, recitAttempts: [...(d.recitAttempts||[]).slice(-49), s], ...(s.score === 100 ? { learned: true } : {}) }))} />
+
+      {/* MODAL DE DEBUG TRADUCTION */}
+      {showDebugModal && (
+        <TranslationDebugModal
+          isOpen={showDebugModal}
+          onClose={() => setShowDebugModal(false)}
+          ayat={ayat}
+          surahNum={surahNum}
+          parts={ld.parts || []}
+          translationLang={translationLang}
+          ayatTranslation={ayatTranslation}
+          wbwWords={wbwWords}
+        />
+      )}
 
       {/* MOTS À SURLIGNER */}
       <div style={{display:'flex',flexDirection:'column',gap:8,padding:'12px 14px',borderTop:'1px solid var(--border)'}}>

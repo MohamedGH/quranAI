@@ -202,12 +202,12 @@ export const CSS = `
   .ts-global-bar{background:var(--surface2);border-bottom:1px solid var(--border);padding:2px 10px;display:flex;align-items:center;gap:5px;flex-shrink:0;position:relative;z-index:20;min-height:26px;}
   .panel-row{position:relative;}
   .panel-expand{
-    position:absolute;top:calc(100% + 4px);left:0;z-index:50;
-    min-width:280px;max-width:min(440px, calc(100vw - 20px));width:max-content;
+    position:absolute;top:calc(100% + 4px);left:0;z-index:150;
+    min-width:280px;max-width:min(440px, calc(100vw - 24px));width:max-content;
     animation:panelDropdownIn .16s cubic-bezier(.2,0,0,1) forwards;
   }
   .panel-expand-right{
-    left:auto !important;right:0 !important;
+    left:auto;right:0;max-width:min(440px, calc(100vw - 24px));
   }
   @keyframes panelDropdownIn{
     from{opacity:0;transform:translateY(-5px) scale(0.98);}

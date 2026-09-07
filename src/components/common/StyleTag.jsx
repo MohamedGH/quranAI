@@ -982,6 +982,31 @@ export const CSS = `
 
     /* Voice help full-width on mobile */
     .voice-help{ right:8px; left:8px; max-width:none; top:calc(var(--header-h) + 6px); }
+
+    /* Ayat FullScreen Modal (Big View) Mobile Overrides */
+    .hide-mobile{ display:none !important; }
+    .show-mobile{ display:inline-flex !important; }
+    .fs-float-nav{ display:none !important; }
+
+    #ayat-fullscreen-modal .fs-header{ padding: max(env(safe-area-inset-top, 0px), 6px) 10px 6px 10px !important; }
+    #ayat-fullscreen-modal .fs-body{ padding: 12px 10px calc(86px + env(safe-area-inset-bottom, 0px)) !important; }
+    #ayat-fullscreen-modal .fs-footer{ padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)) !important; }
+    #ayat-fullscreen-modal .fs-arabic-text{ padding: 0 4px !important; line-height: 2.1 !important; }
+    #ayat-fullscreen-modal .fs-reciter-dialog{
+      max-height: 80vh !important;
+      border-radius: 16px 16px 0 0 !important;
+      align-self: flex-end !important;
+      margin: 0 !important;
+      width: 100% !important;
+    }
+  }
+
+  /* Utility display classes default */
+  .hide-mobile{ display:inline-flex; }
+  .show-mobile{ display:none; }
+  .fs-float-nav{ display:flex; }
+  @media (max-width:768px){
+    .fs-float-nav{ display:none !important; }
   }
 
   /* ══════════════════════════════════════════════════════════════════

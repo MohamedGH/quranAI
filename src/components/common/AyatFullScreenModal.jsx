@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ArabicHighlighted, PlayingArabicHighlighted } from "./ArabicHighlighted.jsx";
 import { Submenu } from "../modes/Submenu.jsx";
 import { isQalqala, getMaddType, isIzhar, isIdgham } from "../../utils/tajweedRules.js";
-import { splitArabicClusters, arabicRoot } from "../../utils/arabicUtils.js";
+import { arabicRoot } from "../../utils/arabicUtils.js";
 import { segmentAyatTranslation } from "../../utils/translationUtils.js";
 
 // Helper for Arabic Eastern digits: e.g. 108 -> ۱۰۸
@@ -73,13 +73,25 @@ export function AyatFullScreenModal({
   spellCheck,
   wbwWords,
 }) {
+  // Detect mobile screen width
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 640 : false));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 640);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Font scale (stored in localStorage)
   const [fontSize, setFontSize] = useState(() => {
     try {
       const saved = localStorage.getItem("quran_fs_fontsize");
-      return saved ? Math.max(22, Math.min(56, parseInt(saved, 10))) : 34;
+      if (saved) return Math.max(18, Math.min(54, parseInt(saved, 10)));
+      return typeof window !== "undefined" && window.innerWidth <= 640 ? 27 : 34;
     } catch {
-      return 34;
+      return 32;
     }
   });
 
@@ -90,6 +102,36 @@ export function AyatFullScreenModal({
   const [showReciterModal, setShowReciterModal] = useState(false);
   const [reciterSearch, setReciterSearch] = useState("");
   const scrollContainerRef = useRef(null);
+
+  // Touch swipe handling for mobile
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+
+  const handleTouchStart = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current == null || touchStartY.current == null) return;
+    if (!e.changedTouches || e.changedTouches.length === 0) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartX.current = null;
+    touchStartY.current = null;
+
+    // Horizontal swipe must dominate vertical scroll
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < -60 && ayat && ayat.numberInSurah < (selectedSurah?.numberOfAyahs || ayats.length)) {
+        // Swipe left -> Next verse
+        onSelectAyat?.(ayat.numberInSurah + 1);
+      } else if (dx > 60 && ayat && ayat.numberInSurah > 1) {
+        // Swipe right -> Previous verse
+        onSelectAyat?.(ayat.numberInSurah - 1);
+      }
+    }
+  };
 
   // Sync native fullscreen state
   useEffect(() => {
@@ -103,7 +145,7 @@ export function AyatFullScreenModal({
   // Update font size helper
   const updateFontSize = (delta) => {
     setFontSize((prev) => {
-      const next = Math.max(22, Math.min(56, prev + delta));
+      const next = Math.max(18, Math.min(54, prev + delta));
       try { localStorage.setItem("quran_fs_fontsize", String(next)); } catch {}
       return next;
     });
@@ -129,7 +171,9 @@ export function AyatFullScreenModal({
 
       if (e.key === "Escape") {
         e.preventDefault();
-        if (showReciterModal) {
+        if (showQuickSettings) {
+          setShowQuickSettings(false);
+        } else if (showReciterModal) {
           setShowReciterModal(false);
         } else {
           onClose();
@@ -155,7 +199,7 @@ export function AyatFullScreenModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, ayat, ayats.length, onClose, onSelectAyat, onTogglePlay, toggleNativeFullscreen, showReciterModal]);
+  }, [isOpen, ayat, ayats.length, onClose, onSelectAyat, onTogglePlay, toggleNativeFullscreen, showReciterModal, showQuickSettings]);
 
   // Scroll to top when ayat changes
   useEffect(() => {
@@ -213,7 +257,6 @@ export function AyatFullScreenModal({
   // Word click handler for selection or aide-mémoire
   const handleInlineWordClick = (e, wi) => {
     e.stopPropagation();
-    // 1. Aide mémoire click modes
     if (aideMemoireClickMode === 'highlight') {
       const normW = normalizeAr(ayatWords[wi] || '');
       const currentHl = (ld?.highlight || '').trim();
@@ -236,7 +279,6 @@ export function AyatFullScreenModal({
       setLData?.(selectedSurah.number, currentAyatNum, d => ({ ...d, unknownWords: next }));
       return;
     }
-    // 2. Part creation selection
     if (!isSelecting) return;
     if (partSelectStep === 'start') {
       if (wi < nextAvail) return;
@@ -301,7 +343,6 @@ export function AyatFullScreenModal({
 
   // Full Arabic Text Renderer with all display modes
   const renderFullAyatText = () => {
-    // 1. Audio is playing in main mode with timestamps
     if (isPlaying && timestamps && enableLetterByLetter) {
       return (
         <PlayingArabicHighlighted
@@ -316,7 +357,6 @@ export function AyatFullScreenModal({
       );
     }
 
-    // 2. Audio is playing a part with timestamps
     if (playingPart?.ayatNum === currentAyatNum && timestamps && enableLetterByLetter) {
       return (
         <PlayingArabicHighlighted
@@ -340,7 +380,6 @@ export function AyatFullScreenModal({
     const showWordButtons = isSelecting || aideMemoireClickMode !== null;
     const showPartColors  = !isSelecting && showParts && Object.keys(wordPartMap).length > 0;
 
-    // 3. Selection or Aide-mémoire interactive word mode
     if (showWordButtons) {
       return (
         <div style={{ cursor: aideMemoireClickMode ? "pointer" : "default", display: "inline" }}>
@@ -398,7 +437,6 @@ export function AyatFullScreenModal({
               );
             }
 
-            // Part creation mode
             const inExistingPart = wordsInParts.has(wi);
             const pi             = wordPartMap[wi];
             const isLearnedPart  = pi !== undefined && (ld?.parts || [])[pi]?.learned;
@@ -450,7 +488,6 @@ export function AyatFullScreenModal({
       );
     }
 
-    // 4. Part segments display mode
     if (showPartColors) {
       const _hlSet = (() => {
         const s = new Set();
@@ -548,7 +585,6 @@ export function AyatFullScreenModal({
       );
     }
 
-    // 5. Annotations display (highlight, unknown words, revision)
     const hlIndices = (() => {
       const set = new Set();
       if (!ld?.highlight?.trim()) return set;
@@ -619,7 +655,6 @@ export function AyatFullScreenModal({
       );
     }
 
-    // 6. Timestamps available and enabled: use ArabicHighlighted for word/char level display
     if (timestamps && enableTimestamps) {
       return (
         <ArabicHighlighted
@@ -634,7 +669,6 @@ export function AyatFullScreenModal({
       );
     }
 
-    // 7. Default Arabic text with character Tajweed coloring
     if (showQalqala || showMadd || showIzhar || showIdgham) {
       const arr = [...ayat.text];
       return <span>{arr.map((ch, i) => renderTajweedChar(ch, i, arr))}</span>;
@@ -642,6 +676,9 @@ export function AyatFullScreenModal({
 
     return <span>{ayat.text}</span>;
   };
+
+  // Adjust display font size: on small screens, clamp slightly for extreme long verses
+  const effectiveFontSize = isMobile ? Math.min(fontSize, 36) : fontSize;
 
   return (
     <div
@@ -661,61 +698,59 @@ export function AyatFullScreenModal({
     >
       {/* ── Top Header Bar ────────────────────────────────────────────── */}
       <header
+        className="fs-header"
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "10px 16px",
+          padding: isMobile ? "max(env(safe-area-inset-top, 0px), 8px) 10px 8px" : "10px 16px",
           borderBottom: "1px solid rgba(201,168,76,0.18)",
-          background: "rgba(12,15,22,0.9)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          zIndex: 10,
+          background: "rgba(12,15,22,0.92)",
+          backdropFilter: "blur(14px)",
+          WebkitBackdropFilter: "blur(14px)",
+          zIndex: 20,
           flexShrink: 0,
-          gap: 10,
-          flexWrap: "wrap",
+          gap: isMobile ? 6 : 10,
+          flexWrap: isMobile ? "wrap" : "nowrap",
         }}
       >
-        {/* Left: Surah Badge, Ayat Number Selector & Reciter */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
-          {/* Surah Name Badge */}
+        {/* Top Row: Surah Info + Ayat Stepper + Controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: isMobile ? "1 1 100%" : "auto", justifyContent: "space-between" }}>
+          {/* Left: Surah Title Badge */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 7,
+              gap: 6,
               background: "rgba(201,168,76,0.1)",
               border: "1px solid rgba(201,168,76,0.3)",
-              padding: "4px 10px",
+              padding: "4px 8px",
               borderRadius: "var(--radius-sm)",
+              maxWidth: isMobile ? "150px" : "240px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
-            <span style={{ fontSize: 12, color: "var(--gold)" }}>⛶</span>
+            <span style={{ fontSize: 11, color: "var(--gold)" }}>⛶</span>
             <span
               style={{
                 fontFamily: "'Cinzel',serif",
                 fontWeight: 700,
-                fontSize: 11,
-                letterSpacing: 1.2,
+                fontSize: isMobile ? 10 : 11,
+                letterSpacing: 1,
                 color: "var(--gold2)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
               {selectedSurah.number}. {selectedSurah.englishName}
             </span>
-            <span
-              style={{
-                fontFamily: "'Amiri Quran',serif",
-                fontSize: 14,
-                color: "var(--text)",
-                marginRight: 2,
-              }}
-            >
-              {selectedSurah.name}
-            </span>
           </div>
 
-          {/* Ayat Number Selector with Dropdown & Prev/Next */}
-          <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+          {/* Center: Ayat Stepper with Direct Select */}
+          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
             <button
               id="btn-fs-prev-ayat"
               disabled={!hasPrev}
@@ -726,10 +761,15 @@ export function AyatFullScreenModal({
                 border: `1px solid ${hasPrev ? "rgba(201,168,76,0.35)" : "rgba(255,255,255,0.06)"}`,
                 color: hasPrev ? "var(--gold2)" : "rgba(255,255,255,0.2)",
                 borderRadius: 4,
-                padding: "4px 8px",
+                padding: isMobile ? "5px 9px" : "4px 8px",
                 cursor: hasPrev ? "pointer" : "default",
                 fontSize: 11,
                 transition: "all .15s",
+                minWidth: 30,
+                minHeight: 30,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
               ◀
@@ -739,16 +779,13 @@ export function AyatFullScreenModal({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 5,
+                gap: 4,
                 background: "rgba(201,168,76,0.12)",
                 border: "1px solid rgba(201,168,76,0.35)",
                 borderRadius: "var(--radius-sm)",
-                padding: "3px 8px",
+                padding: "2px 6px",
               }}
             >
-              <span style={{ fontSize: 10, fontFamily: "'Cinzel',serif", letterSpacing: 1, color: "var(--gold2)", fontWeight: 700 }}>
-                VERSET
-              </span>
               <select
                 id="select-fs-ayat-num"
                 value={currentAyatNum}
@@ -758,22 +795,23 @@ export function AyatFullScreenModal({
                   border: "1px solid rgba(201,168,76,0.5)",
                   color: "#ffd166",
                   borderRadius: 4,
-                  padding: "2px 6px",
-                  fontSize: 12,
+                  padding: "2px 4px",
+                  fontSize: 11,
                   fontFamily: "'Cinzel',serif",
                   fontWeight: 700,
                   cursor: "pointer",
                   outline: "none",
+                  maxWidth: isMobile ? 84 : 110,
                 }}
                 title="Sélectionner directement le numéro de verset"
               >
                 {Array.from({ length: totalAyats }, (_, i) => i + 1).map((num) => (
                   <option key={num} value={num} style={{ background: "#10141e", color: "#f8f5ed" }}>
-                    Verset {num} ﴾{toArabicDigits(num)}﴿
+                    V.{num} ﴾{toArabicDigits(num)}﴿
                   </option>
                 ))}
               </select>
-              <span style={{ fontSize: 10, fontFamily: "'Cinzel',serif", color: "var(--text3)" }}>/ {totalAyats}</span>
+              <span style={{ fontSize: 9, fontFamily: "'Cinzel',serif", color: "var(--text3)" }}>/ {totalAyats}</span>
             </div>
 
             <button
@@ -786,16 +824,81 @@ export function AyatFullScreenModal({
                 border: `1px solid ${hasNext ? "rgba(201,168,76,0.35)" : "rgba(255,255,255,0.06)"}`,
                 color: hasNext ? "var(--gold2)" : "rgba(255,255,255,0.2)",
                 borderRadius: 4,
-                padding: "4px 8px",
+                padding: isMobile ? "5px 9px" : "4px 8px",
                 cursor: hasNext ? "pointer" : "default",
                 fontSize: 11,
                 transition: "all .15s",
+                minWidth: 30,
+                minHeight: 30,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
               ▶
             </button>
           </div>
 
+          {/* Right on Mobile: Quick Settings Gear + Close Button */}
+          {isMobile ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                id="btn-fs-mobile-settings"
+                onClick={() => setShowQuickSettings((v) => !v)}
+                title="Options d'affichage"
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 6,
+                  border: `1px solid ${showQuickSettings ? "var(--gold)" : "rgba(255,255,255,0.15)"}`,
+                  background: showQuickSettings ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.05)",
+                  color: showQuickSettings ? "var(--gold2)" : "var(--text2)",
+                  fontSize: 14,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                ⚙
+              </button>
+
+              <button
+                id="btn-fs-mobile-close"
+                onClick={onClose}
+                title="Fermer (Échap)"
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 6,
+                  border: "1px solid rgba(224,90,90,0.4)",
+                  background: "rgba(224,90,90,0.15)",
+                  color: "#ff8282",
+                  fontSize: 15,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Second Row on Mobile / Right Controls on Desktop */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+            justifyContent: isMobile ? "space-between" : "flex-end",
+            width: isMobile ? "100%" : "auto",
+          }}
+        >
           {/* Reciter Selector Button */}
           <button
             id="btn-fs-reciter"
@@ -807,225 +910,351 @@ export function AyatFullScreenModal({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 6,
+              gap: 5,
               background: "rgba(255,255,255,0.06)",
               border: "1px solid rgba(201,168,76,0.35)",
               borderRadius: "var(--radius-sm)",
-              padding: "4px 10px",
+              padding: "4px 8px",
               color: "var(--gold2)",
-              fontSize: 11,
+              fontSize: 10,
               fontFamily: "'Cinzel',serif",
               letterSpacing: 0.5,
               cursor: "pointer",
               transition: "all .15s",
+              maxWidth: isMobile ? 180 : 160,
             }}
           >
             <span>{activeReciterObj?.flag || "🎙️"}</span>
-            <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {activeReciterObj?.label || reciterName || recitatorId || "Récitateur"}
             </span>
-            <span style={{ fontSize: 9, opacity: 0.7 }}>▼</span>
+            <span style={{ fontSize: 8, opacity: 0.7 }}>▼</span>
           </button>
-        </div>
 
-        {/* Right: Quick Tools & Close */}
-        <div style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
-          {/* Font Size Adjusters */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              background: "rgba(255,255,255,0.05)",
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              padding: "2px",
-            }}
-          >
-            <button
-              id="btn-fs-font-minus"
-              onClick={() => updateFontSize(-3)}
-              title="Diminuer la police"
+          {/* Desktop-only Quick Controls (On mobile they live in ⚙ Settings) */}
+          <div className="hide-mobile" style={{ alignItems: "center", gap: 6 }}>
+            {/* Font Size Adjusters */}
+            <div
               style={{
-                background: "transparent",
-                border: "none",
+                display: "flex",
+                alignItems: "center",
+                background: "rgba(255,255,255,0.05)",
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                padding: "2px",
+              }}
+            >
+              <button
+                id="btn-fs-font-minus"
+                onClick={() => updateFontSize(-3)}
+                title="Diminuer la police"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text2)",
+                  width: 26,
+                  height: 24,
+                  cursor: "pointer",
+                  fontSize: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                A-
+              </button>
+              <span style={{ fontSize: 10, color: "var(--text3)", padding: "0 4px", fontFamily: "monospace" }}>
+                {fontSize}
+              </span>
+              <button
+                id="btn-fs-font-plus"
+                onClick={() => updateFontSize(3)}
+                title="Agrandir la police"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text2)",
+                  width: 26,
+                  height: 24,
+                  cursor: "pointer",
+                  fontSize: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                A+
+              </button>
+            </div>
+
+            {/* Toggle Translation Button */}
+            {translationText && (
+              <button
+                id="btn-fs-toggle-trans"
+                onClick={() => setShowTranslation((v) => !v)}
+                title={showTranslation ? "Masquer la traduction" : "Afficher la traduction"}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: "var(--radius-sm)",
+                  border: `1px solid ${showTranslation ? "rgba(91,200,245,0.4)" : "rgba(255,255,255,0.1)"}`,
+                  background: showTranslation ? "rgba(91,200,245,0.12)" : "rgba(255,255,255,0.03)",
+                  color: showTranslation ? "var(--teal2)" : "var(--text3)",
+                  fontSize: 10,
+                  fontFamily: "'Cinzel',serif",
+                  cursor: "pointer",
+                  letterSpacing: 0.5,
+                }}
+              >
+                TRAD {showTranslation ? "ON" : "OFF"}
+              </button>
+            )}
+
+            {/* Quick Tajweed badge */}
+            {(showQalqala || showMadd || showIzhar || showIdgham) && (
+              <div
+                title="Tajweed actif"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                  padding: "4px 8px",
+                  borderRadius: "var(--radius-sm)",
+                  background: "rgba(201,168,76,0.1)",
+                  border: "1px solid rgba(201,168,76,0.3)",
+                  fontSize: 10,
+                  fontFamily: "'Cinzel',serif",
+                  color: "var(--gold2)",
+                }}
+              >
+                <span>☪</span>
+                <span>TAJWEED</span>
+              </div>
+            )}
+
+            {/* Auto Open Fullscreen Preference */}
+            {onToggleFullScreenOption && (
+              <button
+                id="btn-fs-toggle-auto-open"
+                onClick={onToggleFullScreenOption}
+                title="Ouvrir automatiquement en grand au clic sur un verset"
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: "var(--radius-sm)",
+                  border: `1px solid ${fullScreenOption ? "var(--gold)" : "rgba(255,255,255,0.1)"}`,
+                  background: fullScreenOption ? "rgba(201,168,76,0.15)" : "transparent",
+                  color: fullScreenOption ? "var(--gold2)" : "var(--text3)",
+                  fontSize: 10,
+                  fontFamily: "'Cinzel',serif",
+                  cursor: "pointer",
+                }}
+              >
+                AUTO {fullScreenOption ? "✓" : "○"}
+              </button>
+            )}
+
+            {/* Browser Fullscreen Trigger */}
+            <button
+              id="btn-fs-native"
+              onClick={toggleNativeFullscreen}
+              title={isNativeFs ? "Quitter le plein écran (F)" : "Plein écran navigateur (F)"}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                background: "rgba(255,255,255,0.03)",
                 color: "var(--text2)",
-                width: 26,
-                height: 24,
+                fontSize: 12,
                 cursor: "pointer",
-                fontSize: 13,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              A-
+              {isNativeFs ? "⤓" : "⛶"}
             </button>
-            <span style={{ fontSize: 10, color: "var(--text3)", padding: "0 4px", fontFamily: "monospace" }}>
-              {fontSize}
-            </span>
+
+            {/* Desktop Close Button */}
             <button
-              id="btn-fs-font-plus"
-              onClick={() => updateFontSize(3)}
-              title="Agrandir la police"
+              id="btn-fs-close"
+              onClick={onClose}
+              title="Fermer la vue agrandie (Échap)"
               style={{
-                background: "transparent",
-                border: "none",
-                color: "var(--text2)",
-                width: 26,
-                height: 24,
+                width: 30,
+                height: 30,
+                borderRadius: "var(--radius-sm)",
+                border: "1px solid rgba(224,90,90,0.35)",
+                background: "rgba(224,90,90,0.1)",
+                color: "#ff7b7b",
+                fontSize: 15,
                 cursor: "pointer",
-                fontSize: 13,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                lineHeight: 1,
               }}
             >
-              A+
+              ✕
             </button>
           </div>
-
-          {/* Toggle Translation Button */}
-          {translationText && (
-            <button
-              id="btn-fs-toggle-trans"
-              onClick={() => setShowTranslation((v) => !v)}
-              title={showTranslation ? "Masquer la traduction" : "Afficher la traduction"}
-              style={{
-                padding: "4px 10px",
-                borderRadius: "var(--radius-sm)",
-                border: `1px solid ${showTranslation ? "rgba(91,200,245,0.4)" : "rgba(255,255,255,0.1)"}`,
-                background: showTranslation ? "rgba(91,200,245,0.12)" : "rgba(255,255,255,0.03)",
-                color: showTranslation ? "var(--teal2)" : "var(--text3)",
-                fontSize: 10,
-                fontFamily: "'Cinzel',serif",
-                cursor: "pointer",
-                letterSpacing: 1,
-              }}
-            >
-              TRAD {showTranslation ? "ON" : "OFF"}
-            </button>
-          )}
-
-          {/* Quick Tajweed / Mode indicators badge */}
-          {(showQalqala || showMadd || showIzhar || showIdgham) && (
-            <div
-              title="Tajweed actif"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "4px 8px",
-                borderRadius: "var(--radius-sm)",
-                background: "rgba(201,168,76,0.1)",
-                border: "1px solid rgba(201,168,76,0.3)",
-                fontSize: 10,
-                fontFamily: "'Cinzel',serif",
-                color: "var(--gold2)",
-              }}
-            >
-              <span>☪</span>
-              <span className="hide-mobile">TAJWEED</span>
-            </div>
-          )}
-
-          {/* Toggle Fullscreen Option for Selected Ayat (Preference) */}
-          {onToggleFullScreenOption && (
-            <button
-              id="btn-fs-toggle-auto-open"
-              onClick={onToggleFullScreenOption}
-              title={
-                fullScreenOption
-                  ? "Désactiver l'ouverture automatique en plein écran lors de la sélection d'un verset"
-                  : "Activer l'ouverture automatique en grand quand vous cliquez sur un verset"
-              }
-              style={{
-                padding: "4px 9px",
-                borderRadius: "var(--radius-sm)",
-                border: `1px solid ${fullScreenOption ? "var(--gold)" : "rgba(255,255,255,0.1)"}`,
-                background: fullScreenOption ? "rgba(201,168,76,0.15)" : "transparent",
-                color: fullScreenOption ? "var(--gold2)" : "var(--text3)",
-                fontSize: 10,
-                fontFamily: "'Cinzel',serif",
-                cursor: "pointer",
-                letterSpacing: 0.5,
-              }}
-            >
-              AUTO-OUVRIR {fullScreenOption ? "✓" : "○"}
-            </button>
-          )}
-
-          {/* Browser Fullscreen Trigger */}
-          <button
-            id="btn-fs-native"
-            onClick={toggleNativeFullscreen}
-            title={isNativeFs ? "Quitter le plein écran du navigateur (F)" : "Plein écran navigateur (F)"}
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(255,255,255,0.03)",
-              color: "var(--text2)",
-              fontSize: 13,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {isNativeFs ? "⤓" : "⛶"}
-          </button>
-
-          {/* Close Modal Button */}
-          <button
-            id="btn-fs-close"
-            onClick={onClose}
-            title="Fermer la vue agrandie (Échap)"
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid rgba(224,90,90,0.35)",
-              background: "rgba(224,90,90,0.1)",
-              color: "#ff7b7b",
-              fontSize: 16,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              lineHeight: 1,
-              transition: "all .15s",
-            }}
-          >
-            ✕
-          </button>
         </div>
       </header>
 
-      {/* ── Reciter Selector Modal Dialog ── */}
+      {/* ── Mobile Quick Settings Popover Modal ──────────────────────── */}
+      {showQuickSettings && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 3400,
+            background: "rgba(0,0,0,0.65)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "flex-end",
+            padding: 10,
+          }}
+          onClick={() => setShowQuickSettings(false)}
+        >
+          <div
+            style={{
+              background: "#10141f",
+              border: "1px solid rgba(201,168,76,0.35)",
+              borderRadius: "16px 16px 12px 12px",
+              padding: "16px 18px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+              boxShadow: "0 -10px 30px rgba(0,0,0,0.8)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontFamily: "'Cinzel',serif", fontSize: 12, fontWeight: 700, letterSpacing: 1.2, color: "var(--gold2)" }}>
+                ⚙ OPTIONS D'AFFICHAGE
+              </span>
+              <button
+                onClick={() => setShowQuickSettings(false)}
+                style={{ background: "transparent", border: "none", color: "var(--text2)", fontSize: 18, cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Font Size Row */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <span style={{ fontSize: 12, color: "var(--text)" }}>Taille du texte arabe</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  onClick={() => updateFontSize(-3)}
+                  style={{ width: 34, height: 32, borderRadius: 6, border: "1px solid var(--border)", background: "rgba(255,255,255,0.05)", color: "var(--text)", fontSize: 13, cursor: "pointer" }}
+                >
+                  A-
+                </button>
+                <span style={{ fontFamily: "monospace", fontSize: 12, minWidth: 26, textAlign: "center", color: "var(--gold2)" }}>
+                  {fontSize}px
+                </span>
+                <button
+                  onClick={() => updateFontSize(3)}
+                  style={{ width: 34, height: 32, borderRadius: 6, border: "1px solid var(--border)", background: "rgba(255,255,255,0.05)", color: "var(--text)", fontSize: 13, cursor: "pointer" }}
+                >
+                  A+
+                </button>
+              </div>
+            </div>
+
+            {/* Toggle Translation */}
+            {translationText && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <span style={{ fontSize: 12, color: "var(--text)" }}>Afficher la traduction</span>
+                <button
+                  onClick={() => setShowTranslation((v) => !v)}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 16,
+                    border: `1px solid ${showTranslation ? "var(--teal)" : "rgba(255,255,255,0.15)"}`,
+                    background: showTranslation ? "rgba(62,184,160,0.2)" : "rgba(255,255,255,0.04)",
+                    color: showTranslation ? "var(--teal2)" : "var(--text3)",
+                    fontSize: 11,
+                    fontFamily: "'Cinzel',serif",
+                    cursor: "pointer",
+                  }}
+                >
+                  {showTranslation ? "ACTIVÉ ✓" : "DÉSACTIVÉ"}
+                </button>
+              </div>
+            )}
+
+            {/* Auto Open Fullscreen */}
+            {onToggleFullScreenOption && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <span style={{ fontSize: 12, color: "var(--text)" }}>Ouvrir en grand au clic</span>
+                <button
+                  onClick={onToggleFullScreenOption}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 16,
+                    border: `1px solid ${fullScreenOption ? "var(--gold)" : "rgba(255,255,255,0.15)"}`,
+                    background: fullScreenOption ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.04)",
+                    color: fullScreenOption ? "var(--gold2)" : "var(--text3)",
+                    fontSize: 11,
+                    fontFamily: "'Cinzel',serif",
+                    cursor: "pointer",
+                  }}
+                >
+                  {fullScreenOption ? "ACTIVÉ ✓" : "DÉSACTIVÉ"}
+                </button>
+              </div>
+            )}
+
+            {/* Native Fullscreen */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0" }}>
+              <span style={{ fontSize: 12, color: "var(--text)" }}>Plein écran navigateur</span>
+              <button
+                onClick={toggleNativeFullscreen}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 16,
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "var(--text)",
+                  fontSize: 11,
+                  fontFamily: "'Cinzel',serif",
+                  cursor: "pointer",
+                }}
+              >
+                {isNativeFs ? "QUITTER ⤓" : "ACTIVER ⛶"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reciter Selector Modal Dialog / Bottom Sheet on Mobile ─────── */}
       {showReciterModal && (
         <div
           style={{
             position: "fixed",
             inset: 0,
             zIndex: 3500,
-            background: "rgba(0,0,0,0.72)",
+            background: "rgba(0,0,0,0.75)",
             backdropFilter: "blur(8px)",
             display: "flex",
-            alignItems: "center",
+            alignItems: isMobile ? "flex-end" : "center",
             justifyContent: "center",
-            padding: 16,
+            padding: isMobile ? "0" : 16,
           }}
           onClick={() => setShowReciterModal(false)}
         >
           <div
+            className="fs-reciter-dialog"
             style={{
               background: "#10141e",
               border: "1px solid rgba(201,168,76,0.35)",
-              borderRadius: 12,
+              borderRadius: isMobile ? "18px 18px 0 0" : 12,
               width: "100%",
               maxWidth: 480,
-              maxHeight: "80vh",
+              maxHeight: isMobile ? "80vh" : "80vh",
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
@@ -1033,7 +1262,14 @@ export function AyatFullScreenModal({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+            {/* Mobile Sheet Handle */}
+            {isMobile && (
+              <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 2px" }}>
+                <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.25)" }} />
+              </div>
+            )}
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
               <div>
                 <div style={{ fontFamily: "'Cinzel',serif", fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: "var(--gold2)" }}>
                   CHOISIR UN RÉCITATEUR
@@ -1044,7 +1280,7 @@ export function AyatFullScreenModal({
               </div>
               <button
                 onClick={() => setShowReciterModal(false)}
-                style={{ background: "transparent", border: "none", color: "var(--text2)", fontSize: 20, cursor: "pointer" }}
+                style={{ background: "transparent", border: "none", color: "var(--text2)", fontSize: 20, cursor: "pointer", padding: "4px 8px" }}
               >
                 ×
               </button>
@@ -1055,20 +1291,20 @@ export function AyatFullScreenModal({
                 type="search"
                 value={reciterSearch}
                 onChange={(e) => setReciterSearch(e.target.value)}
-                placeholder="Rechercher un récitateur (ex: Alafasy, Ghamadi, Minshawi...)"
+                placeholder="Rechercher un récitateur (ex: Alafasy, Ghamadi...)"
                 style={{
                   width: "100%",
                   background: "rgba(255,255,255,0.06)",
                   border: "1px solid rgba(255,255,255,0.15)",
-                  borderRadius: 6,
-                  padding: "8px 12px",
+                  borderRadius: 8,
+                  padding: "10px 14px",
                   color: "#fff",
                   fontSize: 13,
                   outline: "none",
                 }}
               />
             </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px", display: "flex", flexDirection: "column", gap: 4, WebkitOverflowScrolling: "touch" }}>
               {visibleReciters.map((r) => {
                 const isSelected = r.id === (recitatorId || activeReciterObj?.id);
                 return (
@@ -1082,13 +1318,14 @@ export function AyatFullScreenModal({
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
-                      padding: "10px 14px",
+                      padding: "12px 14px",
                       borderRadius: 8,
                       background: isSelected ? "rgba(201,168,76,0.18)" : "transparent",
                       border: `1px solid ${isSelected ? "var(--gold)" : "transparent"}`,
                       color: isSelected ? "var(--gold2)" : "var(--text)",
                       cursor: "pointer",
                       textAlign: "left",
+                      minHeight: 44,
                       transition: "all .12s",
                     }}
                   >
@@ -1107,29 +1344,35 @@ export function AyatFullScreenModal({
               )}
             </div>
             <div style={{ padding: "10px 18px", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 11, color: "var(--text3)", display: "flex", justifyContent: "space-between" }}>
-              <span>{visibleReciters.length} récitateur(s) disponible(s)</span>
+              <span>{visibleReciters.length} récitateur(s)</span>
+              <span>Appuyer pour appliquer</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Main Scrollable Body ──────────────────────────────────────── */}
+      {/* ── Main Scrollable Body with Touch Gestures ──────────────────── */}
       <div
         ref={scrollContainerRef}
+        className="fs-body"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         style={{
           flex: 1,
           overflowY: "auto",
           overflowX: "hidden",
-          padding: "24px 20px 160px",
+          padding: isMobile ? "14px 10px calc(86px + env(safe-area-inset-bottom, 0px))" : "20px 20px calc(110px + env(safe-area-inset-bottom, 0px))",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           position: "relative",
+          WebkitOverflowScrolling: "touch",
         }}
       >
-        {/* Floating Side Arrow Buttons for Desktop Navigation */}
+        {/* Floating Side Arrow Buttons — STRICTLY FOR DESKTOP ONLY */}
         <button
           id="btn-fs-float-prev"
+          className="fs-float-nav hide-mobile"
           disabled={!hasPrev}
           onClick={() => hasPrev && onSelectAyat?.(currentAyatNum - 1)}
           title="Verset précédent (Flèche gauche)"
@@ -1146,20 +1389,19 @@ export function AyatFullScreenModal({
             color: hasPrev ? "var(--gold2)" : "rgba(255,255,255,0.15)",
             fontSize: 16,
             cursor: hasPrev ? "pointer" : "default",
-            display: "flex",
             alignItems: "center",
             justifyContent: "center",
             zIndex: 15,
             backdropFilter: "blur(8px)",
             transition: "all .15s",
           }}
-          className="hide-mobile"
         >
           ◀
         </button>
 
         <button
           id="btn-fs-float-next"
+          className="fs-float-nav hide-mobile"
           disabled={!hasNext}
           onClick={() => hasNext && onSelectAyat?.(currentAyatNum + 1)}
           title="Verset suivant (Flèche droite)"
@@ -1176,14 +1418,12 @@ export function AyatFullScreenModal({
             color: hasNext ? "var(--gold2)" : "rgba(255,255,255,0.15)",
             fontSize: 16,
             cursor: hasNext ? "pointer" : "default",
-            display: "flex",
             alignItems: "center",
             justifyContent: "center",
             zIndex: 15,
             backdropFilter: "blur(8px)",
             transition: "all .15s",
           }}
-          className="hide-mobile"
         >
           ▶
         </button>
@@ -1198,27 +1438,28 @@ export function AyatFullScreenModal({
             alignItems: "center",
             textAlign: "center",
             margin: "0 auto",
-            gap: 20,
+            gap: isMobile ? 14 : 20,
           }}
         >
           {/* Prominent Center Stage Verse Badge */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
             <div
               style={{
                 display: "inline-flex",
                 alignItems: "center",
-                gap: 12,
-                padding: "6px 20px",
+                gap: isMobile ? 8 : 12,
+                padding: isMobile ? "4px 14px" : "6px 20px",
                 borderRadius: 24,
                 background: "radial-gradient(ellipse at center, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.04) 100%)",
                 border: "1px solid rgba(201,168,76,0.4)",
                 boxShadow: "0 0 20px rgba(201,168,76,0.12)",
+                maxWidth: "96%",
               }}
             >
               <span
                 style={{
                   fontFamily: "'Amiri Quran', serif",
-                  fontSize: 22,
+                  fontSize: isMobile ? 18 : 22,
                   color: "var(--gold2)",
                   textShadow: "0 0 10px rgba(201,168,76,0.5)",
                 }}
@@ -1228,9 +1469,9 @@ export function AyatFullScreenModal({
               <span
                 style={{
                   fontFamily: "'Cinzel', serif",
-                  fontSize: 13,
+                  fontSize: isMobile ? 11 : 13,
                   fontWeight: 700,
-                  letterSpacing: 2,
+                  letterSpacing: 1.5,
                   color: "var(--gold2)",
                 }}
               >
@@ -1239,18 +1480,25 @@ export function AyatFullScreenModal({
               {(ayat.page || ayat.juz) && (
                 <span
                   style={{
-                    fontSize: 10,
+                    fontSize: 9,
                     fontFamily: "'Cinzel', serif",
-                    letterSpacing: 1,
+                    letterSpacing: 0.8,
                     color: "var(--teal2)",
                     borderLeft: "1px solid rgba(255,255,255,0.15)",
-                    paddingLeft: 10,
+                    paddingLeft: 8,
                   }}
                 >
-                  {ayat.page ? `PAGE ${ayat.page}` : ""} {ayat.juz ? `· JUZ ${ayat.juz}` : ""}
+                  {ayat.page ? `P.${ayat.page}` : ""} {ayat.juz ? `· J.${ayat.juz}` : ""}
                 </span>
               )}
             </div>
+
+            {/* Mobile swipe hint */}
+            {isMobile && (
+              <span style={{ fontSize: 9, color: "var(--text3)", opacity: 0.6, letterSpacing: 0.5 }}>
+                Glisser vers la gauche ou droite pour changer de verset
+              </span>
+            )}
           </div>
 
           {/* Active Selection / Aide-Mémoire Mode Banner */}
@@ -1262,15 +1510,16 @@ export function AyatFullScreenModal({
                 justifyContent: "space-between",
                 width: "100%",
                 maxWidth: 750,
-                padding: "8px 16px",
+                padding: "8px 12px",
                 borderRadius: 8,
                 background: partSelectStep === 'start' ? "rgba(201,168,76,0.15)" : "rgba(62,184,160,0.15)",
                 border: `1px solid ${partSelectStep === 'start' ? "var(--gold)" : "var(--teal)"}`,
                 color: partSelectStep === 'start' ? "var(--gold2)" : "var(--teal2)",
-                fontSize: 11,
+                fontSize: 10,
                 fontFamily: "'Cinzel',serif",
-                letterSpacing: 1,
+                letterSpacing: 0.5,
                 fontWeight: 700,
+                gap: 6,
               }}
             >
               <span>
@@ -1289,10 +1538,11 @@ export function AyatFullScreenModal({
                   border: "none",
                   color: "#fff",
                   borderRadius: 4,
-                  padding: "3px 8px",
+                  padding: "4px 8px",
                   cursor: "pointer",
-                  fontSize: 10,
+                  fontSize: 9,
                   fontFamily: "'Cinzel',serif",
+                  flexShrink: 0,
                 }}
               >
                 ANNULER
@@ -1308,21 +1558,22 @@ export function AyatFullScreenModal({
                 justifyContent: "space-between",
                 width: "100%",
                 maxWidth: 750,
-                padding: "8px 16px",
+                padding: "8px 12px",
                 borderRadius: 8,
                 background: aideMemoireClickMode === 'highlight' ? "rgba(255,209,102,0.15)" : "rgba(255,126,179,0.15)",
                 border: `1px solid ${aideMemoireClickMode === 'highlight' ? "var(--gold)" : "#ff7eb3"}`,
                 color: aideMemoireClickMode === 'highlight' ? "#ffd166" : "#ff7eb3",
-                fontSize: 11,
+                fontSize: 10,
                 fontFamily: "'Cinzel',serif",
-                letterSpacing: 1,
+                letterSpacing: 0.5,
                 fontWeight: 700,
+                gap: 6,
               }}
             >
               <span>
                 {aideMemoireClickMode === 'highlight'
-                  ? "CLIQUEZ SUR UN MOT POUR AJOUTER OU RETIRER LE SURLIGNAGE"
-                  : "CLIQUEZ SUR UN MOT POUR MARQUER OU DÉMARQUER SON RADICAL INCONNU"}
+                  ? "CLIQUEZ SUR UN MOT POUR MODIFIER LE SURLIGNAGE"
+                  : "CLIQUEZ SUR UN MOT POUR MARQUER LE RADICAL"}
               </span>
               <button
                 onClick={() => setAideMemoireClickMode?.(null)}
@@ -1331,10 +1582,11 @@ export function AyatFullScreenModal({
                   border: "none",
                   color: "#fff",
                   borderRadius: 4,
-                  padding: "3px 8px",
+                  padding: "4px 8px",
                   cursor: "pointer",
-                  fontSize: 10,
+                  fontSize: 9,
                   fontFamily: "'Cinzel',serif",
+                  flexShrink: 0,
                 }}
               >
                 FERMER
@@ -1345,17 +1597,20 @@ export function AyatFullScreenModal({
           {/* Arabic Text Display with Complete Rendering */}
           <div
             id="fs-arabic-text"
+            className="fs-arabic-text"
             style={{
               fontFamily: "'Amiri Quran', serif",
-              fontSize: `${fontSize}px`,
-              lineHeight: 2.3,
+              fontSize: `${effectiveFontSize}px`,
+              lineHeight: isMobile ? 2.1 : 2.3,
               direction: "rtl",
               color: "#f8f5ed",
-              padding: "0 20px",
+              padding: isMobile ? "0 4px" : "0 20px",
               textAlign: "center",
-              textShadow: "0 2px 20px rgba(0,0,0,0.6)",
+              textShadow: "0 2px 18px rgba(0,0,0,0.65)",
               transition: "font-size .2s ease",
               width: "100%",
+              wordBreak: "break-word",
+              overflowWrap: "break-word",
             }}
           >
             {renderFullAyatText()}
@@ -1366,16 +1621,16 @@ export function AyatFullScreenModal({
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                marginRight: "14px",
-                marginLeft: "8px",
+                marginRight: isMobile ? "8px" : "14px",
+                marginLeft: isMobile ? "4px" : "8px",
                 color: "var(--gold2)",
-                fontSize: `${Math.round(fontSize * 0.85)}px`,
+                fontSize: `${Math.round(effectiveFontSize * 0.85)}px`,
                 verticalAlign: "middle",
                 fontFamily: "'Amiri Quran', serif",
                 userSelect: "none",
               }}
             >
-              <span style={{ fontSize: `${Math.round(fontSize * 1.05)}px`, position: "relative" }}>
+              <span style={{ fontSize: `${Math.round(effectiveFontSize * 1.05)}px`, position: "relative" }}>
                 ۝
                 <span
                   style={{
@@ -1384,7 +1639,7 @@ export function AyatFullScreenModal({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: `${Math.round(fontSize * 0.42)}px`,
+                    fontSize: `${Math.round(effectiveFontSize * 0.42)}px`,
                     fontFamily: "'Amiri', serif",
                     color: "var(--gold3)",
                     top: "-2px",
@@ -1402,13 +1657,13 @@ export function AyatFullScreenModal({
               id="fs-translation-text"
               style={{
                 maxWidth: 840,
-                width: "92%",
-                padding: "16px 24px",
+                width: isMobile ? "96%" : "92%",
+                padding: isMobile ? "12px 14px" : "16px 24px",
                 background: "rgba(91,200,245,0.04)",
                 border: "1px solid rgba(91,200,245,0.18)",
                 borderRadius: 12,
-                fontSize: 16,
-                lineHeight: 1.8,
+                fontSize: isMobile ? 14 : 16,
+                lineHeight: isMobile ? 1.65 : 1.8,
                 color: "var(--text)",
                 textAlign: "center",
                 fontStyle: "italic",
@@ -1421,11 +1676,11 @@ export function AyatFullScreenModal({
                   top: -9,
                   left: "50%",
                   transform: "translateX(-50%)",
-                  fontSize: 9,
-                  letterSpacing: 2,
+                  fontSize: 8,
+                  letterSpacing: 1.5,
                   color: "var(--teal2)",
                   background: "#10141e",
-                  padding: "0 10px",
+                  padding: "0 8px",
                   fontFamily: "'Cinzel',serif",
                   fontWeight: 600,
                   borderRadius: 4,
@@ -1444,9 +1699,10 @@ export function AyatFullScreenModal({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 8,
+              gap: isMobile ? 6 : 8,
               flexWrap: "wrap",
-              padding: "6px 0",
+              padding: "4px 0",
+              width: "100%",
             }}
           >
             {/* Mark Learned Button */}
@@ -1456,18 +1712,19 @@ export function AyatFullScreenModal({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 6,
-                padding: "6px 14px",
+                gap: 5,
+                padding: isMobile ? "6px 11px" : "6px 14px",
                 borderRadius: 20,
                 border: `1px solid ${isLearned ? "var(--green)" : "rgba(255,255,255,0.1)"}`,
                 background: isLearned ? "rgba(76,175,129,0.18)" : "rgba(255,255,255,0.03)",
                 color: isLearned ? "var(--green2)" : "var(--text3)",
-                fontSize: 10,
+                fontSize: isMobile ? 9 : 10,
                 fontFamily: "'Cinzel',serif",
                 fontWeight: 600,
-                letterSpacing: 1,
+                letterSpacing: 0.5,
                 cursor: "pointer",
                 transition: "all .15s",
+                minHeight: 34,
               }}
             >
               <span>{isLearned ? "✓ APPRIS" : "○ MARQUER APPRIS"}</span>
@@ -1489,18 +1746,19 @@ export function AyatFullScreenModal({
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 6,
-                padding: "6px 14px",
+                gap: 5,
+                padding: isMobile ? "6px 11px" : "6px 14px",
                 borderRadius: 20,
                 border: `1px solid ${isToRevise ? "var(--gold)" : "rgba(255,255,255,0.1)"}`,
                 background: isToRevise ? "rgba(201,168,76,0.18)" : "rgba(255,255,255,0.03)",
                 color: isToRevise ? "var(--gold2)" : "var(--text3)",
-                fontSize: 10,
+                fontSize: isMobile ? 9 : 10,
                 fontFamily: "'Cinzel',serif",
                 fontWeight: 600,
-                letterSpacing: 1,
+                letterSpacing: 0.5,
                 cursor: "pointer",
                 transition: "all .15s",
+                minHeight: 34,
               }}
               title="Ouvrir le panneau À Réviser pour cibler mots ou lettres"
             >
@@ -1523,6 +1781,7 @@ export function AyatFullScreenModal({
                   fontFamily: "'Cinzel',serif",
                   padding: "4px 8px",
                   cursor: "pointer",
+                  minHeight: 34,
                 }}
                 title="Retirer complètement des révisions"
               >
@@ -1538,43 +1797,47 @@ export function AyatFullScreenModal({
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 6,
-                  padding: "6px 14px",
+                  gap: 5,
+                  padding: isMobile ? "6px 11px" : "6px 14px",
                   borderRadius: 20,
                   border: "1px solid rgba(62,184,160,0.35)",
                   background: "rgba(62,184,160,0.1)",
                   color: "var(--teal2)",
-                  fontSize: 10,
+                  fontSize: isMobile ? 9 : 10,
                   fontFamily: "'Cinzel',serif",
                   fontWeight: 600,
-                  letterSpacing: 1,
+                  letterSpacing: 0.5,
                   cursor: "pointer",
                   transition: "all .15s",
+                  minHeight: 34,
                 }}
                 title="Découper ce verset en parties"
               >
-                <span>✂ DÉCOUPER EN PARTIES</span>
+                <span>✂ DÉCOUPER</span>
               </button>
             )}
 
             {masteryPercent > 0 && (
               <div
                 style={{
-                  fontSize: 10,
-                  letterSpacing: 1,
-                  padding: "5px 12px",
+                  fontSize: 9,
+                  letterSpacing: 0.8,
+                  padding: "5px 10px",
                   borderRadius: 20,
                   border: "1px solid rgba(201,168,76,0.4)",
                   color: "var(--gold2)",
                   fontFamily: "'Cinzel',serif",
                   background: "rgba(201,168,76,0.08)",
+                  display: "flex",
+                  alignItems: "center",
+                  minHeight: 34,
                 }}
               >
-                MAÎTRISE : {masteryPercent}%
+                MAÎTRISE: {masteryPercent}%
               </div>
             )}
 
-            {/* Quick Button to Jump to Submenu */}
+            {/* Jump to Submenu Button */}
             {setSubmenuMode && (
               <button
                 id="btn-fs-jump-submenu"
@@ -1587,18 +1850,19 @@ export function AyatFullScreenModal({
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 6,
-                  padding: "6px 14px",
+                  gap: 5,
+                  padding: isMobile ? "6px 11px" : "6px 14px",
                   borderRadius: 20,
                   border: "1px solid rgba(201,168,76,0.35)",
                   background: "rgba(201,168,76,0.1)",
                   color: "var(--gold2)",
-                  fontSize: 10,
+                  fontSize: isMobile ? 9 : 10,
                   fontFamily: "'Cinzel',serif",
                   fontWeight: 600,
-                  letterSpacing: 1,
+                  letterSpacing: 0.5,
                   cursor: "pointer",
                   transition: "all .15s",
+                  minHeight: 34,
                 }}
               >
                 <span>📋 SOUS-MENU · {(submenuMode || "LECTURE").toUpperCase()}</span>
@@ -1620,7 +1884,7 @@ export function AyatFullScreenModal({
                 boxShadow: "0 10px 36px rgba(0,0,0,0.55)",
                 textAlign: "left",
                 marginTop: 6,
-                marginBottom: 24,
+                marginBottom: 20,
                 backdropFilter: "blur(14px)",
                 WebkitBackdropFilter: "blur(14px)",
                 transition: "all .2s ease",
@@ -1632,98 +1896,98 @@ export function AyatFullScreenModal({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "10px 18px",
+                  padding: "10px 14px",
                   background: "rgba(10, 13, 20, 0.8)",
                   borderBottom: "1px solid rgba(201,168,76,0.18)",
                   flexWrap: "wrap",
                   gap: 8,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ color: "var(--gold)", fontSize: 13 }}>📋</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ color: "var(--gold)", fontSize: 12 }}>📋</span>
                   <span
                     style={{
                       fontFamily: "'Cinzel', serif",
-                      fontSize: 11,
+                      fontSize: isMobile ? 10 : 11,
                       fontWeight: 700,
-                      letterSpacing: 1.5,
+                      letterSpacing: 1.2,
                       color: "var(--gold2)",
                     }}
                   >
-                    SOUS-MENU DU VERSET {currentAyatNum}
+                    SOUS-MENU V.{currentAyatNum}
                   </span>
                   <span
                     style={{
-                      fontSize: 10,
+                      fontSize: 9,
                       fontFamily: "'Cinzel', serif",
-                      letterSpacing: 1,
+                      letterSpacing: 0.5,
                       color: "var(--teal2)",
                       background: "rgba(62,184,160,0.12)",
-                      padding: "2px 8px",
+                      padding: "2px 6px",
                       borderRadius: 10,
                       border: "1px solid rgba(62,184,160,0.25)",
                     }}
                   >
-                    MODE ACTIF : {(submenuMode || "LECTURE").toUpperCase()}
+                    {(submenuMode || "LECTURE").toUpperCase()}
                   </span>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <button
-                    id="btn-fs-toggle-submenu-collapse"
-                    onClick={() => setShowSubmenu((v) => !v)}
-                    title={showSubmenu ? "Masquer le contenu du sous-menu" : "Déplier le sous-menu"}
-                    style={{
-                      background: "rgba(255,255,255,0.05)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      color: "var(--text2)",
-                      fontSize: 10,
-                      fontFamily: "'Cinzel', serif",
-                      letterSpacing: 1,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      padding: "4px 10px",
-                      borderRadius: 6,
-                    }}
-                  >
-                    <span>{showSubmenu ? "▲ MASQUER" : "▼ DÉPLIER"}</span>
-                  </button>
-                </div>
+                <button
+                  id="btn-fs-toggle-submenu-collapse"
+                  onClick={() => setShowSubmenu((v) => !v)}
+                  title={showSubmenu ? "Masquer le contenu" : "Déplier le sous-menu"}
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    color: "var(--text2)",
+                    fontSize: 9,
+                    fontFamily: "'Cinzel', serif",
+                    letterSpacing: 0.5,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                  }}
+                >
+                  <span>{showSubmenu ? "▲ MASQUER" : "▼ DÉPLIER"}</span>
+                </button>
               </div>
 
               {/* Submenu Tabs and Active Mode Content */}
               {showSubmenu && (
-                <Submenu
-                  key={currentAyatNum}
-                  ayat={ayat}
-                  surahNum={selectedSurah.number}
-                  ld={ld}
-                  setLData={setLData}
-                  submenuMode={submenuMode}
-                  setSubmenuMode={setSubmenuMode}
-                  audioUrl={audioUrl}
-                  isMainPlaying={isPlaying}
-                  timestamps={timestamps}
-                  onLoadTimestamps={onLoadTimestamps}
-                  onUpdateTimestamps={onUpdateTimestamps}
-                  onLocalPlay={onLocalPlay}
-                  partSelectAyat={partSelectAyat}
-                  partSelectStep={partSelectStep}
-                  onStartPartCreate={onStartPartCreate}
-                  collections={collections}
-                  ayatInCollections={ayatInCollections}
-                  onOpenCollModal={onOpenCollModal}
-                  aideMemoireClickMode={aideMemoireClickMode}
-                  setAideMemoireClickMode={setAideMemoireClickMode}
-                  spellCheck={spellCheck}
-                  onSetLoop={onToggleLoop}
-                  ayatLoopActive={loopActive}
-                  translationLang={translationLang}
-                  ayatTranslation={translationText}
-                  wbwWords={wbwWords}
-                />
+                <div style={{ width: "100%", overflowX: "hidden" }}>
+                  <Submenu
+                    key={currentAyatNum}
+                    ayat={ayat}
+                    surahNum={selectedSurah.number}
+                    ld={ld}
+                    setLData={setLData}
+                    submenuMode={submenuMode}
+                    setSubmenuMode={setSubmenuMode}
+                    audioUrl={audioUrl}
+                    isMainPlaying={isPlaying}
+                    timestamps={timestamps}
+                    onLoadTimestamps={onLoadTimestamps}
+                    onUpdateTimestamps={onUpdateTimestamps}
+                    onLocalPlay={onLocalPlay}
+                    partSelectAyat={partSelectAyat}
+                    partSelectStep={partSelectStep}
+                    onStartPartCreate={onStartPartCreate}
+                    collections={collections}
+                    ayatInCollections={ayatInCollections}
+                    onOpenCollModal={onOpenCollModal}
+                    aideMemoireClickMode={aideMemoireClickMode}
+                    setAideMemoireClickMode={setAideMemoireClickMode}
+                    spellCheck={spellCheck}
+                    onSetLoop={onToggleLoop}
+                    ayatLoopActive={loopActive}
+                    translationLang={translationLang}
+                    ayatTranslation={translationText}
+                    wbwWords={wbwWords}
+                  />
+                </div>
               )}
             </section>
           )}
@@ -1732,25 +1996,27 @@ export function AyatFullScreenModal({
 
       {/* ── Bottom Floating Player & Navigation Bar ───────────────────── */}
       <footer
+        className="fs-footer"
         style={{
           position: "fixed",
           bottom: 0,
           left: 0,
           right: 0,
-          background: "linear-gradient(180deg, rgba(16,20,30,0.85) 0%, rgba(10,13,20,0.98) 100%)",
+          background: "linear-gradient(180deg, rgba(16,20,30,0.92) 0%, rgba(10,13,20,0.98) 100%)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
           borderTop: "1px solid rgba(201,168,76,0.2)",
-          padding: "12px 24px calc(12px + env(safe-area-inset-bottom, 0px))",
+          padding: isMobile ? "8px 12px calc(8px + env(safe-area-inset-bottom, 0px))" : "12px 24px calc(12px + env(safe-area-inset-bottom, 0px))",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          zIndex: 20,
+          zIndex: 25,
           boxShadow: "0 -8px 32px rgba(0,0,0,0.5)",
+          gap: 6,
         }}
       >
-        {/* Left: Previous Ayat shortcut & Reciter info */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+        {/* Left: Previous Ayat button */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button
             id="btn-fs-footer-prev"
             disabled={!hasPrev}
@@ -1758,55 +2024,28 @@ export function AyatFullScreenModal({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 6,
-              padding: "7px 12px",
+              justifyContent: "center",
+              gap: 5,
+              padding: isMobile ? "8px 12px" : "7px 12px",
               borderRadius: "var(--radius-sm)",
               border: "1px solid rgba(255,255,255,0.1)",
-              background: hasPrev ? "rgba(255,255,255,0.05)" : "transparent",
-              color: hasPrev ? "var(--text2)" : "rgba(255,255,255,0.15)",
-              fontSize: 10,
+              background: hasPrev ? "rgba(255,255,255,0.06)" : "transparent",
+              color: hasPrev ? "var(--text)" : "rgba(255,255,255,0.15)",
+              fontSize: isMobile ? 13 : 10,
               fontFamily: "'Cinzel',serif",
-              letterSpacing: 0.8,
+              letterSpacing: 0.5,
               cursor: hasPrev ? "pointer" : "default",
+              minHeight: isMobile ? 40 : 34,
+              minWidth: isMobile ? 42 : "auto",
             }}
           >
             <span>⏮</span>
             <span className="hide-mobile">PRÉCÉDENT</span>
           </button>
-
-          <button
-            id="btn-fs-footer-reciter"
-            onClick={() => {
-              setReciterSearch("");
-              setShowReciterModal(true);
-            }}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              fontSize: 10,
-              color: "var(--gold2)",
-              fontFamily: "'Cinzel',serif",
-              letterSpacing: 0.5,
-              padding: "4px 8px",
-              borderRadius: 4,
-            }}
-            className="hide-mobile"
-            title="Changer de récitateur"
-          >
-            <span>{activeReciterObj?.flag || "🎙️"}</span>
-            <span style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {activeReciterObj?.label || reciterName || recitatorId}
-            </span>
-            <span style={{ fontSize: 8, opacity: 0.7 }}>▾</span>
-          </button>
         </div>
 
-        {/* Center: Main Play / Pause Button & Loop */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        {/* Center: Loop + Main Play/Pause Button */}
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 14 }}>
           {/* Loop Button */}
           {onToggleLoop && (
             <button
@@ -1814,11 +2053,11 @@ export function AyatFullScreenModal({
               onClick={onToggleLoop}
               title={loopActive ? "Désactiver la boucle sur ce verset" : "Répéter ce verset en boucle"}
               style={{
-                width: 36,
-                height: 36,
+                width: isMobile ? 38 : 36,
+                height: isMobile ? 38 : 36,
                 borderRadius: "50%",
-                border: `1px solid ${loopActive ? "var(--teal)" : "rgba(255,255,255,0.12)"}`,
-                background: loopActive ? "rgba(62,184,160,0.2)" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${loopActive ? "var(--teal)" : "rgba(255,255,255,0.15)"}`,
+                background: loopActive ? "rgba(62,184,160,0.22)" : "rgba(255,255,255,0.04)",
                 color: loopActive ? "var(--teal2)" : "var(--text3)",
                 fontSize: 14,
                 cursor: "pointer",
@@ -1838,28 +2077,28 @@ export function AyatFullScreenModal({
             onClick={onTogglePlay}
             title={isPlaying ? "Mettre en pause (Espace)" : "Écouter la récitation (Espace)"}
             style={{
-              width: 52,
-              height: 52,
+              width: isMobile ? 48 : 52,
+              height: isMobile ? 48 : 52,
               borderRadius: "50%",
               border: `2px solid ${isPlaying ? "var(--teal)" : "var(--gold)"}`,
               background: isPlaying ? "var(--teal)" : "linear-gradient(135deg, var(--gold) 0%, #b8933b 100%)",
               color: "#fff",
-              fontSize: 18,
+              fontSize: isMobile ? 16 : 18,
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               boxShadow: isPlaying ? "0 0 24px rgba(62,184,160,0.5)" : "0 0 20px rgba(201,168,76,0.35)",
               transition: "all .2s",
-              paddingLeft: isPlaying ? 0 : 3,
+              paddingLeft: isPlaying ? 0 : 2,
             }}
           >
             {isPlaying ? "❚❚" : "▶"}
           </button>
         </div>
 
-        {/* Right: Next Ayat shortcut & Exit button */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flex: 1 }}>
+        {/* Right: Next Ayat button + Exit */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
           <button
             id="btn-fs-footer-next"
             disabled={!hasNext}
@@ -1867,16 +2106,19 @@ export function AyatFullScreenModal({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 6,
-              padding: "7px 12px",
+              justifyContent: "center",
+              gap: 5,
+              padding: isMobile ? "8px 12px" : "7px 12px",
               borderRadius: "var(--radius-sm)",
               border: "1px solid rgba(255,255,255,0.1)",
-              background: hasNext ? "rgba(255,255,255,0.05)" : "transparent",
-              color: hasNext ? "var(--text2)" : "rgba(255,255,255,0.15)",
-              fontSize: 10,
+              background: hasNext ? "rgba(255,255,255,0.06)" : "transparent",
+              color: hasNext ? "var(--text)" : "rgba(255,255,255,0.15)",
+              fontSize: isMobile ? 13 : 10,
               fontFamily: "'Cinzel',serif",
-              letterSpacing: 0.8,
+              letterSpacing: 0.5,
               cursor: hasNext ? "pointer" : "default",
+              minHeight: isMobile ? 40 : 34,
+              minWidth: isMobile ? 42 : "auto",
             }}
           >
             <span className="hide-mobile">SUIVANT</span>
@@ -1887,20 +2129,21 @@ export function AyatFullScreenModal({
             id="btn-fs-footer-exit"
             onClick={onClose}
             style={{
-              padding: "7px 14px",
+              padding: isMobile ? "8px 10px" : "7px 14px",
               borderRadius: "var(--radius-sm)",
               border: "1px solid rgba(201,168,76,0.4)",
               background: "rgba(201,168,76,0.1)",
               color: "var(--gold2)",
-              fontSize: 10,
+              fontSize: isMobile ? 9 : 10,
               fontFamily: "'Cinzel',serif",
-              letterSpacing: 1,
+              letterSpacing: 0.5,
               cursor: "pointer",
               fontWeight: 600,
               transition: "all .15s",
+              minHeight: isMobile ? 40 : 34,
             }}
           >
-            QUITTER
+            {isMobile ? "✕" : "QUITTER"}
           </button>
         </div>
       </footer>

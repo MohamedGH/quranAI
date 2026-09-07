@@ -19,6 +19,7 @@ export function HeaderToolsModal({
 }) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const dispatch = useDispatch();
+  const fullScreenSelectedAyat = useSelector(sel.fullScreenSelectedAyat);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -231,6 +232,74 @@ export function HeaderToolsModal({
                       position: 'absolute',
                       top: 3,
                       left: showArabicKeyboard ? 23 : 3,
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: '#fff',
+                      transition: 'left .2s',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Plein Écran Verset */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'var(--surface2)',
+                  border: `1px solid ${fullScreenSelectedAyat ? 'rgba(201, 168, 76, 0.4)' : 'rgba(255, 255, 255, 0.07)'}`,
+                  transition: 'all .2s'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      background: fullScreenSelectedAyat ? 'rgba(201, 168, 76, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                      color: fullScreenSelectedAyat ? 'var(--gold2)' : 'var(--text2)'
+                    }}
+                  >
+                    ⛶
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>
+                      Plein Écran Verset (Focus)
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+                      Affiche le verset sélectionné en plein écran immersif
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  id="toggle-fullscreen-ayat-switch"
+                  onClick={() => dispatch(uiActions.toggleFullScreenSelectedAyat())}
+                  style={{
+                    width: 44,
+                    height: 24,
+                    borderRadius: 12,
+                    background: fullScreenSelectedAyat ? 'var(--gold)' : 'rgba(255, 255, 255, 0.15)',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background .2s'
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 3,
+                      left: fullScreenSelectedAyat ? 23 : 3,
                       width: 18,
                       height: 18,
                       borderRadius: '50%',

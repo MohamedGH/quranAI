@@ -27,7 +27,8 @@ const uiSlice = createSlice({
     enableTimestamps:    load("quran_enableTimestamps", true),
     enableLetterByLetter:load("quran_enableLetterByLetter", true),
     enableAnimations:    load("quran_enableAnimations", true),
-    enableHeavyCompute:  load("quran_enableHeavyCompute", true)
+    enableHeavyCompute:  load("quran_enableHeavyCompute", true),
+    fullScreenSelectedAyat: load("quran_fullScreenSelectedAyat", false)
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -48,7 +49,9 @@ const uiSlice = createSlice({
     toggleEnableTimestamps:     (s) => { s.enableTimestamps     = !s.enableTimestamps;     save("quran_enableTimestamps",     s.enableTimestamps); },
     toggleEnableLetterByLetter: (s) => { s.enableLetterByLetter = !s.enableLetterByLetter; save("quran_enableLetterByLetter", s.enableLetterByLetter); },
     toggleEnableAnimations:     (s) => { s.enableAnimations     = !s.enableAnimations;     save("quran_enableAnimations",     s.enableAnimations); },
-    toggleEnableHeavyCompute:   (s) => { s.enableHeavyCompute   = !s.enableHeavyCompute;   save("quran_enableHeavyCompute",   s.enableHeavyCompute); }
+    toggleEnableHeavyCompute:   (s) => { s.enableHeavyCompute   = !s.enableHeavyCompute;   save("quran_enableHeavyCompute",   s.enableHeavyCompute); },
+    toggleFullScreenSelectedAyat: (s) => { s.fullScreenSelectedAyat = !s.fullScreenSelectedAyat; save("quran_fullScreenSelectedAyat", s.fullScreenSelectedAyat); },
+    setFullScreenSelectedAyat:    (s, a) => { s.fullScreenSelectedAyat = !!a.payload; save("quran_fullScreenSelectedAyat", s.fullScreenSelectedAyat); }
   },
 });
 
@@ -350,6 +353,7 @@ export const sel = {
   announceNum:     (s) => s.ui.announceNum,
   spellCheck:      (s) => s.ui.spellCheck,
   showParts:       (s) => s.ui.showParts,
+  fullScreenSelectedAyat: (s) => s.ui.fullScreenSelectedAyat,
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

@@ -42,8 +42,8 @@ const QURAN_KEYWORDS = {
   'آية': ['signe', 'verset', 'sign', 'verse', 'zeichen', 'signo', 'знамение', 'ayet', 'ayat'],
   'حق': ['vérité', 'vrai', 'droit', 'truth', 'wahrheit', 'verdad', 'истина', 'правда', 'hak', 'kebenaran'],
   // Quranic Speech, rulings, social terms
-  'قول': ['say', 'said', 'speak', 'spoke', 'dis', 'disent', 'dit', 'parle', 'sag', 'sagte', 'sprich', 'di', 'dijo', 'habla', 'скажи', 'сказал', 'говори', 'de', 'dedi', 'katakan'],
-  'قل': ['say', 'dis', 'sag', 'sprich', 'di', 'скажи', 'de', 'katakan'],
+  'قول': ['say', 'said', 'speak', 'spoke', 'dis', 'disent', 'dit', 'parole', 'paroles', 'propos', 'parle', 'sag', 'sagte', 'sprich', 'dijo', 'habla', 'скажи', 'сказаل', 'говори', 'dedi', 'söz', 'katakan'],
+  'قل': ['say', 'dis', 'sag', 'sprich', 'скажи', 'dedi', 'katakan'],
   'نسا': ['women', 'woman', 'femme', 'femmes', 'frauen', 'frau', 'mujeres', 'mujer', 'женщин', 'женщина', 'kadın', 'kadınlar', 'wanita', 'perempuan', 'girls', 'girl', 'fille', 'filles', 'orpheline', 'orphelines', 'huerfana', 'huerfanas', 'waisenmadchen'],
   'فتو': ['ruling', 'fatwa', 'consult', 'decision', 'avis', 'juridique', 'jugement', 'decret', 'decrete', 'ordonne', 'urteilsspruch', 'rechtsgutachten', 'dictamen', 'разъяснен', 'hüküm', 'fetva'],
   'يتيم': ['orphan', 'orphans', 'orphelin', 'orphelins', 'orpheline', 'orphelines', 'waise', 'waisen', 'waisenmadchen', 'huerfano', 'huerfanos', 'huerfana', 'huerfanas', 'сирот', 'yetim', 'anak yatim'],
@@ -169,6 +169,33 @@ const TRAILING_CONNECTORS = new Set([
   'çünkü', 'ki', 'bu', 'şu', 'o', 'bir',
 ]);
 
+// Leading subject pronouns that must not be left dangling at the end of a previous part
+const TRAILING_PRONOUNS = new Set([
+  'nous', 'vous', 'ils', 'elles', 'il', 'elle', 'on', 'je', 'tu',
+  'we', 'they', 'he', 'she', 'i', 'you',
+  'wir', 'sie', 'er', 'es', 'ihr', 'ich', 'du',
+  'nosotros', 'ellos', 'ellas', 'él', 'ella', 'yo', 'tú', 'ustedes'
+]);
+
+// Arabic words whose leading waw is part of the root, not a conjunction
+const ROOT_WAW_WORDS = new Set([
+  'وعد', 'وجه', 'ولد', 'ولدان', 'وقت', 'واحد', 'وحيد', 'ورث', 'وسع', 'وصي',
+  'وصف', 'وفى', 'وقى', 'ويل', 'وزن', 'وزر', 'وطن', 'وثق', 'ودع', 'ورد',
+  'وسط', 'وعظ', 'وفق', 'ولى', 'وهب', 'ود'
+]);
+
+export function getLanguageAndConjunctions(lang) {
+  const l = (lang || '').toLowerCase();
+  if (l.startsWith('fr')) return new Set(['et']);
+  if (l.startsWith('en')) return new Set(['and']);
+  if (l.startsWith('es')) return new Set(['y', 'e']);
+  if (l.startsWith('de')) return new Set(['und']);
+  if (l.startsWith('ru')) return new Set(['и', 'да']);
+  if (l.startsWith('tr')) return new Set(['ve']);
+  if (l.startsWith('id')) return new Set(['dan']);
+  return new Set(['and', 'et', 'und', 'y', 'e', 'и', 've', 'dan']);
+}
+
 const PUNCTUATION_END_RE = /[,;:\.\?!«»\(\)—–\-]$/;
 const PUNCTUATION_STRIP_START_RE = /^[\s,;:«»\(\)—–\-]+/;
 const PUNCTUATION_STRIP_END_RE = /[\s,;:«»\(\)—–\-]+$/;
@@ -190,6 +217,7 @@ export function cleanArabicWord(w) {
   if (!w) return '';
   return w
     .replace(/\u0670/g, 'ا')
+    .replace(/\u0640/g, '')
     .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06ED\u0870-\u08FF]/g, '')
     .replace(/[أإآٱ]/g, 'ا')
     .replace(/[ة]/g, 'ه')
@@ -207,6 +235,8 @@ export function cleanTransToken(w) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/œ/g, 'oe')
+    .replace(/æ/g, 'ae')
     .replace(/[,\.;:\?!«»\(\)—–\-"'“”\[\]{}–]/g, '')
     .trim();
 }
@@ -441,7 +471,9 @@ export function findKeywordInTranslation(
         keywordsToMatch.push(...conjTokens);
       }
     }
+  }
 
+  if (cleanAr) {
     // 2. Attached personal pronouns (هن, هم, كم, نا, ها, ه)
     if (cleanAr.endsWith('هن')) {
       const pron = ['them', 'her', 'their', 'elles', 'leur', 'sie', 'ihnen', 'ellas', 'них', 'nim'];
@@ -536,13 +568,17 @@ export function findKeywordInTranslation(
     if (!cleanTrans) continue;
 
     for (let ki = 0; ki < keywordsToMatch.length; ki++) {
-      const kw = keywordsToMatch[ki];
+      const rawKw = keywordsToMatch[ki];
+      if (!rawKw || rawKw.length < 2) continue;
+      const kw = cleanTransToken(rawKw);
       if (!kw || kw.length < 2) continue;
 
       let matchType = 0; // 0=none, 1=partial, 2=prefix/stem, 3=exact
       if (cleanTrans === kw) {
         matchType = 3;
-      } else if (cleanTrans.startsWith(kw) || kw.startsWith(cleanTrans)) {
+      } else if (cleanTrans.startsWith(kw) && kw.length >= 3) {
+        matchType = 2;
+      } else if (kw.startsWith(cleanTrans) && cleanTrans.length >= 4) {
         matchType = 2;
       } else if (cleanTrans.includes(kw) && kw.length >= 4) {
         matchType = 1;
@@ -785,27 +821,38 @@ export function computePartsSegmentation({
 
     // If next Arabic word starts with conjunction و, check if an "and" conjunction exists near expectedNextTransIdx
     const cleanNext = cleanArabicWord(nextArWord);
-    if (cleanNext.startsWith('و') && cleanNext.length >= 2) {
-      const AND_CONJUNCTIONS = new Set(['and', 'et', 'und', 'y', 'e', 'и', 've']);
-      if (idxNext > minCut && AND_CONJUNCTIONS.has(cleanTransToken(transTokens[idxNext - 1]))) {
+    const andConjunctions = getLanguageAndConjunctions(translationLang);
+    if (cleanNext.startsWith('و') && cleanNext.length >= 2 && !ROOT_WAW_WORDS.has(cleanNext)) {
+      if (idxNext > minCut && andConjunctions.has(cleanTransToken(transTokens[idxNext - 1]))) {
         idxNext = idxNext - 1;
       } else {
-        const searchS = Math.max(minCut, idxLast !== -1 ? (idxLast + 1) : Math.min(winStartLast, winStartNext));
+        const searchS = Math.max(minCut, idxLast !== -1 ? Math.min(idxLast + 1, minCut) : Math.min(winStartLast, winStartNext));
         const searchE = Math.min(numTrans - 1, Math.max(winEndLast, winEndNext));
         let bestAndIdx = -1;
         let bestAndDist = Infinity;
+        let bestAndHasPunct = false;
+
         for (let j = searchS; j <= searchE; j++) {
           const cln = cleanTransToken(transTokens[j]);
-          if (AND_CONJUNCTIONS.has(cln)) {
+          if (andConjunctions.has(cln)) {
+            const hasPrecedingPunct = j > 0 && PUNCTUATION_END_RE.test(transTokens[j - 1]);
             const dist = Math.abs(j - expectedNextTransIdx);
-            if (dist < bestAndDist) {
-              bestAndDist = dist;
+            if (hasPrecedingPunct && !bestAndHasPunct) {
               bestAndIdx = j;
+              bestAndDist = dist;
+              bestAndHasPunct = true;
+            } else if (hasPrecedingPunct === bestAndHasPunct) {
+              if (dist < bestAndDist) {
+                bestAndDist = dist;
+                bestAndIdx = j;
+              }
             }
           }
         }
-        if (bestAndIdx !== -1 && (idxNext === -1 || bestAndIdx <= idxNext || idxNext <= idxLast)) {
-          idxNext = bestAndIdx;
+        if (bestAndIdx !== -1) {
+          if (bestAndHasPunct || idxNext === -1 || bestAndIdx <= idxNext) {
+            idxNext = bestAndIdx;
+          }
         }
       }
     }
@@ -825,6 +872,13 @@ export function computePartsSegmentation({
           while (cutCandidate > idxLast && /^["'«“\(\[\s\.]+$/.test(transTokens[cutCandidate])) {
             cutCandidate--;
           }
+          // If cutCandidate landed on a pronoun or connector and token before it ends a clause with punctuation, snap back
+          if (cutCandidate > idxLast && cutCandidate > minCut) {
+            const candWord = cleanTransToken(transTokens[cutCandidate]);
+            if ((TRAILING_PRONOUNS.has(candWord) || TRAILING_CONNECTORS.has(candWord)) && PUNCTUATION_END_RE.test(transTokens[cutCandidate - 1])) {
+              cutCandidate -= 1;
+            }
+          }
           if (cutCandidate >= idxLast) {
             matchedIdx = cutCandidate;
           } else {
@@ -833,18 +887,45 @@ export function computePartsSegmentation({
         }
         matchMethod = `Double concordance arabe : fin "${transTokens[idxLast]}" (#${idxLast}) & début suivant "${transTokens[idxNext]}" (#${idxNext})`;
       } else {
-        // Overlap or same token: fallback safely to last word match
-        const hasLastPunct = PUNCTUATION_END_RE.test(transTokens[idxLast]);
-        matchedIdx = idxLast;
-        matchMethod = hasLastPunct
-          ? `Dernier mot arabe avec ponctuation ("${transTokens[idxLast]}")`
-          : `Dernier mot partie courante ("${transTokens[idxLast]}" #${idxLast})`;
+        // Inversion or collision (idxLast >= idxNext)
+        // If next part starts with conjunction و, or idxNext is an and-conjunction, or token before idxNext has punctuation:
+        if (
+          (cleanNext.startsWith('و') && andConjunctions.has(cleanTransToken(transTokens[idxNext]))) ||
+          (idxNext > minCut && PUNCTUATION_END_RE.test(transTokens[idxNext - 1]))
+        ) {
+          let proposedCut = idxNext - 1;
+          while (proposedCut > minCut && /^["'«“\(\[\s\.]+$/.test(transTokens[proposedCut])) {
+            proposedCut -= 1;
+          }
+          if (proposedCut > minCut) {
+            const pWord = cleanTransToken(transTokens[proposedCut]);
+            if ((TRAILING_PRONOUNS.has(pWord) || TRAILING_CONNECTORS.has(pWord)) && PUNCTUATION_END_RE.test(transTokens[proposedCut - 1])) {
+              proposedCut -= 1;
+            }
+          }
+          matchedIdx = Math.max(minCut, proposedCut);
+          matchMethod = `Concordance début suivant avec conjonction ("${transTokens[idxNext]}" #${idxNext}) -> coupure avant`;
+        } else {
+          // Fallback safely to last word match
+          const hasLastPunct = PUNCTUATION_END_RE.test(transTokens[idxLast]);
+          matchedIdx = idxLast;
+          matchMethod = hasLastPunct
+            ? `Dernier mot arabe avec ponctuation ("${transTokens[idxLast]}")`
+            : `Dernier mot partie courante ("${transTokens[idxLast]}" #${idxLast})`;
+        }
       }
     } else if (idxNext !== -1) {
       // ONLY the next part's first word was matched! (e.g. "Say" at token 12)
       let proposedCut = idxNext - 1;
       while (proposedCut > minCut && /^["'«“\(\[\s\.]+$/.test(transTokens[proposedCut])) {
         proposedCut -= 1;
+      }
+      // If proposedCut landed on a subject pronoun (e.g. "Nous") or connector and previous token has punctuation, snap back
+      if (proposedCut > minCut) {
+        const pWord = cleanTransToken(transTokens[proposedCut]);
+        if ((TRAILING_PRONOUNS.has(pWord) || TRAILING_CONNECTORS.has(pWord)) && PUNCTUATION_END_RE.test(transTokens[proposedCut - 1])) {
+          proposedCut -= 1;
+        }
       }
       matchedIdx = Math.max(minCut, proposedCut);
       matchMethod = `Premier mot partie suivante ("${transTokens[idxNext]}" #${idxNext}) -> coupure avant`;
@@ -919,7 +1000,7 @@ export function computePartsSegmentation({
     // Trailing connector shifting (so next part does not miss its starting connector)
     if (!isActuallyLastInAyah) {
       const endToken = transTokens[cutEnd]?.toLowerCase().replace(/[,\.;:\?!«»\(\)—–\-']/g, '').trim();
-      if (endToken && TRAILING_CONNECTORS.has(endToken) && cutEnd > currentStart) {
+      if (endToken && (TRAILING_CONNECTORS.has(endToken) || TRAILING_PRONOUNS.has(endToken)) && cutEnd > currentStart) {
         connectorShifted = true;
         shiftedWord = transTokens[cutEnd];
         cutEnd = cutEnd - 1;

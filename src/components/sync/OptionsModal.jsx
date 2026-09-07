@@ -16,6 +16,7 @@ export function OptionsModal({ onClose, onOpenReminders }) {
   const showParts             = useSelector(sel.showParts);
   const spellCheck            = useSelector(sel.spellCheck);
   const announceNum           = useSelector(sel.announceNum);
+  const fullScreenSelectedAyat= useSelector(sel.fullScreenSelectedAyat);
 
   const Row = ({ label, desc, on, onToggle, color = "var(--teal2)" }) => (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -72,6 +73,7 @@ export function OptionsModal({ onClose, onOpenReminders }) {
           <Row label="IZHAR إظهار" on={showIzhar} onToggle={() => dispatch(uiActions.toggleIzhar())} color="#4caf81" />
           <Row label="IDGHAM إدغام" on={showIdgham} onToggle={() => dispatch(uiActions.toggleIdgham())} color="#ffd166" />
           <Section title="AFFICHAGE" />
+          <Row label="PLEIN ÉCRAN VERSET" desc="Afficher le verset sélectionné en plein écran immersif" on={fullScreenSelectedAyat} onToggle={() => dispatch(uiActions.toggleFullScreenSelectedAyat())} color="var(--gold2)" />
           <Row label="PARTIES" desc="Afficher les découpes de mémorisation" on={showParts} onToggle={() => dispatch(uiActions.toggleShowParts())} color="var(--gold2)" />
           <Row label="ORTHOGRAPHE" desc="Vérification en révision écrite" on={spellCheck} onToggle={() => dispatch(uiActions.toggleSpellCheck())} color="var(--gold2)" />
           <Row label="NUMÉROS" desc="Annoncer les numéros d'ayat" on={announceNum} onToggle={() => dispatch(uiActions.toggleAnnounceNum())} color="var(--teal2)" />

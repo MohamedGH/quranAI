@@ -20,6 +20,7 @@ import { HeaderToolsModal } from "./components/common/HeaderToolsModal.jsx";
 import { NotificationToast } from "./components/common/NotificationToast.jsx";
 import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
+import { AyatFullScreenModal } from "./components/common/AyatFullScreenModal.jsx";
 
 import { LoginScreen } from "./components/sync/LoginScreen.jsx";
 import { SyncConsole } from "./components/sync/SyncConsole.jsx";
@@ -259,6 +260,8 @@ function AppInner({ currentUser, onSignOut }) {
   const announceNum     = useSelector(sel.announceNum);
   const spellCheck      = useSelector(sel.spellCheck);
   const showParts       = useSelector(sel.showParts);
+  const fullScreenSelectedAyat = useSelector(sel.fullScreenSelectedAyat);
+  const [explicitFullScreen, setExplicitFullScreen] = useState(false);
   const showVoiceInput  = useSelector(sel.showVoiceInput);
   const voiceInputText  = useSelector(sel.voiceInputText);
   const goals           = useSelector(sel.goals, shallowEqual);
@@ -1007,6 +1010,15 @@ function AppInner({ currentUser, onSignOut }) {
     }
   }, [mainAyatIdx, isMainPlaying]);
 
+  // Auto-follow playing ayat when in fullscreen focus mode
+  useEffect(() => {
+    if ((fullScreenSelectedAyat || explicitFullScreen) && openAyatNum != null && isMainPlaying && playingAyatNum != null) {
+      if (playingAyatNum !== openAyatNum) {
+        setOpenAyatNum(playingAyatNum);
+      }
+    }
+  }, [fullScreenSelectedAyat, explicitFullScreen, openAyatNum, isMainPlaying, playingAyatNum]);
+
   useEffect(() => {
     if (openAyatNum && submenuMode === "lecture" && selectedSurah) {
       setLData(selectedSurah.number, openAyatNum, d => ({ ...d, readCount: (d.readCount || 0) + 1 }));
@@ -1440,6 +1452,43 @@ function AppInner({ currentUser, onSignOut }) {
 
   const currentMainAyat = ayats[mainAyatIdx];
   const audioUrl = a => a ? `${getAudioBase()}/${a.number}.mp3` : "";
+
+  const playPartInlineCommon = useCallback((targetAyat, targetTs, part, loop = false) => {
+    if (!targetTs?.words || !part?.wordIndices?.length) return;
+    const url = audioUrl(targetAyat);
+    if (!url) return;
+    const firstTs = targetTs.words[part.wordIndices[0]];
+    const lastTs  = targetTs.words[part.wordIndices[part.wordIndices.length - 1]];
+    if (!firstTs || !lastTs) return;
+    const startMs = firstTs.chars?.[0]?.start;
+    const endMs   = lastTs.chars?.[lastTs.chars.length - 1]?.end;
+    if (startMs == null || endMs == null) return;
+    const audio = partAudioRef.current;
+    if (!audio) return;
+    if (playingPart?.ayatNum === targetAyat.numberInSurah && playingPart?.partId === part.id) {
+      audio.pause(); setPlayingPart(null); setPartCurrentMs(0); stopPartRaf(); return;
+    }
+    audio.src = url;
+    audio.currentTime = startMs / 1000;
+    audio.play().catch(() => {});
+    setPlayingPart({ ayatNum: targetAyat.numberInSurah, partId: part.id, loop });
+    startPartRaf();
+    const endSec = endMs / 1000;
+    const startSec = startMs / 1000;
+    const check = () => {
+      if (audio.currentTime >= endSec) {
+        if (loop && playingPart?.loop !== false) {
+          audio.currentTime = startSec;
+          audio.play().catch(() => {});
+        } else {
+          audio.pause();
+          setTimeout(() => { stopPartRaf(); setPlayingPart(null); setPartCurrentMs(0); audio.removeEventListener('timeupdate', check); }, 250);
+          audio.removeEventListener('timeupdate', check);
+        }
+      }
+    };
+    audio.addEventListener('timeupdate', check);
+  }, [playingPart, audioUrl]); // eslint-disable-line react-hooks/exhaustive-deps
   // Memoized mastery per ayat key
   const masteryMap = useMemo(() => {
     if (!enableHeavyCompute) return {};
@@ -1979,8 +2028,8 @@ function AppInner({ currentUser, onSignOut }) {
                 {(() => {
                   const anyTj = showQalqala||showMadd||showIzhar||showIdgham;
                   const activeTjCount = [showQalqala, showMadd, showIzhar, showIdgham].filter(Boolean).length;
-                  const anyOpt = announceNum||spellCheck||showParts||pageMode;
-                  const activeOptCount = [announceNum, spellCheck, showParts, pageMode].filter(Boolean).length;
+                  const anyOpt = announceNum||spellCheck||showParts||pageMode||fullScreenSelectedAyat;
+                  const activeOptCount = [announceNum, spellCheck, showParts, pageMode, fullScreenSelectedAyat].filter(Boolean).length;
                   const langLabel = translationLang ? (TRANS_LABELS[translationLang] || translationLang.toUpperCase()) : "LANGUE";
 
                   return (
@@ -2109,6 +2158,7 @@ function AppInner({ currentUser, onSignOut }) {
                           </div>
                           <div className="panel-items-row">
                             {[
+                              { toggle: () => dispatch(uiActions.toggleFullScreenSelectedAyat()), on: fullScreenSelectedAyat, label: "⛶ PLEIN ÉCRAN", color: "var(--gold2)", bg: "rgba(201,168,76,.14)" },
                               { toggle: toggleAnnounceNum, on: announceNum, label: "🔢 N°",      color: "var(--teal2)",  bg: "rgba(62,184,160,.14)" },
                               { toggle: toggleSpellCheck,  on: spellCheck,  label: "✔ ORTHO",   color: "var(--gold2)",  bg: "rgba(201,168,76,.12)" },
                               { toggle: toggleShowParts,   on: showParts,   label: "✂ PARTIES", color: "var(--gold2)",  bg: "rgba(201,168,76,.12)" },
@@ -2323,43 +2373,7 @@ function AppInner({ currentUser, onSignOut }) {
                       const isPageStart = ayat.page != null && (!prevAyat || prevAyat.page !== ayat.page);
                       const isPageEnd   = ayat.page != null && (!nextAyat || nextAyat.page !== ayat.page);
 
-                      const playPartInline = (part, loop = false) => {
-                        if (!ts?.words || !part.wordIndices?.length) return;
-                        const url = audioUrl(ayat);
-                        if (!url) return;
-                        const firstTs = ts.words[part.wordIndices[0]];
-                        const lastTs  = ts.words[part.wordIndices[part.wordIndices.length - 1]];
-                        if (!firstTs || !lastTs) return;
-                        const startMs = firstTs.chars?.[0]?.start;
-                        const endMs   = lastTs.chars?.[lastTs.chars.length - 1]?.end;
-                        if (startMs == null || endMs == null) return;
-                        const audio = partAudioRef.current;
-                        if (!audio) return;
-                        // Toggle stop if same part playing
-                        if (playingPart?.ayatNum === ayat.numberInSurah && playingPart?.partId === part.id) {
-                          audio.pause(); setPlayingPart(null); setPartCurrentMs(0); stopPartRaf(); return;
-                        }
-                        audio.src = url;
-                        audio.currentTime = startMs / 1000;
-                        audio.play().catch(() => {});
-                        setPlayingPart({ ayatNum: ayat.numberInSurah, partId: part.id, loop });
-                        startPartRaf();
-                        const endSec = endMs / 1000;
-                        const startSec = startMs / 1000;
-                        const check = () => {
-                          if (audio.currentTime >= endSec) {
-                            if (loop && playingPart?.loop !== false) {
-                              audio.currentTime = startSec;
-                              audio.play().catch(() => {});
-                            } else {
-                              audio.pause();
-                              setTimeout(() => { stopPartRaf(); setPlayingPart(null); setPartCurrentMs(0); audio.removeEventListener('timeupdate', check); }, 250);
-                              audio.removeEventListener('timeupdate', check);
-                            }
-                          }
-                        };
-                        audio.addEventListener('timeupdate', check);
-                      };
+                      const playPartInline = (part, loop = false) => playPartInlineCommon(ayat, ts, part, loop);
 
                       // Word→partIndex map for coloring
                       const PART_COLORS  = ["rgba(201,168,76,.22)","rgba(62,184,160,.18)","rgba(111,207,154,.18)","rgba(224,90,90,.15)","rgba(200,120,255,.15)"];
@@ -2747,6 +2761,20 @@ function AppInner({ currentUser, onSignOut }) {
                                   outline: isPlaying ? "2px solid var(--teal)" : "none",
                                   outlineOffset:2,
                                 }}>▶</button>
+                              <button
+                                title="Afficher en plein écran (Focus)"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setOpenAyatNum(ayat.numberInSurah);
+                                  setExplicitFullScreen(true);
+                                }}
+                                style={{
+                                  width:22, height:22, borderRadius:"50%", border:"1px solid rgba(201,168,76,.25)",
+                                  background:"rgba(201,168,76,.06)",
+                                  color:"var(--gold2)",
+                                  fontSize:9, cursor:"pointer", display:"flex", alignItems:"center",
+                                  justifyContent:"center", flexShrink:0, transition:"all .15s",
+                                }}>⛶</button>
                             </div>
                             {renderAyatText()}
                             <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
@@ -2823,6 +2851,7 @@ function AppInner({ currentUser, onSignOut }) {
                                 setLoopStartInput(ayat.numberInSurah); setLoopEndInput(ayat.numberInSurah);
                                 setLoopActive(true);
                               }}
+                              onFullScreen={() => setExplicitFullScreen(true)}
                             />
                           </AnimatedSubmenu>
                           {isPageEnd && <div className="page-edge-pill end">FIN · PAGE {ayat.page} ◆</div>}
@@ -2882,6 +2911,136 @@ function AppInner({ currentUser, onSignOut }) {
           listening={listening}
           initialTab={headerToolsInitialTab}
         />
+
+        {/* AYAT FULL SCREEN (FOCUS) MODAL */}
+        {((fullScreenSelectedAyat || explicitFullScreen) && openAyatNum != null && selectedSurah) && (() => {
+          const currentAyat = ayats.find(a => a.numberInSurah === openAyatNum);
+          if (!currentAyat) return null;
+          const tKey = `${translationLang}:${selectedSurah.number}`;
+          const transText = translations[tKey]?.find(t => t.numberInSurah === openAyatNum)?.text;
+          const currentTs = timestampsMap[tskey(selectedSurah.number, openAyatNum)];
+          const currentLd = getLData(selectedSurah.number, openAyatNum);
+          const isCurrentPlaying = playingAyatNum === openAyatNum && isMainPlaying;
+          const masteryPct = masteryMap[lkey(selectedSurah.number, openAyatNum)] ?? 0;
+          const isCurrentLoop = loopActive && loopStartNum === openAyatNum && loopEndNum === openAyatNum;
+
+          const handleTogglePlay = () => {
+            const idx = ayats.findIndex(a => a.numberInSurah === openAyatNum);
+            if (idx < 0) return;
+            if (isCurrentPlaying) {
+              mainAudioRef.current?.pause();
+              setIsMainPlaying(false);
+            } else {
+              playMainAyat(idx);
+              setIsMainPlaying(true);
+            }
+          };
+
+          const handleSelectAyat = (nextAyatNum) => {
+            setOpenAyatNum(nextAyatNum);
+            const nextIdx = ayats.findIndex(a => a.numberInSurah === nextAyatNum);
+            if (nextIdx >= 0 && isMainPlaying) {
+              playMainAyat(nextIdx);
+            }
+          };
+
+          const handleToggleLoop = () => {
+            const idx = ayats.findIndex(a => a.numberInSurah === openAyatNum);
+            if (idx === -1) return;
+            if (isCurrentLoop) {
+              setLoopActive(false);
+            } else {
+              setLoopStart(idx);
+              setLoopEnd(idx);
+              setLoopStartInput(openAyatNum);
+              setLoopEndInput(openAyatNum);
+              setLoopActive(true);
+            }
+          };
+
+          return (
+            <AyatFullScreenModal
+              isOpen={true}
+              onClose={() => {
+                setOpenAyatNum(null);
+                setExplicitFullScreen(false);
+              }}
+              ayat={currentAyat}
+              selectedSurah={selectedSurah}
+              ayats={ayats}
+              translationLang={translationLang}
+              translationText={transText}
+              timestamps={currentTs}
+              enableTimestamps={enableTimestamps}
+              enableLetterByLetter={enableLetterByLetter}
+              showQalqala={showQalqala}
+              showMadd={showMadd}
+              showIzhar={showIzhar}
+              showIdgham={showIdgham}
+              isPlaying={isCurrentPlaying}
+              onTogglePlay={handleTogglePlay}
+              onSelectAyat={handleSelectAyat}
+              ld={currentLd}
+              setLData={setLData}
+              fullScreenOption={fullScreenSelectedAyat}
+              onToggleFullScreenOption={() => dispatch(uiActions.toggleFullScreenSelectedAyat())}
+              masteryPercent={masteryPct}
+              loopActive={isCurrentLoop}
+              onToggleLoop={handleToggleLoop}
+              reciterName={activeRecitator?.label || recitatorId}
+              recitators={RECITATORS}
+              recitatorId={recitatorId}
+              onSelectReciter={(newId) => {
+                const changed = newId !== recitatorId;
+                setRecitatorId(newId);
+                if (changed && mainAudioRef.current) {
+                  loadedAyatIdxRef.current = null;
+                  if (isMainPlaying) {
+                    mainAudioRef.current.load();
+                    mainAudioRef.current.play().catch(() => {});
+                    loadedAyatIdxRef.current = mainAyatIdx;
+                  }
+                }
+              }}
+              showParts={showParts}
+              playingPart={playingPart}
+              onPlayPartInline={(part, loop) => playPartInlineCommon(currentAyat, currentTs, part, loop)}
+              partSelectStart={partSelectStart}
+              setPartSelectStart={setPartSelectStart}
+              setPartSelectStep={setPartSelectStep}
+              setPartSelectAyat={setPartSelectAyat}
+              translations={translations}
+              wbwTranslations={wbwTranslations}
+              submenuMode={submenuMode}
+              setSubmenuMode={setSubmenuMode}
+              audioUrl={audioUrl(currentAyat)}
+              onLoadTimestamps={data => {
+                const parsed = parseTimestampsFile(data, selectedSurah.number, recitatorId);
+                if (Object.keys(parsed).length === 0 && data.words)
+                  setTimestampsMap({ ...timestampsMap, [tskey(selectedSurah.number, currentAyat.numberInSurah)]: { words: data.words } });
+                else setTimestampsMap({ ...timestampsMap, ...parsed });
+              }}
+              onUpdateTimestamps={data => {
+                setTimestampsMap({ ...timestampsMap, [tskey(selectedSurah.number, currentAyat.numberInSurah)]: data });
+              }}
+              onLocalPlay={(ms) => setLocalPlaying(ms != null ? { ayatNum: currentAyat.numberInSurah, currentMs: ms } : null)}
+              partSelectAyat={partSelectAyat}
+              partSelectStep={partSelectStep}
+              onStartPartCreate={() => {
+                setPartSelectAyat(currentAyat.numberInSurah);
+                setPartSelectStep('start');
+                setPartSelectStart(null);
+              }}
+              collections={collections}
+              ayatInCollections={ayatInCollections(selectedSurah.number, currentAyat.numberInSurah)}
+              onOpenCollModal={() => setCollModal({ surahNum: selectedSurah.number, surahEn: selectedSurah.englishName, ayatNum: currentAyat.numberInSurah, text: currentAyat.text, number: currentAyat.number })}
+              aideMemoireClickMode={aideMemoireClickModes[currentAyat.numberInSurah]||null}
+              setAideMemoireClickMode={(m)=>setAideMemoireClickModes(prev=>({...prev,[currentAyat.numberInSurah]:m}))}
+              spellCheck={spellCheck}
+              wbwWords={wbwTranslations[`${translationLang}:${selectedSurah.number}`]?.[currentAyat.numberInSurah] || null}
+            />
+          );
+        })()}
 
         {/* OPTIONS & SETTINGS MODAL */}
         {showOptionsModal && (

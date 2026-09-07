@@ -12,7 +12,7 @@ import { RevisionEcritureMode } from "./RevisionEcritureMode.jsx";
 import { TajweedExercice } from "./TajweedExercice.jsx";
 import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 
-export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive, translationLang, ayatTranslation, wbwWords }) {
+export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive, translationLang, ayatTranslation, wbwWords, onFullScreen }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="submenu" onClick={e => e.stopPropagation()}>
@@ -32,15 +32,13 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
         <button className={`mode-btn${submenuMode === "memoire" ? " active" : ""}`} onClick={() => setSubmenuMode("memoire")}>📖 AIDE MÉMOIRE</button>
         <button className={`mode-btn${submenuMode === "tajweed" ? " active" : ""}`} onClick={() => setSubmenuMode("tajweed")}>☪ TAJWEED</button>
         <button
-          onClick={() => setSubmenuMode(submenuMode === 'reviser' ? 'lecture' : 'reviser')}
-          title={ld.toRevise ? "Modifier marquage à réviser" : "Marquer à réviser"}
-          style={{
-            flexShrink:0, padding:"6px 10px", fontSize:13, cursor:"pointer",
-            background: ld.toRevise ? "rgba(201,168,76,.12)" : submenuMode === 'reviser' ? "rgba(255,255,255,.05)" : "transparent",
-            border:"none", borderBottom: ld.toRevise ? "2px solid var(--gold)" : submenuMode === 'reviser' ? "2px solid var(--text3)" : "2px solid transparent",
-            color: ld.toRevise ? "var(--gold2)" : submenuMode === 'reviser' ? "var(--text2)" : "var(--text3)",
-            transition:"all .15s",
-          }}>🔖</button>
+          className={`mode-btn${submenuMode === "reviser" ? " active" : ""}`}
+          onClick={() => setSubmenuMode("reviser")}
+          style={submenuMode !== "reviser" && ld?.toRevise ? { color: "var(--gold2)" } : {}}
+          title={ld?.toRevise ? "Modifier marquage à réviser" : "Marquer et cibler des mots/lettres à réviser"}
+        >
+          🔖 À RÉVISER{ld?.toRevise ? " •" : ""}
+        </button>
         <button onClick={() => onSetLoop?.()} style={{
           flexShrink:0, padding:"6px 10px", fontSize:14, cursor:"pointer",
           background: ayatLoopActive ? "rgba(62,184,160,.12)" : "transparent",
@@ -66,6 +64,21 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
         >
           {copied ? "✓" : "📋"}
         </button>
+        {onFullScreen && (
+          <button
+            onClick={onFullScreen}
+            title="Afficher ce verset en plein écran (Focus)"
+            style={{
+              flexShrink:0, padding:"6px 10px", fontSize:12, cursor:"pointer",
+              background: "transparent",
+              border: "none", borderBottom: "2px solid transparent",
+              color: "var(--gold2)",
+              transition:"all .15s",
+            }}
+          >
+            ⛶
+          </button>
+        )}
       </div>
       <div className="submenu-content">
         <ErrorBoundary>

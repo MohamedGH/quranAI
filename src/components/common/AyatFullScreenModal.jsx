@@ -106,27 +106,56 @@ export function AyatFullScreenModal({
   // Touch swipe handling for mobile
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
+  const touchIsIgnored = useRef(false);
+
+  const isSwipeIgnoredTarget = (target) => {
+    if (!target) return false;
+    return !!(
+      target.closest &&
+      target.closest(
+        '#fs-submenu-section, .submenu, .submenu-header, .mode-btn, .submenu-content, button, input, textarea, select, [data-no-swipe], .horizontal-scroll, audio, .scrubber, .tajweed-badge, .word-badge'
+      )
+    );
+  };
 
   const handleTouchStart = (e) => {
     if (!e.touches || e.touches.length === 0) return;
+    if (isSwipeIgnoredTarget(e.target)) {
+      touchIsIgnored.current = true;
+      touchStartX.current = null;
+      touchStartY.current = null;
+      return;
+    }
+    touchIsIgnored.current = false;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
   };
 
   const handleTouchEnd = (e) => {
-    if (touchStartX.current == null || touchStartY.current == null) return;
+    if (touchIsIgnored.current || touchStartX.current == null || touchStartY.current == null) {
+      touchIsIgnored.current = false;
+      touchStartX.current = null;
+      touchStartY.current = null;
+      return;
+    }
     if (!e.changedTouches || e.changedTouches.length === 0) return;
+    if (isSwipeIgnoredTarget(e.target)) {
+      touchStartX.current = null;
+      touchStartY.current = null;
+      return;
+    }
+
     const dx = e.changedTouches[0].clientX - touchStartX.current;
     const dy = e.changedTouches[0].clientY - touchStartY.current;
     touchStartX.current = null;
     touchStartY.current = null;
 
-    // Horizontal swipe must dominate vertical scroll
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-      if (dx < -60 && ayat && ayat.numberInSurah < (selectedSurah?.numberOfAyahs || ayats.length)) {
+    // Horizontal swipe must dominate vertical scroll and exceed threshold
+    if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 2.0) {
+      if (dx < -80 && ayat && ayat.numberInSurah < (selectedSurah?.numberOfAyahs || ayats.length)) {
         // Swipe left -> Next verse
         onSelectAyat?.(ayat.numberInSurah + 1);
-      } else if (dx > 60 && ayat && ayat.numberInSurah > 1) {
+      } else if (dx > 80 && ayat && ayat.numberInSurah > 1) {
         // Swipe right -> Previous verse
         onSelectAyat?.(ayat.numberInSurah - 1);
       }
@@ -1874,6 +1903,9 @@ export function AyatFullScreenModal({
           {setSubmenuMode && (
             <section
               id="fs-submenu-section"
+              data-no-swipe="true"
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => e.stopPropagation()}
               style={{
                 width: "100%",
                 maxWidth: 960,

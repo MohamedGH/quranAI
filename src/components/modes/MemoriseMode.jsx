@@ -7,12 +7,13 @@ import { sel } from "../../store.js";
 import { splitArabicWords, splitArabicClusters } from "../../utils/arabicUtils.js";
 import { ArabicHighlighted } from "../common/ArabicHighlighted.jsx";
 import { MasteryBar, MasteryBadge, MasteryDebug, computeMastery } from "../common/Mastery.jsx";
+import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
 
 export function MemoriseMode({ surahs, learnData, setLData, initialSurahNum, initialRangeFrom, initialRangeTo }) {
   // ── Persistence helpers ──
   const MEM_KEY = 'quran_memorise_session';
-  const loadSession = () => { try { return JSON.parse(localStorage.getItem(MEM_KEY)) || {}; } catch { return {}; } };
-  const saveSession = (data) => { try { localStorage.setItem(MEM_KEY, JSON.stringify(data)); } catch {} };
+  const loadSession = () => safeGetItem(MEM_KEY, {});
+  const saveSession = (data) => safeSetItem(MEM_KEY, data);
 
   const saved = React.useMemo(() => {
     // URL params take priority over saved session

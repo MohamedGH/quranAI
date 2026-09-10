@@ -1,9 +1,9 @@
 import { OfflineLoader } from "../common/OfflineLoader.jsx";
 import { firebaseAuth, firebaseDb, isFirebaseConfigured } from "../../firebase.js";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import { getDeviceId, mergeLearnData, mergeActivity, mergeCollections } from "../../utils/syncUtils.js";
+import { getDeviceId, mergeLearnData, mergeActivity, mergeCollections, DATA_KEYS } from "../../utils/syncUtils.js";
+import { safeJsonParse, safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
 import React, { useState } from "react";
-import { DATA_KEYS } from "../../utils/syncUtils.js";
 
 export function ExportImport() {
   const [open,      setOpen]      = React.useState(false);
@@ -25,8 +25,8 @@ export function ExportImport() {
       data: {},
     };
     for (const key of DATA_KEYS) {
-      const raw = localStorage.getItem(key);
-      if (raw) { try { payload.data[key] = JSON.parse(raw); } catch { payload.data[key] = raw; } }
+      const val = safeGetItem(key, null);
+      if (val !== null) payload.data[key] = val;
     }
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -54,9 +54,7 @@ export function ExportImport() {
       for (const key of DATA_KEYS) {
         const incoming = payload.data[key];
         if (incoming == null) continue;
-        const rawBase = localStorage.getItem(key);
-        let base;
-        try { base = rawBase ? JSON.parse(rawBase) : null; } catch { base = null; }
+        const base = safeGetItem(key, null);
 
         let result;
         if (key === "quran_learnData") {
@@ -70,13 +68,13 @@ export function ExportImport() {
         } else {
           result = base ?? incoming;
         }
-        localStorage.setItem(key, JSON.stringify(result));
+        safeSetItem(key, result);
         merged++;
       }
 
       // ── Backup avant fusion ──
       const backupPayload = { version:2, deviceId: myId, exportedAt: new Date().toISOString(), isBackup: true, data: {} };
-      for (const k of DATA_KEYS) { const r = localStorage.getItem(k); if (r) { try { backupPayload.data[k] = JSON.parse(r); } catch { backupPayload.data[k] = r; } } }
+      for (const k of DATA_KEYS) { const r = safeGetItem(k, null); if (r !== null) backupPayload.data[k] = r; }
       const backupBlob = new Blob([JSON.stringify(backupPayload, null, 2)], { type:"application/json" });
       const backupUrl  = URL.createObjectURL(backupBlob);
       const backupA    = document.createElement("a");
@@ -86,9 +84,9 @@ export function ExportImport() {
       URL.revokeObjectURL(backupUrl);
 
       // Track import history
-      const history = JSON.parse(localStorage.getItem("quran_import_history") || "[]");
+      const history = safeGetItem("quran_import_history", []);
       history.push({ from: payload.deviceId || "?", importedAt: new Date().toISOString(), myId, keys: merged });
-      localStorage.setItem("quran_import_history", JSON.stringify(history.slice(-20)));
+      safeSetItem("quran_import_history", history.slice(-20));
 
       setStatus({ type:"ok", msg: `Fusion OK — ${merged} clés importées depuis ${payload.deviceId || "?"} (${payload.exportedAt?.slice(0,10) || "?"})` });
       setTimeout(() => window.location.reload(), 1200);
@@ -112,8 +110,8 @@ export function ExportImport() {
     try {
       const data = {};
       for (const key of DATA_KEYS) {
-        const raw = localStorage.getItem(key);
-        if (raw) { try { data[key] = JSON.parse(raw); } catch { data[key] = raw; } }
+        const val = safeGetItem(key, null);
+        if (val !== null) data[key] = val;
       }
       const docRef = doc(firebaseDb, "userData", uid);
       await setDoc(docRef, {
@@ -153,9 +151,7 @@ export function ExportImport() {
       for (const key of DATA_KEYS) {
         const incoming = data[key];
         if (incoming == null) continue;
-        const rawBase = localStorage.getItem(key);
-        let base;
-        try { base = rawBase ? JSON.parse(rawBase) : null; } catch { base = null; }
+        const base = safeGetItem(key, null);
         let result;
         if (key === "quran_learnData") {
           result = mergeLearnData(base || {}, incoming);
@@ -168,7 +164,7 @@ export function ExportImport() {
         } else {
           result = incoming ?? base;
         }
-        localStorage.setItem(key, JSON.stringify(result));
+        safeSetItem(key, result);
         merged++;
       }
       setCloudStatus({ type:"ok", msg:`Restauré depuis le cloud ✓ (sauvegarde du ${savedAt?.slice(0,10) || "?"})` });
@@ -180,7 +176,7 @@ export function ExportImport() {
   };
 
   const history = React.useMemo(() => {
-    try { return JSON.parse(localStorage.getItem("quran_import_history") || "[]"); } catch { return []; }
+    return safeGetItem("quran_import_history", []);
   }, [open]);
 
   return (

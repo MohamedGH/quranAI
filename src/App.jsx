@@ -21,6 +21,9 @@ import { NotificationToast } from "./components/common/NotificationToast.jsx";
 import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
 import { AyatFullScreenModal } from "./components/common/AyatFullScreenModal.jsx";
+import { SurahHeader } from "./components/common/SurahHeader.jsx";
+import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
+import { safeGetItem, safeSetItem, safeRemoveItem } from "./utils/safeStorage.js";
 
 import { LoginScreen } from "./components/sync/LoginScreen.jsx";
 import { SyncConsole } from "./components/sync/SyncConsole.jsx";
@@ -321,7 +324,7 @@ function AppInner({ currentUser, onSignOut }) {
   const activeArabicInput = React.useRef(null);
   const [showOptionsPanel, setShowOptionsPanel] = React.useState(false);
   const [showLangPanel,    setShowLangPanel]    = React.useState(false);
-  const [recitatorId,      setRecitatorId]      = useState(() => { try { return localStorage.getItem('quran_recitator') || 'ar.alafasy'; } catch { return 'ar.alafasy'; } });
+  const [recitatorId,      setRecitatorId]      = useState(() => safeGetItem('quran_recitator', 'ar.alafasy') || 'ar.alafasy');
   const [showRecitPanel,   setShowRecitPanel]   = useState(false);
   const [recitatorSearch,  setRecitatorSearch]  = useState("");
   // Bumped whenever a reciter's bitrate self-heals (markBitrateBad) so components
@@ -442,7 +445,7 @@ function AppInner({ currentUser, onSignOut }) {
   }, [recitatorId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [renderLimit, setRenderLimit] = useState(30);
-  const [pageMode,    setPageMode]    = useState(() => { try { return JSON.parse(localStorage.getItem('quran_page_mode')) ?? false; } catch { return false; } });
+  const [pageMode,    setPageMode]    = useState(() => safeGetItem('quran_page_mode', false) ?? false);
   const [surahMeta,   setSurahMeta]   = useState(null); // { hizb, juz, page, wordCount }
   const [pageMeta,    setPageMeta]    = useState(null); // { hizb, juz, ayatCount, wordCount } for current page
   const [showSurahInfo, setShowSurahInfo] = useState(false);
@@ -465,19 +468,15 @@ function AppInner({ currentUser, onSignOut }) {
   }, []);
   const [ayatSearchInput, setAyatSearchInput] = useState("");
   const [autoPageFollow, setAutoPageFollow] = useState(true);
-  const [translationLang, setTranslationLang] = useState(() => {
-    try { return localStorage.getItem('quran_trans_lang') || null; } catch { return null; }
-  }); // null | 'fr'|'en'|'tr'…
+  const [translationLang, setTranslationLang] = useState(() => safeGetItem('quran_trans_lang', null)); // null | 'fr'|'en'|'tr'…
   useEffect(() => {
-    try {
-      if (translationLang) localStorage.setItem('quran_trans_lang', translationLang);
-      else localStorage.removeItem('quran_trans_lang');
-    } catch {}
+    if (translationLang) safeSetItem('quran_trans_lang', translationLang);
+    else safeRemoveItem('quran_trans_lang');
   }, [translationLang]);
   const [translations, setTranslations] = useState({}); // { 'fr:2': [{numberInSurah, text}] }
   const [wbwTranslations, setWbwTranslations] = useState({}); // { 'fr:2': { [ayahNum]: [word1, word2] } }
   const [activePageCoran,  setactivePageCoran]  = useState(null);
-  React.useEffect(() => { try { localStorage.setItem('quran_page_mode', JSON.stringify(pageMode)); } catch {} }, [pageMode]);
+  React.useEffect(() => { safeSetItem('quran_page_mode', pageMode); }, [pageMode]);
   const rafRef       = useRef(null);
   const wakeLockRef  = useRef(null);
 
@@ -1896,376 +1895,56 @@ function AppInner({ currentUser, onSignOut }) {
               </div>
             ) : (
               <>
-                {(() => {
-                  const isSurahFullyLearned = ayats.length > 0 && ayats.every(a => getLData(selectedSurah.number, a.numberInSurah).learned);
-                  const markAllLearned   = () => ayats.forEach(a => setLData(selectedSurah.number, a.numberInSurah, d => ({ ...d, learned: true })));
-                  const unmarkAllLearned = () => ayats.forEach(a => setLData(selectedSurah.number, a.numberInSurah, d => ({ ...d, learned: false })));
-                  return (
-                <div className="surah-header">
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,flexWrap:'wrap',lineHeight:1.1}}>
-                    <div className="surah-header-ornament">{selectedSurah.name}</div>
-                    {selectedSurah.number !== 9 && (
-                      <div className="surah-header-bismillah" style={{fontFamily:"'Amiri Quran',serif",fontSize:13,color:'var(--gold)',direction:'rtl',opacity:.8,lineHeight:1.1}}>بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
-                    )}
-                  </div>
-                  <div className="surah-header-title">{selectedSurah.englishName.toUpperCase()} · <span style={{opacity:.6}}>{selectedSurah.englishNameTranslation?.toUpperCase()}</span> · {selectedSurah.numberOfAyahs} AYATS</div>
-
-                  {/* Compact single-line toolbar: mastery · info toggle · learned toggle · go-to-ayat toggle */}
-                  {(() => {
-                    const st = surahStats[selectedSurah.number];
-                    const total = selectedSurah.numberOfAyahs || 0;
-                    const totalMasteryPct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0;
-
-                    const sn = selectedSurah.number;
-                    const curPage = pageMode ? (activePageCoran ?? ayats[mainAyatIdx]?.page ?? null) : null;
-                    const pageAyats = curPage ? ayats.filter(a => a.page === curPage) : ayats;
-                    const totalParts = pageAyats.reduce((s, a) => s + (learnData[lkey(sn, a.numberInSurah)]?.parts?.length || 0), 0);
-                    const totalUnk   = pageAyats.reduce((s, a) => s + (learnData[lkey(sn, a.numberInSurah)]?.unknownWords?.length || 0), 0);
-                    const meta = pageMode && pageMeta ? pageMeta : surahMeta;
-                    const pills = pageMode && curPage ? [
-                      { label: 'PAGE',    val: curPage,              color: '#c878ff' },
-                      { label: 'HIZB',    val: meta?.hizb    ?? '…', color: '#ffd166' },
-                      { label: 'JUZ',     val: meta?.juz     ?? '…', color: '#a8edea' },
-                      { label: 'AYATS',   val: meta?.ayatCount ?? pageAyats.length, color: 'var(--gold2)' },
-                      { label: 'MOTS',    val: meta?.wordCount ?? '…', color: '#5bc8f5' },
-                      { label: 'PARTIES', val: totalParts,            color: '#c878ff' },
-                      { label: 'INCONNUS',val: totalUnk, color: totalUnk > 0 ? '#ff9f43' : 'var(--text3)' },
-                    ] : [
-                      { label: 'HIZB',    val: surahMeta?.hizb ?? '…', color: '#ffd166' },
-                      { label: 'AYATS',   val: selectedSurah.numberOfAyahs, color: 'var(--gold2)' },
-                      { label: 'MOTS',    val: surahMeta?.wordCount ?? '…', color: '#5bc8f5' },
-                      { label: 'PARTIES', val: totalParts, color: '#c878ff' },
-                      { label: 'INCONNUS',val: totalUnk,  color: totalUnk > 0 ? '#ff9f43' : 'var(--text3)' },
-                    ];
-                    const infoLabel = pageMode && curPage ? `PAGE ${curPage}` : `SOURATE`;
-
-                    const pillBtnStyle = (active, activeColor='rgba(255,255,255,.2)') => ({
-                      display:'flex', alignItems:'center', gap:3,
-                      fontSize:7.5, letterSpacing:.6, padding:'1px 7px', borderRadius:12, height:19,
-                      fontFamily:"'Cinzel',serif", cursor:'pointer', whiteSpace:'nowrap',
-                      background: active ? 'rgba(255,255,255,.06)' : 'transparent',
-                      border:'1px solid ' + (active ? activeColor : 'rgba(255,255,255,.1)'),
-                      color: active ? 'var(--text2)' : 'var(--text3)', transition:'all .2s',
-                    });
-
-                    return (
-                      <>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:3,flexWrap:'wrap'}}>
-                          {/* Mastery */}
-                          <div style={{display:'flex',alignItems:'center',gap:3,padding:'1px 6px',borderRadius:12,height:19,
-                            border:`1px solid ${masteryColor(totalMasteryPct)}`,background:'rgba(255,255,255,.03)'}}>
-                            <span style={{fontSize:8}}>🎯</span>
-                            <span style={{fontSize:9.5,fontWeight:700,fontFamily:"'Cinzel',serif",color:masteryColor(totalMasteryPct)}}>{totalMasteryPct}%</span>
-                          </div>
-
-                          {/* Info toggle (page/hizb/juz/mots/parties/inconnus pills) */}
-                          <button onClick={() => setShowSurahInfo(v => !v)}
-                            style={pillBtnStyle(showSurahInfo, 'rgba(255,255,255,.25)')}>
-                            ℹ {infoLabel} {showSurahInfo ? '▲' : '▼'}
-                          </button>
-
-                          {/* Learned toggle */}
-                          {ayats.length > 0 && (
-                            <button onClick={isSurahFullyLearned ? unmarkAllLearned : markAllLearned}
-                              title={isSurahFullyLearned ? "Sourate apprise — cliquer pour désactiver" : "Marquer toute la sourate comme apprise"}
-                              style={pillBtnStyle(isSurahFullyLearned, 'var(--green)')}>
-                              {isSurahFullyLearned
-                                ? <span style={{color:'var(--green)'}}>✓ APPRISE</span>
-                                : 'MARQUER APPRISE'}
-                            </button>
-                          )}
-
-                          {/* Go-to-ayat toggle */}
-                          {ayats.length > 0 && (
-                            <button onClick={() => setShowAyatJump(v => !v)}
-                              style={pillBtnStyle(showAyatJump, '#c878ff')}>
-                              🔎 ALLER {showAyatJump ? '▲' : '▼'}
-                            </button>
-                          )}
-                        </div>
-
-                        {showSurahInfo && (
-                          <div style={{display:'flex',flexWrap:'wrap',gap:4,justifyContent:'center',marginTop:4}}>
-                            {pills.map(({ label: l, val, color }) => (
-                              <div key={l} style={{
-                                display:'flex',flexDirection:'column',alignItems:'center',
-                                background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.08)',
-                                borderRadius:5,padding:'3px 8px',minWidth:44,
-                              }}>
-                                <div style={{fontSize:11,fontWeight:700,color,fontFamily:"'Cinzel',serif",lineHeight:1}}>{val}</div>
-                                <div style={{fontSize:6.5,letterSpacing:1,color:'var(--text3)',marginTop:2}}>{l}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {showAyatJump && (
-                          <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:4}}>
-                            <input type="number" min={1} max={selectedSurah.numberOfAyahs}
-                              autoFocus
-                              value={ayatSearchInput}
-                              onChange={e => setAyatSearchInput(e.target.value)}
-                              onKeyDown={e => { if (e.key === 'Enter') { jumpToAyatNumber(ayatSearchInput); setAyatSearchInput(''); setShowAyatJump(false); } }}
-                              placeholder="N°"
-                              style={{width:48,height:20,textAlign:'center',background:'var(--surface3)',
-                                border:'1px solid var(--border2)',borderRadius:4,padding:'2px 4px',
-                                color:'var(--text)',fontSize:11,fontFamily:"'Cinzel',serif",outline:'none'}} />
-                            <button onClick={() => { jumpToAyatNumber(ayatSearchInput); setAyatSearchInput(''); setShowAyatJump(false); }}
-                              style={{fontSize:7.5,letterSpacing:.5,padding:'2px 7px',height:20,fontFamily:"'Cinzel',serif",
-                                background:'rgba(200,120,255,.08)',border:'1px solid #c878ff',color:'#c878ff',
-                                borderRadius:4,cursor:'pointer'}}>
-                              🔎 ALLER
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-                  );
-                })()}
-
-                {(() => {
-                  const anyTj = showQalqala||showMadd||showIzhar||showIdgham;
-                  const activeTjCount = [showQalqala, showMadd, showIzhar, showIdgham].filter(Boolean).length;
-                  const anyOpt = announceNum||spellCheck||showParts||pageMode||fullScreenSelectedAyat;
-                  const activeOptCount = [announceNum, spellCheck, showParts, pageMode, fullScreenSelectedAyat].filter(Boolean).length;
-                  const langLabel = translationLang ? (TRANS_LABELS[translationLang] || translationLang.toUpperCase()) : "LANGUE";
-
-                  return (
-                <div className="ts-global-bar">
-                  {/* Backdrop to close floating panels on outside click */}
-                  {(showTajweedPanel || showOptionsPanel || showLangPanel) && (
-                    <div
-                      onClick={() => { setShowTajweedPanel(false); setShowOptionsPanel(false); setShowLangPanel(false); }}
-                      style={{ position: "fixed", inset: 0, zIndex: 25, background: "transparent" }}
-                    />
-                  )}
-
-                  <button onClick={() => setShowTsBar(!showTsBar)}
-                    style={{ display:"flex", alignItems:"center", gap:4, background:"transparent", border:"1px solid var(--border2)", borderRadius:"var(--radius-sm)", padding:"1px 6px", height:20, cursor:"pointer", flexShrink:0 }}>
-                    <span className="ts-global-label" style={{fontSize:8,letterSpacing:.5}}>⚡ TS</span>
-                    <span className="ts-global-count" style={{fontSize:8}}>{loadedCount}/{ayats.length}</span>
-                    <span style={{ fontSize:7, color:"var(--text3)", marginLeft:1 }}>{showTsBar ? "▲" : "▼"}</span>
-                  </button>
-
-                  {/* TAJWEED POPOVER */}
-                  <div className="panel-row">
-                    <button onClick={() => { setShowTajweedPanel(v => !v); setShowOptionsPanel(false); setShowLangPanel(false); }}
-                      style={{ display:"flex", alignItems:"center", gap:3,
-                        background: showTajweedPanel ? "rgba(91,200,245,.15)" : anyTj ? "rgba(91,200,245,.08)" : "transparent",
-                        border: "1px solid " + (anyTj ? "#5bc8f5" : showTajweedPanel ? "rgba(255,255,255,.2)" : "var(--border2)"),
-                        borderRadius:"var(--radius-sm)", padding:"1px 6px", height:20, cursor:"pointer", flexShrink:0,
-                        color: anyTj ? "#5bc8f5" : "var(--text3)",
-                        fontSize:8, letterSpacing:".5px", fontFamily:"Cinzel,serif", transition:"all .2s" }}>
-                      تجويد{activeTjCount > 0 ? ` (${activeTjCount})` : ''} <span style={{fontSize:6.5,marginLeft:1}}>{showTajweedPanel ? "▲" : "▼"}</span>
-                    </button>
-                    {showTajweedPanel && (
-                      <div className="panel-expand">
-                        <div className="tajweed-panel">
-                          <div className="panel-header-title">
-                            <span style={{ fontSize:8, letterSpacing:1, color:'var(--gold2)', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                              RÈGLES DE TAJWEED {activeTjCount > 0 ? `(${activeTjCount}/4)` : ''}
-                            </span>
-                            <button
-                              onClick={() => setShowTajweedPanel(false)}
-                              title="Fermer"
-                              style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:11, padding:'0 2px' }}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                          <div className="panel-items-row">
-                            {[
-                              { toggle: toggleQalqala, on: showQalqala, label: "قلقلة", sub: "Qalqala", color: "#38bdf8", bg: "rgba(56,189,248,.14)" },
-                              { toggle: toggleMadd,    on: showMadd,    label: "مَدّ",   sub: "Madd",    color: "#fb923c", bg: "rgba(251,146,60,.14)" },
-                              { toggle: toggleIzhar,   on: showIzhar,   label: "إظهار", sub: "Idh-har", color: "#34d399", bg: "rgba(52,211,153,.14)" },
-                              { toggle: toggleIdgham,  on: showIdgham,  label: "إدgham", sub: "Idgham",  color: "#fbbf24", bg: "rgba(251,191,36,.14)" },
-                            ].map(({toggle,on,label,sub,color,bg}) => (
-                              <button key={label} onClick={toggle}
-                                id={`tajweed-toggle-${sub.toLowerCase()}`}
-                                style={{ display:"flex", alignItems:"center", gap:3, background: on ? bg : "rgba(255,255,255,.03)",
-                                  border: "1px solid " + (on ? color : "rgba(255,255,255,.1)"),
-                                  borderRadius:"var(--radius-sm)", padding:"2px 6px", height:22, cursor:"pointer", flexShrink:0,
-                                  color: on ? color : "var(--text3)", fontSize:8.5, transition:"all .15s" }}>
-                                <span style={{ width:5, height:5, borderRadius:"50%", background: on ? color : "var(--text3)" }} />
-                                <span style={{ fontFamily:"'Scheherazade New',serif", fontSize:12 }}>{label}</span>
-                                <span style={{ fontSize:7, opacity:0.8 }}>({sub})</span>
-                              </button>
-                            ))}
-                            <button
-                              onClick={() => {
-                                const any = showQalqala || showMadd || showIzhar || showIdgham;
-                                if (any) {
-                                  if (showQalqala) toggleQalqala();
-                                  if (showMadd) toggleMadd();
-                                  if (showIzhar) toggleIzhar();
-                                  if (showIdgham) toggleIdgham();
-                                } else {
-                                  if (!showQalqala) toggleQalqala();
-                                  if (!showMadd) toggleMadd();
-                                  if (!showIzhar) toggleIzhar();
-                                  if (!showIdgham) toggleIdgham();
-                                }
-                              }}
-                              style={{
-                                marginLeft: 'auto',
-                                background: 'transparent',
-                                border: '1px dashed var(--border2)',
-                                borderRadius: 'var(--radius-sm)',
-                                padding: '2px 7px',
-                                height: 22,
-                                cursor: 'pointer',
-                                fontSize: 8,
-                                letterSpacing: .5,
-                                color: 'var(--gold)',
-                                fontFamily: "'Cinzel', serif"
-                              }}
-                            >
-                              {anyTj ? '✕ COUPER' : '✓ TOUT ACTIVER'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* OPTIONS POPOVER */}
-                  <div className="panel-row">
-                    <button onClick={() => { setShowOptionsPanel(v => !v); setShowTajweedPanel(false); setShowLangPanel(false); }}
-                      style={{ display:"flex", alignItems:"center", gap:3,
-                        background: showOptionsPanel ? "rgba(201,168,76,.15)" : anyOpt ? "rgba(201,168,76,.08)" : "transparent",
-                        border: "1px solid " + (anyOpt ? "var(--gold)" : showOptionsPanel ? "rgba(255,255,255,.2)" : "var(--border2)"),
-                        borderRadius:"var(--radius-sm)", padding:"1px 6px", height:20, cursor:"pointer", flexShrink:0,
-                        color: anyOpt ? "var(--gold2)" : "var(--text3)",
-                        fontSize:8, letterSpacing:".5px", fontFamily:"Cinzel,serif", transition:"all .2s" }}>
-                      OPTIONS{activeOptCount > 0 ? ` (${activeOptCount})` : ''} <span style={{fontSize:6.5,marginLeft:1}}>{showOptionsPanel ? "▲" : "▼"}</span>
-                    </button>
-                    {showOptionsPanel && (
-                      <div className="panel-expand">
-                        <div className="tajweed-panel">
-                          <div className="panel-header-title">
-                            <span style={{ fontSize:8, letterSpacing:1, color:'var(--gold2)', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                              OPTIONS D'AFFICHAGE ET LECTURE
-                            </span>
-                            <button
-                              onClick={() => setShowOptionsPanel(false)}
-                              title="Fermer"
-                              style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:11, padding:'0 2px' }}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                          <div className="panel-items-row">
-                            {[
-                              { toggle: () => dispatch(uiActions.toggleFullScreenSelectedAyat()), on: fullScreenSelectedAyat, label: "⛶ PLEIN ÉCRAN", color: "var(--gold2)", bg: "rgba(201,168,76,.14)" },
-                              { toggle: toggleAnnounceNum, on: announceNum, label: "🔢 N°",      color: "var(--teal2)",  bg: "rgba(62,184,160,.14)" },
-                              { toggle: toggleSpellCheck,  on: spellCheck,  label: "✔ ORTHO",   color: "var(--gold2)",  bg: "rgba(201,168,76,.12)" },
-                              { toggle: toggleShowParts,   on: showParts,   label: "✂ PARTIES", color: "var(--gold2)",  bg: "rgba(201,168,76,.12)" },
-                              { toggle: () => { setPageMode(v=>!v); setactivePageCoran(null); }, on: pageMode, label: "📖 PAGE", color: "#c878ff", bg: "rgba(200,120,255,.14)" },
-                              ...(pageMode ? [{ toggle: () => setAutoPageFollow(v=>!v), on: autoPageFollow, label: "⇄ SUIVI", color: "#c878ff", bg: "rgba(200,120,255,.14)" }] : []),
-                            ].map(({toggle,on,label,color,bg}) => (
-                              <button key={label} onClick={toggle}
-                                style={{ display:"flex", alignItems:"center", background: on ? bg : "rgba(255,255,255,.03)",
-                                  border: "1px solid " + (on ? color : "rgba(255,255,255,.1)"),
-                                  borderRadius:"var(--radius-sm)", padding:"2px 7px", height:22, cursor:"pointer", flexShrink:0,
-                                  color: on ? color : "var(--text3)", fontSize:8.5, fontFamily:"Cinzel,serif", transition:"all .15s" }}>
-                                {label}
-                              </button>
-                            ))}
-                            <button onClick={()=>{ setShowOptionsPanel(false); navigate('/quran/book'); }}
-                              style={{display:"flex",alignItems:"center",background:"rgba(201,168,76,.08)",
-                                border:"1px solid rgba(201,168,76,.3)",borderRadius:"var(--radius-sm)",
-                                padding:"2px 7px",height:22,cursor:"pointer",flexShrink:0,
-                                color:"var(--gold2)",fontSize:8.5,fontFamily:"Cinzel,serif"}}>📖 CSS</button>
-                            <button onClick={()=>{ setShowOptionsPanel(false); navigate('/quran/book3d'); }}
-                              style={{display:"flex",alignItems:"center",background:"rgba(201,168,76,.15)",
-                                border:"1px solid rgba(201,168,76,.5)",borderRadius:"var(--radius-sm)",
-                                padding:"2px 7px",height:22,cursor:"pointer",flexShrink:0,
-                                color:"var(--gold)",fontSize:8.5,fontFamily:"Cinzel,serif"}}>✨ 3D</button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* LANGUES POPOVER */}
-                  <div className="panel-row" style={{ flexShrink:0 }}>
-                    <button onClick={() => { setShowLangPanel(v => !v); setShowTajweedPanel(false); setShowOptionsPanel(false); }}
-                      style={{ display:"flex", alignItems:"center", gap:3,
-                        background: showLangPanel ? "rgba(91,200,245,.15)" : translationLang ? "rgba(91,200,245,.08)" : "transparent",
-                        border: "1px solid " + (translationLang ? "#5bc8f5" : showLangPanel ? "rgba(255,255,255,.2)" : "var(--border2)"),
-                        borderRadius:"var(--radius-sm)", padding:"1px 6px", height:20, cursor:"pointer", flexShrink:0,
-                        color: translationLang ? "#5bc8f5" : "var(--text3)",
-                        fontSize:8, letterSpacing:".5px", fontFamily:"Cinzel,serif", transition:"all .2s" }}>
-                      🌐 {langLabel} <span style={{fontSize:6.5,marginLeft:1}}>{showLangPanel ? "▲" : "▼"}</span>
-                    </button>
-                    {showLangPanel && (
-                      <div className="panel-expand">
-                        <div className="tajweed-panel">
-                          <div className="panel-header-title">
-                            <span style={{ fontSize:8, letterSpacing:1, color:'var(--teal2)', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                              TRADUCTION DU CORAN
-                            </span>
-                            <button
-                              onClick={() => setShowLangPanel(false)}
-                              title="Fermer"
-                              style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer', fontSize:11, padding:'0 2px' }}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                          <div className="panel-items-row">
-                            {Object.entries(TRANS_LABELS).map(([lang, label]) => (
-                              <button key={lang} onClick={() => setTranslationLang(t => t === lang ? null : lang)}
-                                style={{ display:"flex", alignItems:"center", flexShrink:0,
-                                  background: translationLang === lang ? 'rgba(91,200,245,.15)' : 'rgba(255,255,255,.03)',
-                                  border:`1px solid ${translationLang === lang ? '#5bc8f5' : 'rgba(255,255,255,.1)'}`,
-                                  borderRadius:4, padding:'2px 8px', height:22, cursor:'pointer',
-                                  color: translationLang === lang ? '#5bc8f5' : 'var(--text3)',
-                                  fontSize:9, fontFamily:"Cinzel,serif", transition:'all .15s',
-                                  boxShadow: translationLang === lang ? '0 0 8px rgba(91,200,245,.25)' : 'none' }}>
-                                {label}
-                              </button>
-                            ))}
-                            {translationLang && (
-                              <button onClick={() => setTranslationLang(null)}
-                                style={{ fontSize:8, padding:'2px 7px', height:22, borderRadius:4, cursor:'pointer',
-                                  background:'rgba(229,115,115,.12)', border:'1px solid rgba(229,115,115,.35)',
-                                  color:'var(--red)', fontFamily:"Cinzel,serif", marginLeft:'auto' }}>✕ OFF</button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {showTsBar && (
-                    <>
-                      <span style={{ fontSize:8, letterSpacing:1, color:'var(--text3)', fontFamily:"'Cinzel',serif", marginRight:4 }}>
-                        {RECITATORS.find(r => r.id === recitatorId)?.flag} {RECITATORS.find(r => r.id === recitatorId)?.label?.toUpperCase()}
-                      </span>
-                      <div className="ts-progress-bar">
-                        <div className="ts-progress-fill" style={{ width: `${ayats.length ? (loadedCount / ayats.length) * 100 : 0}%` }} />
-                      </div>
-                      <label className="ts-drop-zone">
-                        <input type="file" accept=".json" multiple onChange={e => handleTimestampsFiles([...e.target.files])} />
-                        <span className="ts-drop-label">📂 CHARGER JSON(S)</span>
-                      </label>
-                      {loadedCount > 0 && (
-                        <button className="btn-small" style={{ color: "var(--red)", borderColor: "var(--red)" }}
-                          title={`Effacer les timestamps de ${RECITATORS.find(r => r.id === recitatorId)?.label || recitatorId}`}
-                          onClick={() => {
-                            // Only clear this reciter's entries — other reciters keep theirs
-                            const kept = {};
-                            for (const [k, v] of Object.entries(timestampsMap)) {
-                              if (!k.startsWith(`${recitatorId}:`)) kept[k] = v;
-                            }
-                            setTimestampsMap(kept);
-                          }}>✕</button>
-                      )}
-                    </>
-                  )}
-                </div>); })()} 
+                <SurahHeader
+                  selectedSurah={selectedSurah}
+                  surahs={surahs}
+                  setSelectedSurah={setSelectedSurah}
+                  setSidebarOpen={setSidebarOpen}
+                  ayats={ayats}
+                  getLData={getLData}
+                  setLData={setLData}
+                  surahStats={surahStats}
+                  pageMode={pageMode}
+                  setPageMode={setPageMode}
+                  activePageCoran={activePageCoran}
+                  setactivePageCoran={setactivePageCoran}
+                  mainAyatIdx={mainAyatIdx}
+                  learnData={learnData}
+                  lkey={lkey}
+                  pageMeta={pageMeta}
+                  surahMeta={surahMeta}
+                  jumpToAyatNumber={jumpToAyatNumber}
+                  showQalqala={showQalqala}
+                  toggleQalqala={toggleQalqala}
+                  showMadd={showMadd}
+                  toggleMadd={toggleMadd}
+                  showIzhar={showIzhar}
+                  toggleIzhar={toggleIzhar}
+                  showIdgham={showIdgham}
+                  toggleIdgham={toggleIdgham}
+                  fullScreenSelectedAyat={fullScreenSelectedAyat}
+                  toggleFullScreen={() => dispatch(uiActions.toggleFullScreenSelectedAyat())}
+                  announceNum={announceNum}
+                  toggleAnnounceNum={toggleAnnounceNum}
+                  spellCheck={spellCheck}
+                  toggleSpellCheck={toggleSpellCheck}
+                  showParts={showParts}
+                  toggleShowParts={toggleShowParts}
+                  autoPageFollow={autoPageFollow}
+                  setAutoPageFollow={setAutoPageFollow}
+                  translationLang={translationLang}
+                  setTranslationLang={setTranslationLang}
+                  TRANS_LABELS={TRANS_LABELS}
+                  showTsBar={showTsBar}
+                  setShowTsBar={setShowTsBar}
+                  loadedCount={loadedCount}
+                  recitatorId={recitatorId}
+                  RECITATORS={RECITATORS}
+                  handleTimestampsFiles={handleTimestampsFiles}
+                  timestampsMap={timestampsMap}
+                  setTimestampsMap={setTimestampsMap}
+                  navigate={navigate}
+                /> 
 
                 {/* ── Page mode navigator bar ── */}
                 {pageMode && ayats && ayats.length > 0 && (() => {
@@ -3399,7 +3078,9 @@ export default function App() {
       <HashRouter>
         <CloudSyncManager uid={user.uid} />
         <SyncConsole />
-        <AppInner currentUser={user} onSignOut={() => signOut(firebaseAuth).catch(() => {}).finally(() => setUser(null))} />
+        <ErrorBoundary>
+          <AppInner currentUser={user} onSignOut={() => signOut(firebaseAuth).catch(() => {}).finally(() => setUser(null))} />
+        </ErrorBoundary>
       </HashRouter>
     </Provider>
   );

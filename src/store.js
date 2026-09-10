@@ -1,12 +1,9 @@
 import { configureStore, createSlice } from "@reduxjs/toolkit";
+import { safeJsonParse, safeGetItem, safeSetItem } from "./utils/safeStorage.js";
 
 // ─── Helpers localStorage ────────────────────────────────────────────────────
-const load = (key, fallback) => {
-  try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; } catch { return fallback; }
-};
-const save = (key, value) => {
-  try { localStorage.setItem(key, JSON.stringify(value, null, 0)); } catch {}
-};
+const load = (key, fallback) => safeGetItem(key, fallback);
+const save = (key, value) => safeSetItem(key, value);
 
 // ─── Slice : navigation / UI ─────────────────────────────────────────────────
 const uiSlice = createSlice({

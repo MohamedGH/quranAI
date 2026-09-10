@@ -15,9 +15,21 @@ import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive, translationLang, ayatTranslation, wbwWords, onFullScreen }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="submenu" onClick={e => e.stopPropagation()}>
+    <div
+      className="submenu"
+      data-no-swipe="true"
+      onClick={e => e.stopPropagation()}
+      onTouchStart={e => e.stopPropagation()}
+      onTouchEnd={e => e.stopPropagation()}
+    >
 
-      <div className="submenu-header">
+      <div
+        className="submenu-header"
+        data-no-swipe="true"
+        onTouchStart={e => e.stopPropagation()}
+        onTouchEnd={e => e.stopPropagation()}
+        style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}
+      >
         <button className={`mode-btn${submenuMode === "lecture" ? " active" : ""}`} onClick={() => setSubmenuMode("lecture")}>LECTURE</button>
         <button className={`mode-btn${submenuMode === "decouverte" ? " active" : ""}`} onClick={() => setSubmenuMode("decouverte")}>👁 DÉCOUVERTE</button>
         <button className={`mode-btn${submenuMode === "apprentissage" ? " active" : ""}`} onClick={() => setSubmenuMode("apprentissage")}>APPRENTISSAGE</button>

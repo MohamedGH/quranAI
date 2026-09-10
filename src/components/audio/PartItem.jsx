@@ -3,7 +3,21 @@ import React, { useState, useMemo } from "react";
 import { PartAudioPlayer } from "./PartAudioPlayer.jsx";
 import { getPartTranslation } from "../../utils/translationUtils.js";
 
-export function PartItem({ part, pi, allParts, words, timestamps, audioUrl, update, translationLang, ayatTranslation, wbwWords, onOpenDebug }) {
+export function PartItem({
+  part,
+  pi,
+  allParts,
+  words,
+  timestamps,
+  audioUrl,
+  update,
+  translationLang,
+  ayatTranslation,
+  wbwWords,
+  onOpenDebug,
+  chainMode,
+  onSetChainMode,
+}) {
   const [learningStep, setLearningStep] = useState(0); // 0=idle 1=écoute(audio+texte) 2=mémo(audio sans texte) 3=récit
   const [isEditingTranslation, setIsEditingTranslation] = useState(false);
   const [editTransText, setEditTransText] = useState("");
@@ -54,23 +68,25 @@ export function PartItem({ part, pi, allParts, words, timestamps, audioUrl, upda
   return (
     <div className={`part-item${part.learned ? " part-learned" : ""}`}>
       <div className="part-header">
-        <div className="part-label">PARTIE {pi + 1} · {part.wordIndices?.length} MOTS</div>
-        <button onClick={advance} style={{
-          fontSize:8, letterSpacing:1, padding:'3px 10px', borderRadius:6, cursor:'pointer',
-          fontFamily:"'Cinzel',serif", transition:'all .2s',
-          background: btnStep.bg, border:`1px solid ${btnStep.color}`, color: btnStep.color,
-        }}>{btnStep.label}</button>
-        <button className={`btn-small${part.learned ? " done" : ""}`}
-          onClick={() => update(d => ({ ...d, parts: d.parts.map(p => p.id === part.id ? { ...p, learned: !p.learned } : p) }))}>
-          {part.learned ? "✓" : "APPRIS"}
-        </button>
-        <button className="btn-small" style={{ color:"var(--red)", borderColor:"var(--red)" }}
-          onClick={() => update(d => ({ ...d, parts: d.parts.filter(p => p.id !== part.id) }))}>✕</button>
+        <div className="part-label">PARTIE {pi + 1} · {part.wordIndices?.length || 0} MOTS</div>
+        <div className="part-header-actions">
+          <button onClick={advance} style={{
+            fontSize:8, letterSpacing:1, padding:'3px 8px', borderRadius:6, cursor:'pointer',
+            fontFamily:"'Cinzel',serif", transition:'all .2s', whiteSpace:'nowrap',
+            background: btnStep.bg, border:`1px solid ${btnStep.color}`, color: btnStep.color,
+          }}>{btnStep.label}</button>
+          <button className={`btn-small${part.learned ? " done" : ""}`}
+            onClick={() => update(d => ({ ...d, parts: d.parts.map(p => p.id === part.id ? { ...p, learned: !p.learned } : p) }))}>
+            {part.learned ? "✓" : "APPRIS"}
+          </button>
+          <button className="btn-small" style={{ color:"var(--red)", borderColor:"var(--red)" }}
+            onClick={() => update(d => ({ ...d, parts: d.parts.filter(p => p.id !== part.id) }))}>✕</button>
+        </div>
       </div>
 
       {/* Progress bar steps 1-3 */}
       {learningStep > 0 && (
-        <div style={{ display:'flex', gap:4, padding:'4px 12px 0' }}>
+        <div style={{ display:'flex', gap:4, padding:'4px 8px 0' }}>
           {STEPS.slice(0,3).map((s,i) => (
             <div key={i} style={{ flex:1, height:3, borderRadius:2, transition:'background .3s',
               background: i < learningStep ? s.color : 'rgba(255,255,255,.08)' }} />
@@ -80,12 +96,19 @@ export function PartItem({ part, pi, allParts, words, timestamps, audioUrl, upda
 
       {/* Audio player — always shown except step 3 */}
       {learningStep < 3 && (
-        <div style={{ padding: learningStep === 0 ? "0 12px 10px" : "6px 12px 6px" }}>
+        <div style={{ padding: learningStep === 0 ? "4px 8px 8px" : "6px 8px 6px" }}>
           <PartAudioPlayer
             key={`step-${learningStep}`}
-            part={part} words={words} timestamps={timestamps} audioUrl={audioUrl}
+            part={part}
+            pi={pi}
+            allParts={allParts}
+            words={words}
+            timestamps={timestamps}
+            audioUrl={audioUrl}
             autoPlay={learningStep > 0}
             hideText={learningStep === 2}
+            chainMode={chainMode}
+            onSetChainMode={onSetChainMode}
           />
         </div>
       )}

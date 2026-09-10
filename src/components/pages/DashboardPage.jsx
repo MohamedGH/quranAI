@@ -8,6 +8,7 @@ import { DonutChart, MiniBarChart, KpiWidget, ActivityBarChart, GoalsPanel } fro
 import { LearningEvolutionChart } from "../common/LearningEvolutionChart.jsx";
 import { MasteryTimelineWidget } from "../common/MasteryTimelineWidget.jsx";
 import { fetchSurahSimple } from "../../utils/reciterAudio.js";
+import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
 
 export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, onSetGoal, onRecordActivity, surahStats, surahTextCache = {}, onOpenReminders }) {
   const today = new Date();
@@ -175,17 +176,14 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
 
   const loadLayout = () => {
     try {
-      const s = localStorage.getItem("quran_dash_layout");
-      if (s) {
-        const parsed = JSON.parse(s);
-        if (Array.isArray(parsed)) {
-          const map = new Map(parsed.map(w => [w.id, w]));
-          // Merge to ensure all widgets from ALL_WIDGETS are present
-          return ALL_WIDGETS.map(w => {
-            const existing = map.get(w.id);
-            return existing ? { ...w, ...existing, visible: existing.visible !== undefined ? existing.visible : true } : { id: w.id, visible: true, size: w.defaultSize };
-          });
-        }
+      const parsed = safeGetItem("quran_dash_layout", null);
+      if (Array.isArray(parsed)) {
+        const map = new Map(parsed.map(w => [w.id, w]));
+        // Merge to ensure all widgets from ALL_WIDGETS are present
+        return ALL_WIDGETS.map(w => {
+          const existing = map.get(w.id);
+          return existing ? { ...w, ...existing, visible: existing.visible !== undefined ? existing.visible : true } : { id: w.id, visible: true, size: w.defaultSize };
+        });
       }
     } catch {}
     return ALL_WIDGETS.map(w => ({ id: w.id, visible: true, size: w.defaultSize }));
@@ -198,7 +196,7 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
 
   const saveLayout = (l) => {
     setLayout(l);
-    try { localStorage.setItem("quran_dash_layout", JSON.stringify(l)); } catch {}
+    safeSetItem("quran_dash_layout", l);
   };
 
   const toggleVisible = (id) => saveLayout(layout.map(w => w.id === id ? { ...w, visible: !w.visible } : w));

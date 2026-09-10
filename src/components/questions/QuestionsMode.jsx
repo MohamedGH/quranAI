@@ -15,14 +15,15 @@ import { PageStructureQuestion } from "./PageStructureQuestion.jsx";
 import { FirstContactQuestion } from "./FirstContactQuestion.jsx";
 import { QAyatPlayer } from "../audio/QAyatPlayer.jsx";
 import { TextAnswerInput } from "../common/TextAnswerInput.jsx";
+import { safeGetItem, safeSetItem, safeRemoveItem } from "../../utils/safeStorage.js";
 
 export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLData, ayatTexts, randomize, selectedQTypes, initialQIdx, onQIdxChange, onDone, multiItems, skipCorrect }) {
   // ── Session persistence ──────────────────────────────────────────────────────
   const _items = multiItems || (ayatList||[]).map(n => ({ sn: selectedSn, ayatNum: n }));
   const Q_KEY = multiItems ? `quran_questions_multi_${_items.length}` : `quran_questions_${selectedSn}_${ayatList[0]}_${ayatList[ayatList.length-1]}`;
-  const loadQSession  = () => { try { return JSON.parse(localStorage.getItem(Q_KEY)) || null; } catch { return null; } };
-  const saveQSession  = (data) => { try { localStorage.setItem(Q_KEY, JSON.stringify(data)); } catch {} };
-  const clearQSession = () => { try { localStorage.removeItem(Q_KEY); } catch {} };
+  const loadQSession  = () => safeGetItem(Q_KEY, null);
+  const saveQSession  = (data) => safeSetItem(Q_KEY, data);
+  const clearQSession = () => safeRemoveItem(Q_KEY);
 
   const saved = React.useMemo(() => loadQSession(), []);
 

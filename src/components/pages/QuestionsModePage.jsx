@@ -4,12 +4,13 @@ import React, { useState, useEffect } from "react";
 import { QuestionsMode } from "../questions/QuestionsMode.jsx";
 import { getAyatRevisionInfo, REVISION_LEVEL_LEGEND } from "../../utils/ayatRevisionLevel.js";
 import { SurahAyatsMasteryRibbon } from "../common/SurahAyatsMasteryRibbon.jsx";
+import { safeGetItem, safeSetItem, safeRemoveItem } from "../../utils/safeStorage.js";
 
 export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum, initialRangeFrom, initialRangeTo, initialQIdx, initialPreset }) {
   const Q_PAGE_KEY = 'quran_questions_page_session';
-  const loadSession = () => { try { return JSON.parse(localStorage.getItem(Q_PAGE_KEY)) || {}; } catch { return {}; } };
-  const saveSession = (d) => { try { localStorage.setItem(Q_PAGE_KEY, JSON.stringify(d)); } catch {} };
-  const clearPageSession = () => { try { localStorage.removeItem(Q_PAGE_KEY); } catch {} };
+  const loadSession = () => safeGetItem(Q_PAGE_KEY, {});
+  const saveSession = (d) => safeSetItem(Q_PAGE_KEY, d);
+  const clearPageSession = () => safeRemoveItem(Q_PAGE_KEY);
 
   const ALL_Q_TYPES = ["first_contact","first_word","last_word","missing_word","next_verse","previous_verse","verse_number","find_ayat","reconstruct","compare_verse","find_surah","unknown_word","unknown_pick","page_structure","revise_word","revise_part"];
 

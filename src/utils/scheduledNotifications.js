@@ -1,4 +1,5 @@
 // ─── Scheduled Notification System for Daily Quran Revision & Memorization ───
+import { safeGetItem, safeSetItem, safeJsonParse } from "./safeStorage.js";
 
 const STORAGE_KEY = "quran_scheduled_reminders";
 const SETTINGS_KEY = "quran_reminders_settings";
@@ -84,12 +85,11 @@ export const DEFAULT_SETTINGS = {
 
 export function loadReminders() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
+    const parsed = safeGetItem(STORAGE_KEY, null);
+    if (!parsed) {
       saveReminders(DEFAULT_REMINDERS);
       return DEFAULT_REMINDERS;
     }
-    const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : DEFAULT_REMINDERS;
   } catch {
     return DEFAULT_REMINDERS;
@@ -97,29 +97,21 @@ export function loadReminders() {
 }
 
 export function saveReminders(reminders) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reminders));
-  } catch (err) {
-    console.warn("Could not save reminders:", err);
-  }
+  safeSetItem(STORAGE_KEY, reminders || DEFAULT_REMINDERS);
 }
 
 export function loadReminderSettings() {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const parsed = safeGetItem(SETTINGS_KEY, null);
+    if (!parsed) return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS, ...parsed };
   } catch {
     return DEFAULT_SETTINGS;
   }
 }
 
 export function saveReminderSettings(settings) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  } catch (err) {
-    console.warn("Could not save reminder settings:", err);
-  }
+  safeSetItem(SETTINGS_KEY, settings || DEFAULT_SETTINGS);
 }
 
 // ─── Sound Generator (Web Audio API) ──────────────────────────────────────────
@@ -247,24 +239,19 @@ export function snoozeReminder(reminderId, minutes = 15) {
     const snoozes = getSnoozes();
     const triggerAt = Date.now() + minutes * 60 * 1000;
     snoozes[reminderId] = triggerAt;
-    localStorage.setItem(SNOOZE_KEY, JSON.stringify(snoozes));
+    safeSetItem(SNOOZE_KEY, snoozes);
   } catch {}
 }
 
 export function getSnoozes() {
-  try {
-    const raw = localStorage.getItem(SNOOZE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
+  return safeGetItem(SNOOZE_KEY, {});
 }
 
 export function clearSnooze(reminderId) {
   try {
     const snoozes = getSnoozes();
     delete snoozes[reminderId];
-    localStorage.setItem(SNOOZE_KEY, JSON.stringify(snoozes));
+    safeSetItem(SNOOZE_KEY, snoozes);
   } catch {}
 }
 

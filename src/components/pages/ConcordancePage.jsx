@@ -5,6 +5,7 @@ import { sel } from "../../store.js";
 import { normalizeArabic } from "../../utils/recitationDiff.js";
 import { splitArabicWords, stripDiacritics, wordTranslit, ARABIC_ROOTS, SURAH_INFO, SUGGESTED_SEARCHES } from "../../utils/arabicUtils.js";
 import { fetchSurahSimple, fetchSurahs } from "../../utils/reciterAudio.js";
+import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
 
 
 function ConcordGroup({ group, debouncedQ, onNavigate, isLinked, toggleLink, textCache, onOpenCollModal, ayatInCollectionsFn }) {
@@ -208,9 +209,7 @@ export function ConcordancePage({ surahs: surahList, onNavigate, collections, on
   const [sharedLoading, setSharedLoading] = useState(false);
   const sharedTokenRef = useRef(0);
 
-  const [linkedAyats, setLinkedAyats]= useState(() => {
-    try { const s = localStorage.getItem("quran_concordLinks"); return s ? JSON.parse(s) : []; } catch { return []; }
-  });
+  const [linkedAyats, setLinkedAyats]= useState(() => safeGetItem("quran_concordLinks", []));
   const debounceRef    = useRef(null);
   const cacheRef       = useRef({}); // surahNum -> ayats[] (texte brut)
   const searchTokenRef = useRef(0);
@@ -389,7 +388,7 @@ export function ConcordancePage({ surahs: surahList, onNavigate, collections, on
       const next = exists
         ? prev.filter(l => l.key !== key)
         : [...prev, { key, surahNum, surahEn, ayatNum, text }];
-      try { localStorage.setItem("quran_concordLinks", JSON.stringify(next)); } catch {}
+      safeSetItem("quran_concordLinks", next);
       return next;
     });
   };

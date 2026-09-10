@@ -1,5 +1,6 @@
 import { IS_ANDROID } from './audioRecorder.js';
 import { splitArabicWords } from './arabicUtils.js';
+import { safeGetItem, safeSetItem } from './safeStorage.js';
 
 export const API = "https://api.alquran.cloud/v1";
 export const AUDIO_CDN_ROOT = 'https://cdn.islamic.network/quran/audio'; // bitrate is appended dynamically, see getAudioBase()
@@ -27,21 +28,21 @@ export const RECITATORS = [
   { id: 'ar.aymanswoaid',        label: 'Ayman Sowaid',                flag: '🇸🇾' },
 ];
 
-export let _recitatorId = (() => { try { return localStorage.getItem('quran_recitator') || 'ar.alafasy'; } catch { return 'ar.alafasy'; } })();
+export let _recitatorId = safeGetItem('quran_recitator', 'ar.alafasy') || 'ar.alafasy';
 
 // Bitrate is automatic and per-reciter — not every reciter's audio is hosted at every bitrate.
 // The official per-ayah API response (`audio` + `audioSecondary` fields) reports exactly which
 // bitrate URLs actually exist for a given reciter — this is the same source data that backs
 // cdn.islamic.network's info.json, fetched live via the API instead of parsing a static dump.
 export const BITRATE_FALLBACK_ORDER = [128, 64, 192, 48, 40, 32]; // generic guess, used only until the official list arrives
-export let _officialBitrates = (() => { try { return JSON.parse(localStorage.getItem('quran_official_bitrates')) || {}; } catch { return {}; } })();
-export let _bitrateByReciter  = (() => { try { return JSON.parse(localStorage.getItem('quran_bitrate_by_reciter')) || {}; } catch { return {}; } })();
+export let _officialBitrates = safeGetItem('quran_official_bitrates', {}) || {};
+export let _bitrateByReciter  = safeGetItem('quran_bitrate_by_reciter', {}) || {};
 
 export const bitrateOrderFor  = (id) => (_officialBitrates[id]?.length ? _officialBitrates[id] : BITRATE_FALLBACK_ORDER);
 export const getReciterBitrate = (id) => _bitrateByReciter[id] ?? bitrateOrderFor(id)[0];
 export const setReciterBitrate = (id, kbps) => {
   _bitrateByReciter = { ..._bitrateByReciter, [id]: kbps };
-  try { localStorage.setItem('quran_bitrate_by_reciter', JSON.stringify(_bitrateByReciter)); } catch {}
+  safeSetItem('quran_bitrate_by_reciter', _bitrateByReciter);
 };
 // Called when the current bitrate 404s for a reciter — advances to the next candidate in its
 // (ideally official) list and remembers it, so this reciter "just works" from then on. Returns
@@ -69,14 +70,14 @@ export async function fetchOfficialBitrates(id) {
     if (!kbps.length) return null;
     kbps.sort((a, b) => (a === 128 ? -1 : b === 128 ? 1 : a - b)); // prefer 128 when it's an option
     _officialBitrates = { ..._officialBitrates, [id]: kbps };
-    try { localStorage.setItem('quran_official_bitrates', JSON.stringify(_officialBitrates)); } catch {}
+    safeSetItem('quran_official_bitrates', _officialBitrates);
     // if what we had remembered for this reciter turns out not to be real, snap to the true default
     if (!kbps.includes(getReciterBitrate(id))) setReciterBitrate(id, kbps[0]);
     return kbps;
   } catch { return null; }
 }
 export const getAudioBase = () => `${AUDIO_CDN_ROOT}/${getReciterBitrate(_recitatorId)}/${_recitatorId}`;
-export const setGlobalRecitator = (id) => { _recitatorId = id; try { localStorage.setItem('quran_recitator', id); } catch {} };
+export const setGlobalRecitator = (id) => { _recitatorId = id; safeSetItem('quran_recitator', id); };
 export const getGlobalRecitator = () => _recitatorId;
 
 // AUDIO_BASE removed — use getAudioBase() (dynamic, follows the selected reciter, bitrate is automatic)
@@ -86,10 +87,15 @@ export const getGlobalRecitator = () => _recitatorId;
 export async function fetchSurahs() {
   const idbKey = 'surahs';
   try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah`);
-  const data = (await r.json()).data;
-  idbSetQuran(idbKey, data).catch(() => {});
-  return data;
+  try {
+    const r = await fetch(`${API}/surah`);
+    if (!r.ok) return [];
+    const data = (await r.json())?.data || [];
+    idbSetQuran(idbKey, data).catch(() => {});
+    return data;
+  } catch {
+    return [];
+  }
 }
 
 // Translation editions keyed by lang code
@@ -111,11 +117,16 @@ export async function fetchSurahTranslation(sn, lang) {
   if (!edition) return [];
   const idbKey = `trans:${lang}:${sn}`;
   try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah/${sn}/${edition}`);
-  const ayahs = (await r.json()).data?.ayahs || [];
-  const result = ayahs.map(a => ({ numberInSurah: a.numberInSurah, text: a.text }));
-  idbSetQuran(idbKey, result).catch(() => {});
-  return result;
+  try {
+    const r = await fetch(`${API}/surah/${sn}/${edition}`);
+    if (!r.ok) return [];
+    const ayahs = (await r.json())?.data?.ayahs || [];
+    const result = ayahs.map(a => ({ numberInSurah: a.numberInSurah, text: a.text }));
+    idbSetQuran(idbKey, result).catch(() => {});
+    return result;
+  } catch {
+    return [];
+  }
 }
 
 // fetchSurahWbw(sn, lang) → { [numberInSurah]: [word1Trans, word2Trans, ...] } cached in IDB
@@ -146,30 +157,45 @@ export async function fetchSurahWbw(sn, lang = 'fr') {
 export async function fetchAyats(n) {
   const idbKey = `alafasy:${n}`;
   try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah/${n}/ar.alafasy`);
-  const data = (await r.json()).data;
-  idbSetQuran(idbKey, data).catch(() => {});
-  return data;
+  try {
+    const r = await fetch(`${API}/surah/${n}/ar.alafasy`);
+    if (!r.ok) return { ayahs: [] };
+    const data = (await r.json())?.data || { ayahs: [] };
+    idbSetQuran(idbKey, data).catch(() => {});
+    return data;
+  } catch {
+    return { ayahs: [] };
+  }
 }
 // /surah/${n}/quran-simple  →  [{num, text}, …]
 export async function fetchSurahSimple(n) {
   const idbKey = `text:${n}`;
   try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah/${n}/quran-simple`);
-  const data = (await r.json()).data?.ayahs || [];
-  const ayats = data.map(a => ({ num: a.numberInSurah, text: a.text }));
-  idbSetQuran(idbKey, ayats).catch(() => {});
-  return ayats;
+  try {
+    const r = await fetch(`${API}/surah/${n}/quran-simple`);
+    if (!r.ok) return [];
+    const data = (await r.json())?.data?.ayahs || [];
+    const ayats = data.map(a => ({ num: a.numberInSurah, text: a.text }));
+    idbSetQuran(idbKey, ayats).catch(() => {});
+    return ayats;
+  } catch {
+    return [];
+  }
 }
 // /surah/${n}  (default edition — used for ayat texts in MemoriseMode etc.)
 // Returns raw ayahs array from API data.ayahs
 export async function fetchSurahDefault(n) {
   const idbKey = `simple:${n}`;
   try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
-  const r = await fetch(`${API}/surah/${n}`);
-  const ayahs = (await r.json()).data?.ayahs || [];
-  idbSetQuran(idbKey, ayahs).catch(() => {});
-  return ayahs;
+  try {
+    const r = await fetch(`${API}/surah/${n}`);
+    if (!r.ok) return [];
+    const ayahs = (await r.json())?.data?.ayahs || [];
+    idbSetQuran(idbKey, ayahs).catch(() => {});
+    return ayahs;
+  } catch {
+    return [];
+  }
 }
 // Static surah metadata cache: hizb, juz, page (from ayat 1) + total word count
 export async function fetchSurahMeta(n) {
@@ -196,10 +222,15 @@ export const fetchAyatMeta = fetchAyahMeta;
 export async function fetchQuranPage(pageNum) {
   const key = `mushaf_page:${pageNum}`;
   try { const c = await idbGetQuran(key); if (c) return c; } catch {}
-  const r = await fetch(`${API}/page/${pageNum}/quran-uthmani`);
-  const ayahs = (await r.json()).data?.ayahs || [];
-  idbSetQuran(key, ayahs).catch(() => {});
-  return ayahs;
+  try {
+    const r = await fetch(`${API}/page/${pageNum}/quran-uthmani`);
+    if (!r.ok) return [];
+    const ayahs = (await r.json())?.data?.ayahs || [];
+    idbSetQuran(key, ayahs).catch(() => {});
+    return ayahs;
+  } catch {
+    return [];
+  }
 }
 // Static page-level metadata: hizb, juz, word count — cached in IDB as pmeta:N
 export async function fetchPageMeta(pageNum) {

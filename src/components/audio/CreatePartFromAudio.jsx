@@ -34,18 +34,35 @@ export function CreatePartFromAudio({ ayat, timestamps, audioUrl, existingWordIn
 
   // Calcule les indices de mots couverts par [startMs, endMs]
   const coveredIndices = useMemo(() => {
-    if (startMs == null || endMs == null || !timestamps?.words) return [];
-    return timestamps.words
-      .map((w, wi) => {
-        const ws = w.chars?.[0]?.start ?? null;
-        const we = w.chars?.[w.chars.length - 1]?.end ?? null;
-        if (ws == null || we == null) return null;
-        // Un mot est couvert s'il chevauche [startMs, endMs]
-        if (we < startMs || ws > endMs) return null;
-        return wi;
-      })
-      .filter(wi => wi !== null && !existingWordIndices.has(wi));
-  }, [startMs, endMs, timestamps, existingWordIndices]);
+    if (startMs == null || endMs == null) return [];
+    if (timestamps?.words?.length) {
+      return timestamps.words
+        .map((w, wi) => {
+          const ws = w.chars?.[0]?.start ?? w.start ?? null;
+          const we = w.chars?.[w.chars.length - 1]?.end ?? w.end ?? null;
+          if (ws == null || we == null) return null;
+          if (we < startMs || ws > endMs) return null;
+          return wi;
+        })
+        .filter(wi => wi !== null && !existingWordIndices.has(wi));
+    }
+    // Estimation proportionnelle basée sur les mots et la durée audio si timestamps non chargés
+    const durMs = audioRef.current?.duration ? Math.round(audioRef.current.duration * 1000) : 0;
+    if (durMs > 0 && words?.length > 0) {
+      const cleanLen = (w) => (w || "").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "").length || 1;
+      const weights = words.map(cleanLen);
+      const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+      return words
+        .map((_, wi) => {
+          const ws = Math.round((weights.slice(0, wi).reduce((a, b) => a + b, 0) / totalWeight) * durMs);
+          const we = Math.round((weights.slice(0, wi + 1).reduce((a, b) => a + b, 0) / totalWeight) * durMs);
+          if (we < startMs || ws > endMs) return null;
+          return wi;
+        })
+        .filter(wi => wi !== null && !existingWordIndices.has(wi));
+    }
+    return [];
+  }, [startMs, endMs, timestamps, words, existingWordIndices]);
 
   const fmtMs = (ms) => ms == null ? "--:--.---"
     : `${String(Math.floor(ms / 60000)).padStart(2,"0")}:${String(Math.floor((ms % 60000) / 1000)).padStart(2,"0")}.${String(Math.floor(ms % 1000)).padStart(3,"0")}`;
@@ -59,7 +76,7 @@ export function CreatePartFromAudio({ ayat, timestamps, audioUrl, existingWordIn
     if (!canCreate) return;
     const text = coveredIndices.map(wi => words[wi]).join(" ");
     const newStart = endMs ?? 0;
-    onCreatePart({ wordIndices: coveredIndices, text });
+    onCreatePart({ wordIndices: coveredIndices, text, startMs, endMs });
     setStartMs(newStart);
     setEndMs(null);
     if (audioRef.current) {
@@ -104,28 +121,21 @@ export function CreatePartFromAudio({ ayat, timestamps, audioUrl, existingWordIn
       </div>
 
       {/* Prévisualisation mots couverts */}
-      {timestamps?.words && (
-        <div className="cpa-preview">
-          {words.map((w, wi) => {
-            const inRange   = coveredIndices.includes(wi);
-            const isExist   = existingWordIndices.has(wi);
-            return (
-              <span key={wi} className={`cpa-preview-word${inRange ? " in-range" : ""}`}
-                style={isExist ? { opacity:.35 } : {}}>
-                {w}{" "}
-              </span>
-            );
-          })}
-        </div>
-      )}
-      {startMs != null && endMs != null && coveredIndices.length === 0 && timestamps?.words && (
+      <div className="cpa-preview">
+        {words.map((w, wi) => {
+          const inRange   = coveredIndices.includes(wi);
+          const isExist   = existingWordIndices.has(wi);
+          return (
+            <span key={wi} className={`cpa-preview-word${inRange ? " in-range" : ""}`}
+              style={isExist ? { opacity:.35 } : {}}>
+              {w}{" "}
+            </span>
+          );
+        })}
+      </div>
+      {startMs != null && endMs != null && coveredIndices.length === 0 && (
         <div style={{ fontSize:9, color:"var(--red)", letterSpacing:1 }}>
           Aucun mot dans cet intervalle — ajustez les marqueurs
-        </div>
-      )}
-      {!timestamps?.words && (
-        <div style={{ fontSize:9, color:"var(--text3)", letterSpacing:1 }}>
-          ⚠ Chargez d'abord un fichier de timestamps dans l'onglet ÉCOUTER
         </div>
       )}
 

@@ -6,6 +6,7 @@ import { RecitationChecker } from "./RecitationChecker.jsx";
 import { TranslationDebugModal } from "../debug/TranslationDebugModal.jsx";
 import { arabicRoot } from "../../utils/arabicUtils.js";
 import { segmentAyatTranslation } from "../../utils/translationUtils.js";
+import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
 
 export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, audioUrl, isSelectingThisAyat, partSelectStep, onStartPartCreate, clickMode, setClickMode, translationLang, ayatTranslation, wbwWords }) {
   const words  = ayat.text ? ayat.text.split(" ").filter(Boolean) : [];
@@ -17,6 +18,13 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
   const [showCreateAudio, setShowCreateAudio] = useState(false);
   const [partsOpen, setPartsOpen] = useState(false);
   const [showDebugModal, setShowDebugModal] = useState(false);
+
+  // Mode d'enchaînement audio des parties ("none" | "prev" | "all")
+  const [chainMode, setChainMode] = useState(() => safeGetItem("quran_part_chain_mode", "none"));
+  const handleSetChainMode = (mode) => {
+    setChainMode(mode);
+    safeSetItem("quran_part_chain_mode", mode);
+  };
 
   // Workflow complet pour l'ayat principale (Écouter, Mémoriser, Réciter)
   const [mainLearningStep, setMainLearningStep] = useState(0); // 0=idle 1=écoute(audio+texte) 2=mémo(audio sans texte) 3=récit
@@ -55,12 +63,14 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
     return w.chars?.[w.chars.length - 1]?.end ?? null;
   }, [timestamps, wordsInParts]);
 
-  const handleCreateFromAudio = ({ wordIndices, text }) => {
+  const handleCreateFromAudio = ({ wordIndices, text, startMs, endMs }) => {
     const existingParts = ld.parts || [];
     const newPart = {
       id: Date.now(),
       wordIndices,
       text,
+      startMs: startMs != null ? startMs : undefined,
+      endMs: endMs != null ? endMs : undefined,
       learned: !!ld.learned,
     };
     const allPartsSimulated = [...existingParts, newPart];
@@ -272,6 +282,41 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
               />
             )}
 
+            {/* Barre d'enchaînement audio des parties */}
+            {ld.parts?.length > 1 && (
+              <div className="part-global-chain-bar">
+                <div className="part-global-chain-title">
+                  ⚡ ENCHAÎNEMENT AUDIO :
+                </div>
+                <div className="part-global-chain-btns">
+                  <button
+                    type="button"
+                    className={`part-chain-btn ${chainMode === "none" ? "active-none" : ""}`}
+                    onClick={() => handleSetChainMode("none")}
+                    title="Lire chaque partie seule sans pré-écoute"
+                  >
+                    SEULE
+                  </button>
+                  <button
+                    type="button"
+                    className={`part-chain-btn ${chainMode === "prev" ? "active-prev" : ""}`}
+                    onClick={() => handleSetChainMode(chainMode === "prev" ? "none" : "prev")}
+                    title="Jouer la partie précédente avant de jouer chaque partie"
+                  >
+                    ⏮ {chainMode === "prev" ? "✓ + PRÉC." : "+ PRÉC."}
+                  </button>
+                  <button
+                    type="button"
+                    className={`part-chain-btn ${chainMode === "all" ? "active-all" : ""}`}
+                    onClick={() => handleSetChainMode(chainMode === "all" ? "none" : "all")}
+                    title="Jouer toutes les parties précédentes avant de jouer chaque partie"
+                  >
+                    ⏮ {chainMode === "all" ? "✓ + TOUTES" : "+ TOUTES"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {(ld.parts || []).map((part, pi) => (
               <PartItem
                 key={part.id}
@@ -286,6 +331,8 @@ export function ApprentissageMode({ ayat, surahNum, ld, setLData, timestamps, au
                 ayatTranslation={ayatTranslation}
                 wbwWords={wbwWords}
                 onOpenDebug={() => setShowDebugModal(true)}
+                chainMode={chainMode}
+                onSetChainMode={handleSetChainMode}
               />
             ))}
             {ld.parts?.length === 0 && !isSelectingThisAyat && !showCreateAudio && (

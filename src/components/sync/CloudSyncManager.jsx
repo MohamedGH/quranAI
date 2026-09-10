@@ -4,6 +4,7 @@ import { sel } from "../../store.js";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { firebaseDb, isFirebaseConfigured } from "../../firebase.js";
 import { DATA_KEYS, getDeviceId, mergeLearnData, mergeActivity, mergeCollections } from "../../utils/syncUtils.js";
+import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
 
 export function CloudSyncManager({ uid }) {
   const learnData       = useSelector(sel.learnData);
@@ -23,10 +24,9 @@ export function CloudSyncManager({ uid }) {
     const mergeKey = (k, mergeFn) => {
       if (!cloudData[k]) return;
       try {
-        let local = null;
-        try { const raw = localStorage.getItem(k); if (raw) local = JSON.parse(raw); } catch {}
+        const local = safeGetItem(k, null);
         const merged = mergeFn ? mergeFn(local, cloudData[k]) : cloudData[k];
-        localStorage.setItem(k, JSON.stringify(merged));
+        safeSetItem(k, merged);
       } catch (e) {
         console.warn(`[Sync] error merging ${k}:`, e);
       }
@@ -45,7 +45,7 @@ export function CloudSyncManager({ uid }) {
     if (!uid || !firebaseDb || !isFirebaseConfigured || isSyncingRef.current) return;
     isSyncingRef.current = true;
     try {
-      const get = (k) => { try { const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : null; } catch { return null; } };
+      const get = (k) => safeGetItem(k, null);
       const payload = {
         updatedAt: new Date().toISOString(),
         deviceId:  getDeviceId(),

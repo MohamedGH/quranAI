@@ -12,7 +12,11 @@ export function LectureMode({ ayat, surahNum, audioUrl, isMainPlaying, timestamp
   const [currentMs, setCurrentMs]   = useState(0);
   const [showEditor, setShowEditor] = useState(false);
   const [editTs, setEditTs] = useState(null);
-  useEffect(() => { if (timestamps) setEditTs(JSON.parse(JSON.stringify(timestamps))); }, [timestamps]);
+  useEffect(() => {
+    if (timestamps) {
+      try { setEditTs(JSON.parse(JSON.stringify(timestamps))); } catch { setEditTs(null); }
+    }
+  }, [timestamps]);
 
   const stop    = () => { if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; } onLocalPlay?.(null); };
   useEffect(() => { if (isMainPlaying && audioRef.current) { audioRef.current.pause(); stop(); } }, [isMainPlaying]);
@@ -41,7 +45,9 @@ export function LectureMode({ ayat, surahNum, audioUrl, isMainPlaying, timestamp
 
   const setCharField = (wi, ci, field, val) => {
     setEditTs(prev => {
-      const next  = JSON.parse(JSON.stringify(prev));
+      let next;
+      try { next = JSON.parse(JSON.stringify(prev)); } catch { return prev; }
+      if (!next?.words?.[wi]?.chars?.[ci]) return prev;
       const chars = next.words[wi].chars;
       chars[ci][field] = Number(val);
       if (field === 'end') {
@@ -221,7 +227,7 @@ export function LectureMode({ ayat, surahNum, audioUrl, isMainPlaying, timestamp
           {showEditor && editTs?.words && (
             <EditorWords editTs={editTs} currentMs={localCurrentMs} setCharField={setCharField}
               captureStart={captureStart} captureEnd={captureEnd}
-              onSave={saveAndExport} onReset={() => setEditTs(JSON.parse(JSON.stringify(timestamps)))}
+              onSave={saveAndExport} onReset={() => { try { setEditTs(JSON.parse(JSON.stringify(timestamps))); } catch {} }}
               isDiacritic={isDiacritic} audioRef={audioRef} />
           )}
         </div>

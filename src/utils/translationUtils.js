@@ -59,14 +59,35 @@ const QURAN_KEYWORDS = {
   'حسن': ['good', 'better', 'best', 'righteous', 'bien', 'meilleur', 'gut', 'besser', 'mejor', 'добр', 'лучш', 'iyilik', 'kebaikan'],
   'محسن': ['good', 'doer of good', 'righteous', 'bienfaisant', 'bienfaiteur', 'bien', 'gutes', 'gut', 'rechtschaffen', 'bienhechor', 'добродетель', 'добр', 'muhsin', 'kebaikan'],
   'احسن': ['better', 'best', 'good', 'meilleur', 'mieux', 'bien', 'gut', 'besser', 'mejor', 'лучш', 'en iyi', 'terbaik'],
-  'تبع': ['follow', 'follows', 'followed', 'following', 'pursue', 'suit', 'suivre', 'suivi', 'suivent', 'folgen', 'folgt', 'folgte', 'seguir', 'sigue', 'siguió', 'следовать', 'следует', 'tabi', 'uymak', 'mengikuti'],
-  'اتبع': ['follow', 'follows', 'followed', 'following', 'pursue', 'suit', 'suivre', 'suivi', 'suivent', 'folgen', 'folgt', 'folgte', 'seguir', 'sigue', 'siguió', 'следовать', 'следует', 'tabi', 'uymak', 'mengikuti'],
+  'اسلم': ['soumet', 'soumis', 'soumission', 'submit', 'submitted', 'surrender', 'ergeben', 'someter', 'покори'],
+  'سلم': ['soumet', 'soumis', 'soumission', 'paix', 'peace', 'submit', 'islam'],
+  'وجه': ['face', 'visage', 'être', 'etre', 'gesicht', 'cara', 'rostro', 'лицо'],
+  'تبع': ['follow', 'follows', 'followed', 'following', 'pursue', 'suit', 'suivre', 'suivi', 'suivent', 'suivant', 'suivante', 'suivants', 'suivantes', 'suiv', 'folgen', 'folgt', 'folgte', 'seguir', 'sigue', 'siguió', 'следовать', 'следует', 'tabi', 'uymak', 'mengikuti'],
+  'اتبع': ['follow', 'follows', 'followed', 'following', 'pursue', 'suit', 'suivre', 'suivi', 'suivent', 'suivant', 'suivante', 'suivants', 'suivantes', 'suiv', 'folgen', 'folgt', 'folgte', 'seguir', 'sigue', 'siguió', 'следовать', 'следует', 'tabi', 'uymak', 'mengikuti'],
   'ملة': ['religion', 'creed', 'faith', 'religion', 'creance', 'foi', 'communaute', 'glaube', 'creencia', 'fe', 'религия', 'вера', 'din', 'millet', 'agama'],
+  'ابراهيم': ['abraham', 'ibrahim', 'ibrahima'],
+  'موسي': ['moïse', 'moise', 'moses', 'musa', 'mose'],
+  'عيسي': ['jésus', 'jesus', 'isa'],
+  'نوح': ['noé', 'noe', 'noah', 'nuh'],
+  'داوود': ['david', 'dawud'],
+  'داود': ['david', 'dawud'],
+  'سليمان': ['salomon', 'solomon', 'sulayman'],
+  'اسماعيل': ['ismaël', 'ismael', 'ishmael', 'ismail'],
+  'اسحاق': ['isaac', 'ishaq'],
+  'يعقوب': ['jacob', 'yaqub'],
+  'يوسف': ['joseph', 'yusuf'],
+  'هارون': ['aaron', 'harun'],
+  'مريم': ['marie', 'mary', 'maryam'],
+  'لوط': ['loth', 'lot'],
+  'محمد': ['muhammad', 'mohammed', 'mahomet'],
   'حنيف': ['truth', 'inclining toward truth', 'upright', 'monotheist', 'hanif', 'droiture', 'droit', 'vrai croyant', 'monotheiste', 'aufrecht', 'monoteista', 'правоверный', 'hanif'],
   'حنفا': ['truth', 'inclining toward truth', 'upright', 'monotheist', 'hanif', 'droiture', 'droits', 'vrais croyants', 'monotheistes', 'aufrecht', 'monoteistas', 'правоверные', 'hanifler'],
+  'احد': ['one', 'unique', 'seul', 'einzige', 'único', 'один', 'bir', 'satu'],
+  'واحد': ['one', 'unique', 'seul', 'einzige', 'único', 'один', 'bir', 'satu'],
+  'صمد': ['eternal', 'refuge', 'absolu', 'besoins', 'ewige', 'eterno'],
   'اتخذ': ['took', 'take', 'taken', 'choose', 'chosen', 'pris', 'prendre', 'choisi', 'choisir', 'adopté', 'adopter', 'nehmen', 'nahm', 'gewählt', 'tomar', 'tomó', 'elegir', 'взял', 'брать', 'избрал', 'edinmek', 'edindi', 'seçti', 'mengambil'],
   'تخذ': ['took', 'take', 'taken', 'choose', 'pris', 'prendre', 'choisi', 'nehmen', 'nahm', 'tomar', 'tomó', 'взял', 'edinmek'],
-  'خليل': ['friend', 'intimate friend', 'companion', 'ami', 'ami intime', 'ami privilegie', 'freund', 'amigo', 'друг', 'dost', 'yakın dost', 'sahabat'],
+  'خليل': ['friend', 'intimate friend', 'companion', 'ami', 'ami intime', 'ami privilegie', 'privilégié', 'freund', 'amigo', 'друг', 'dost', 'yakın dost', 'sahabat'],
   'صبر': ['patient', 'patience', 'geduld', 'paciencia', 'терпен', 'sabır', 'sabar'],
   'شكر': ['thank', 'reconnaiss', 'dank', 'gracia', 'благодар', 'şükür', 'syukur'],
   'ظلم': ['injust', 'wrong', 'unrecht', 'injusticia', 'несправедлив', 'zulüm', 'zalim'],
@@ -179,21 +200,101 @@ const TRAILING_PRONOUNS = new Set([
 
 // Arabic words whose leading waw is part of the root, not a conjunction
 const ROOT_WAW_WORDS = new Set([
-  'وعد', 'وجه', 'ولد', 'ولدان', 'وقت', 'واحد', 'وحيد', 'ورث', 'وسع', 'وصي',
-  'وصف', 'وفى', 'وقى', 'ويل', 'وزن', 'وزر', 'وطن', 'وثق', 'ودع', 'ورد',
-  'وسط', 'وعظ', 'وفق', 'ولى', 'وهب', 'ود'
+  'وعد', 'وجه', 'وجوه', 'ولد', 'ولدان', 'والد', 'والدين', 'وقت', 'واحد', 'وحيد', 'ورث', 'ورثة', 'وسع', 'وصي',
+  'وصية', 'وصف', 'وفى', 'وفات', 'وقى', 'تقوى', 'ويل', 'وزن', 'وزر', 'وطن', 'وثق', 'ميثاق', 'ودع', 'ورد',
+  'ورود', 'وسط', 'وعظ', 'وفق', 'ولى', 'أولياء', 'وهب', 'ود'
 ]);
 
-export function getLanguageAndConjunctions(lang) {
+// Arabic words whose leading fa is part of the root, not a conjunction
+const ROOT_FA_WORDS = new Set([
+  'فتح', 'فعل', 'فوز', 'فوق', 'فضل', 'فاحش', 'فاحشة', 'فاسق', 'فسق', 'فريق', 'فرق',
+  'فتن', 'فتنة', 'فصل', 'فجر', 'فلك', 'فرد', 'فرعون', 'فم', 'فهم', 'فاز', 'فرح', 'فرس', 'فسد', 'فقر', 'فكر', 'فكه', 'فلح', 'فوت'
+]);
+
+/**
+ * Detects if an Arabic word begins with or consists of a grammatical conjunction:
+ * و (waw), ف (fa), ثم (thumma), أو / أم (aw / am), بل (bal), لكن (lakin).
+ * Returns { hasConjunction, type, baseWord }.
+ */
+export function getArabicWordConjunction(arWord) {
+  if (!arWord) return { hasConjunction: false, type: null, baseWord: '' };
+  const cleanAr = cleanArabicWord(arWord);
+  if (!cleanAr) return { hasConjunction: false, type: null, baseWord: '' };
+
+  if (cleanAr === 'ثم') return { hasConjunction: true, type: 'thumma', baseWord: 'ثم' };
+  if (cleanAr === 'او') return { hasConjunction: true, type: 'aw', baseWord: 'او' };
+  if (cleanAr === 'ام') return { hasConjunction: true, type: 'am', baseWord: 'ام' };
+  if (cleanAr === 'بل') return { hasConjunction: true, type: 'bal', baseWord: 'بل' };
+  if (cleanAr === 'لكن' || cleanAr === 'لكنا') return { hasConjunction: true, type: 'lakin', baseWord: 'لكن' };
+
+  if (cleanAr.startsWith('و') && cleanAr.length >= 2 && !ROOT_WAW_WORDS.has(cleanAr)) {
+    return { hasConjunction: true, type: 'waw', baseWord: cleanAr.slice(1) };
+  }
+
+  if (cleanAr.startsWith('ف') && cleanAr.length >= 2 && !cleanAr.startsWith('في') && !ROOT_FA_WORDS.has(cleanAr)) {
+    return { hasConjunction: true, type: 'fa', baseWord: cleanAr.slice(1) };
+  }
+
+  return { hasConjunction: false, type: null, baseWord: cleanAr };
+}
+
+/**
+ * Retrieves target language conjunction tokens matching the Arabic conjunction type.
+ */
+export function getLanguageConjunctionTokens(lang, conjType = 'waw') {
   const l = (lang || '').toLowerCase();
-  if (l.startsWith('fr')) return new Set(['et']);
-  if (l.startsWith('en')) return new Set(['and']);
-  if (l.startsWith('es')) return new Set(['y', 'e']);
-  if (l.startsWith('de')) return new Set(['und']);
-  if (l.startsWith('ru')) return new Set(['и', 'да']);
-  if (l.startsWith('tr')) return new Set(['ve']);
-  if (l.startsWith('id')) return new Set(['dan']);
+  if (conjType === 'waw') {
+    if (l.startsWith('fr')) return new Set(['et']);
+    if (l.startsWith('en')) return new Set(['and']);
+    if (l.startsWith('es')) return new Set(['y', 'e']);
+    if (l.startsWith('de')) return new Set(['und']);
+    if (l.startsWith('ru')) return new Set(['и', 'да']);
+    if (l.startsWith('tr')) return new Set(['ve']);
+    if (l.startsWith('id')) return new Set(['dan']);
+    if (l.startsWith('ur')) return new Set(['اور']);
+    return new Set(['and', 'et', 'und', 'y', 'e', 'и', 've', 'dan', 'اور']);
+  }
+  if (conjType === 'fa') {
+    if (l.startsWith('fr')) return new Set(['donc', 'alors', 'puis', 'et', 'aussi']);
+    if (l.startsWith('en')) return new Set(['so', 'then', 'and', 'thus']);
+    if (l.startsWith('es')) return new Set(['entonces', 'así', 'luego', 'y']);
+    if (l.startsWith('de')) return new Set(['so', 'dann', 'da', 'und']);
+    if (l.startsWith('ru')) return new Set(['то', 'и', 'так']);
+    if (l.startsWith('tr')) return new Set(['artık', 've', 'bunun']);
+    if (l.startsWith('id')) return new Set(['maka', 'lalu']);
+    return new Set(['so', 'then', 'and', 'donc', 'alors', 'puis', 'maka']);
+  }
+  if (conjType === 'thumma') {
+    if (l.startsWith('fr')) return new Set(['puis', 'ensuite']);
+    if (l.startsWith('en')) return new Set(['then', 'thereafter']);
+    if (l.startsWith('es')) return new Set(['luego', 'después']);
+    if (l.startsWith('de')) return new Set(['dann', 'darauf']);
+    if (l.startsWith('ru')) return new Set(['затем', 'потом']);
+    return new Set(['then', 'puis', 'ensuite', 'luego', 'dann', 'затем']);
+  }
+  if (conjType === 'aw' || conjType === 'am') {
+    if (l.startsWith('fr')) return new Set(['ou']);
+    if (l.startsWith('en')) return new Set(['or']);
+    if (l.startsWith('es')) return new Set(['o', 'u']);
+    if (l.startsWith('de')) return new Set(['oder']);
+    if (l.startsWith('ru')) return new Set(['или']);
+    return new Set(['or', 'ou', 'oder', 'o', 'или']);
+  }
+  if (conjType === 'bal') {
+    if (l.startsWith('fr')) return new Set(['mais', 'plutôt']);
+    if (l.startsWith('en')) return new Set(['nay', 'rather', 'but']);
+    return new Set(['mais', 'rather', 'nay', 'but', 'sino', 'sondern']);
+  }
+  if (conjType === 'lakin') {
+    if (l.startsWith('fr')) return new Set(['mais', 'cependant', 'or']);
+    if (l.startsWith('en')) return new Set(['but', 'however']);
+    return new Set(['mais', 'but', 'aber', 'pero', 'но']);
+  }
   return new Set(['and', 'et', 'und', 'y', 'e', 'и', 've', 'dan']);
+}
+
+export function getLanguageAndConjunctions(lang) {
+  return getLanguageConjunctionTokens(lang, 'waw');
 }
 
 const PUNCTUATION_END_RE = /[,;:\.\?!«»\(\)—–\-]$/;
@@ -227,18 +328,22 @@ export function cleanArabicWord(w) {
 }
 
 /**
- * Cleans a translation token by stripping outer punctuation and symbols.
+ * Cleans a translation token by stripping outer punctuation, symbols,
+ * and elided prefixes (e.g. French "d'abraham" -> "abraham", "l'islam" -> "islam").
  */
 export function cleanTransToken(w) {
   if (!w) return '';
-  return w
+  let s = w
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/œ/g, 'oe')
-    .replace(/æ/g, 'ae')
-    .replace(/[,\.;:\?!«»\(\)—–\-"'“”\[\]{}–]/g, '')
-    .trim();
+    .replace(/æ/g, 'ae');
+  const withoutElision = s.replace(/^[dlcnsmtj]['’]/, '').replace(/^qu['’]/, '');
+  if (withoutElision.replace(/[,\.;:\?!«»\(\)—–\-"'“”\[\]{}–]/g, '').trim()) {
+    s = withoutElision;
+  }
+  return s.replace(/[,\.;:\?!«»\(\)—–\-"'“”\[\]{}–]/g, '').trim();
 }
 
 /**
@@ -530,9 +635,10 @@ export function findKeywordInTranslation(
 
     // Check direct Arabic root / term keyword mapping
     for (const [arKey, terms] of Object.entries(QURAN_KEYWORDS)) {
+      const cleanArKey = cleanArabicWord(arKey);
       for (const variant of arVariants) {
-        if (variant === arKey || variant.includes(arKey) || (variant.length >= 3 && arKey.includes(variant))) {
-          if (isBoundaryStart && arKey === 'قل') {
+        if (variant === cleanArKey || variant.includes(cleanArKey) || (variant.length >= 3 && cleanArKey.includes(variant))) {
+          if (isBoundaryStart && cleanArKey === 'قل') {
             keywordsToMatch.unshift(...terms);
           } else {
             keywordsToMatch.push(...terms);
@@ -607,6 +713,154 @@ export function findKeywordInTranslation(
   }
 
   return bestIdx;
+}
+
+/**
+ * Checks if a translation token matches any of the provided Arabic words (or their Quranic keywords/WBW meanings).
+ */
+export function tokenMatchesAnyArabicWord(tok, arWords = []) {
+  if (!tok || !arWords || arWords.length === 0) return false;
+  const cleanTok = cleanTransToken(tok);
+  if (!cleanTok || cleanTok.length < 2) return false;
+
+  for (let i = 0; i < arWords.length; i++) {
+    const ar = arWords[i];
+    if (!ar) continue;
+    const cleanAr = cleanArabicWord(ar);
+    if (!cleanAr) continue;
+
+    const variants = [cleanAr];
+    if ((cleanAr.startsWith('و') || cleanAr.startsWith('ف') || cleanAr.startsWith('ب') || cleanAr.startsWith('ل')) && cleanAr.length >= 3) {
+      variants.push(cleanAr.slice(1));
+    }
+    if (cleanAr.startsWith('ال') && cleanAr.length >= 4) {
+      variants.push(cleanAr.slice(2));
+    }
+
+    for (const v of variants) {
+      for (const [k, terms] of Object.entries(QURAN_KEYWORDS)) {
+        const cleanK = cleanArabicWord(k);
+        if (v === cleanK || v.includes(cleanK) || (v.length >= 3 && cleanK.includes(v))) {
+          for (let ti = 0; ti < terms.length; ti++) {
+            const cleanT = cleanTransToken(terms[ti]);
+            if (!cleanT || cleanT.length < 2) continue;
+            if (cleanTok === cleanT) return true;
+            if (cleanTok.startsWith(cleanT) && cleanT.length >= 3) return true;
+            if (cleanT.startsWith(cleanTok) && cleanTok.length >= 4) return true;
+            if (cleanTok.includes(cleanT) && cleanT.length >= 4) return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Evaluates candidate conjunction tokens in the translation when the next Arabic part
+ * begins with a conjunction (e.g. و / et / and, ف / donc / then).
+ * Scores each candidate based on proximity, subsequent word matches of the next part,
+ * and penalizes candidates if words belonging to the next part appear BEFORE them.
+ */
+export function findBestConjunctionIndex({
+  transTokens = [],
+  targetConjunctions = new Set(),
+  searchStart = 0,
+  searchEnd = 0,
+  expectedIdx = 0,
+  nextArWord = '',
+  secondNextArWord = '',
+  nextPartWords = [],
+  currentPartWords = [],
+  subsequentWords = []
+}) {
+  let bestIdx = -1;
+  let bestScore = -Infinity;
+
+  const start = Math.max(0, searchStart);
+  const end = Math.min(transTokens.length - 1, searchEnd);
+
+  for (let j = start; j <= end; j++) {
+    const tok = transTokens[j];
+    const cln = cleanTransToken(tok);
+    if (!targetConjunctions.has(cln)) continue;
+
+    let score = 0;
+    // Proximity to expected proportional position
+    score -= Math.abs(j - expectedIdx) * 1.5;
+
+    // Subsequent words check (words following candidate j)
+    let nextPartMatches = 0;
+    let subsequentMatches = 0;
+    for (let k = j + 1; k <= Math.min(transTokens.length - 1, j + 7); k++) {
+      if (nextArWord && tokenMatchesAnyArabicWord(transTokens[k], [nextArWord])) {
+        score += 45; // Direct match of initial verb/noun following conjunction!
+        nextPartMatches++;
+      } else if (secondNextArWord && tokenMatchesAnyArabicWord(transTokens[k], [secondNextArWord])) {
+        score += 30;
+        nextPartMatches++;
+      } else if (tokenMatchesAnyArabicWord(transTokens[k], nextPartWords)) {
+        score += 20;
+        nextPartMatches++;
+      }
+      if (subsequentWords.length > 0 && tokenMatchesAnyArabicWord(transTokens[k], subsequentWords)) {
+        subsequentMatches++;
+      }
+    }
+
+    // Heavy penalty if candidate conjunction directly precedes a later part without any nextPart words
+    if (subsequentMatches > 0 && nextPartMatches === 0) {
+      score -= 80;
+    }
+
+    // Filter words belonging exclusively to nextPart (not shared with currentPart)
+    const exclusiveNextPartWords = nextPartWords.filter(nw => {
+      const clnN = cleanArabicWord(nw);
+      return !currentPartWords.some(cw => cleanArabicWord(cw) === clnN);
+    });
+
+    // Preceding words check (words before candidate j)
+    let nextPartBeforeCount = 0;
+    let currentPartBeforeCount = 0;
+    for (let k = Math.max(0, j - 8); k < j; k++) {
+      if (tokenMatchesAnyArabicWord(transTokens[k], exclusiveNextPartWords)) {
+        nextPartBeforeCount++;
+      }
+      if (tokenMatchesAnyArabicWord(transTokens[k], currentPartWords)) {
+        currentPartBeforeCount++;
+      }
+    }
+
+    // Massive penalty if words of nextPart already occurred BEFORE this candidate:
+    // this means this candidate conjunction occurs AFTER nextPart has already started or finished!
+    if (nextPartBeforeCount > 0) {
+      score -= 150 * nextPartBeforeCount;
+    }
+    if (currentPartBeforeCount > 0) {
+      score += 15 * Math.min(3, currentPartBeforeCount);
+    }
+
+    // Preceding punctuation bonus / penalty
+    if (j > 0 && PUNCTUATION_END_RE.test(transTokens[j - 1])) {
+      const punc = transTokens[j - 1];
+      if (/[,;]$/.test(punc)) {
+        score += 10;
+      } else if (/[\.?!]$/.test(punc)) {
+        if (nextPartBeforeCount === 0 && Math.abs(j - expectedIdx) <= 6) {
+          score += 15;
+        } else {
+          score -= 40;
+        }
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = j;
+    }
+  }
+
+  return { bestIdx, bestScore };
 }
 
 /**
@@ -819,41 +1073,47 @@ export function computePartsSegmentation({
       }
     }
 
-    // If next Arabic word starts with conjunction و, check if an "and" conjunction exists near expectedNextTransIdx
-    const cleanNext = cleanArabicWord(nextArWord);
-    const andConjunctions = getLanguageAndConjunctions(translationLang);
-    if (cleanNext.startsWith('و') && cleanNext.length >= 2 && !ROOT_WAW_WORDS.has(cleanNext)) {
-      if (idxNext > minCut && andConjunctions.has(cleanTransToken(transTokens[idxNext - 1]))) {
-        idxNext = idxNext - 1;
-      } else {
-        const searchS = Math.max(minCut, idxLast !== -1 ? Math.min(idxLast + 1, minCut) : Math.min(winStartLast, winStartNext));
-        const searchE = Math.min(numTrans - 1, Math.max(winEndLast, winEndNext));
-        let bestAndIdx = -1;
-        let bestAndDist = Infinity;
-        let bestAndHasPunct = false;
+    // Extract all words of currentPart, nextPart, and subsequentParts to evaluate context
+    const currentPartWords = (part.wordIndices || []).map(idx => arabicWords?.[idx] || '').filter(isArabicLetterWord);
+    const nextPartWords = (nextPart.wordIndices || []).map(idx => arabicWords?.[idx] || '').filter(isArabicLetterWord);
+    const subsequentWords = sortedParts.slice(i + 2).flatMap(p => (p.wordIndices || []).map(idx => arabicWords?.[idx] || '').filter(isArabicLetterWord));
 
-        for (let j = searchS; j <= searchE; j++) {
-          const cln = cleanTransToken(transTokens[j]);
-          if (andConjunctions.has(cln)) {
-            const hasPrecedingPunct = j > 0 && PUNCTUATION_END_RE.test(transTokens[j - 1]);
-            const dist = Math.abs(j - expectedNextTransIdx);
-            if (hasPrecedingPunct && !bestAndHasPunct) {
-              bestAndIdx = j;
-              bestAndDist = dist;
-              bestAndHasPunct = true;
-            } else if (hasPrecedingPunct === bestAndHasPunct) {
-              if (dist < bestAndDist) {
-                bestAndDist = dist;
-                bestAndIdx = j;
-              }
-            }
-          }
-        }
-        if (bestAndIdx !== -1) {
-          if (bestAndHasPunct || idxNext === -1 || bestAndIdx <= idxNext) {
-            idxNext = bestAndIdx;
-          }
-        }
+    // Conjunction analysis on nextArWord (e.g. و / et / and, ف / donc / then, ثم, أو, بل, لكن)
+    const conjInfo = getArabicWordConjunction(nextArWord);
+    let conjMatched = false;
+
+    if (conjInfo.hasConjunction) {
+      const targetConjunctions = getLanguageConjunctionTokens(translationLang, conjInfo.type);
+      const searchStart = Math.max(minCut + 1, Math.min(winStartLast, winStartNext) - 4);
+      const searchEnd = Math.min(numTrans - 1, Math.max(winEndLast, winEndNext) + 4);
+
+      const conjResult = findBestConjunctionIndex({
+        transTokens,
+        targetConjunctions,
+        searchStart,
+        searchEnd,
+        expectedIdx: expectedNextTransIdx,
+        nextArWord,
+        secondNextArWord,
+        nextPartWords,
+        currentPartWords,
+        subsequentWords
+      });
+
+      if (conjResult.bestIdx !== -1 && conjResult.bestScore > -150) {
+        idxNext = conjResult.bestIdx;
+        conjMatched = true;
+      }
+    }
+
+    // If idxNext was matched on the word immediately after a conjunction (e.g. "suivant" after "et"),
+    // absorb the conjunction so that it begins the next part!
+    if (idxNext > minCut + 1 && conjInfo.hasConjunction) {
+      const targetConjunctions = getLanguageConjunctionTokens(translationLang, conjInfo.type);
+      const prevTokCln = cleanTransToken(transTokens[idxNext - 1]);
+      if (targetConjunctions.has(prevTokCln)) {
+        idxNext = idxNext - 1;
+        conjMatched = true;
       }
     }
 
@@ -863,34 +1123,30 @@ export function computePartsSegmentation({
     if (idxLast !== -1 && idxNext !== -1) {
       if (idxLast < idxNext) {
         // Both found in logical order (e.g. last: "them" #7, next: "and" #8)
-        if (PUNCTUATION_END_RE.test(transTokens[idxLast])) {
-          // If current part's terminal token has punctuation (comma, period),
-          // the clause cleanly concludes here, and following connective words introduce the next part
-          matchedIdx = idxLast;
-        } else {
-          let cutCandidate = idxNext - 1;
-          while (cutCandidate > idxLast && /^["'«“\(\[\s\.]+$/.test(transTokens[cutCandidate])) {
-            cutCandidate--;
-          }
-          // If cutCandidate landed on a pronoun or connector and token before it ends a clause with punctuation, snap back
-          if (cutCandidate > idxLast && cutCandidate > minCut) {
-            const candWord = cleanTransToken(transTokens[cutCandidate]);
-            if ((TRAILING_PRONOUNS.has(candWord) || TRAILING_CONNECTORS.has(candWord)) && PUNCTUATION_END_RE.test(transTokens[cutCandidate - 1])) {
-              cutCandidate -= 1;
-            }
-          }
-          if (cutCandidate >= idxLast) {
-            matchedIdx = cutCandidate;
-          } else {
-            matchedIdx = idxLast;
+        let cutCandidate = idxNext - 1;
+        while (cutCandidate > idxLast && /^["'«“\(\[\s\.]+$/.test(transTokens[cutCandidate])) {
+          cutCandidate--;
+        }
+        // If cutCandidate landed on a pronoun or connector and token before it ends a clause with punctuation, snap back
+        if (cutCandidate > idxLast && cutCandidate > minCut) {
+          const candWord = cleanTransToken(transTokens[cutCandidate]);
+          if ((TRAILING_PRONOUNS.has(candWord) || TRAILING_CONNECTORS.has(candWord)) && PUNCTUATION_END_RE.test(transTokens[cutCandidate - 1])) {
+            cutCandidate -= 1;
           }
         }
-        matchMethod = `Double concordance arabe : fin "${transTokens[idxLast]}" (#${idxLast}) & début suivant "${transTokens[idxNext]}" (#${idxNext})`;
+        if (cutCandidate >= idxLast) {
+          matchedIdx = cutCandidate;
+        } else {
+          matchedIdx = idxLast;
+        }
+        matchMethod = conjMatched
+          ? `Concordance conjonction arabe "${nextArWord}" (${conjInfo.type}) -> début suivant "${transTokens[idxNext]}" (#${idxNext})`
+          : `Double concordance arabe : fin "${transTokens[idxLast]}" (#${idxLast}) & début suivant "${transTokens[idxNext]}" (#${idxNext})`;
       } else {
         // Inversion or collision (idxLast >= idxNext)
-        // If next part starts with conjunction و, or idxNext is an and-conjunction, or token before idxNext has punctuation:
+        const targetConjunctions = conjInfo.hasConjunction ? getLanguageConjunctionTokens(translationLang, conjInfo.type) : getLanguageAndConjunctions(translationLang);
         if (
-          (cleanNext.startsWith('و') && andConjunctions.has(cleanTransToken(transTokens[idxNext]))) ||
+          (conjInfo.hasConjunction && targetConjunctions.has(cleanTransToken(transTokens[idxNext]))) ||
           (idxNext > minCut && PUNCTUATION_END_RE.test(transTokens[idxNext - 1]))
         ) {
           let proposedCut = idxNext - 1;
@@ -928,7 +1184,9 @@ export function computePartsSegmentation({
         }
       }
       matchedIdx = Math.max(minCut, proposedCut);
-      matchMethod = `Premier mot partie suivante ("${transTokens[idxNext]}" #${idxNext}) -> coupure avant`;
+      matchMethod = conjMatched
+        ? `Concordance conjonction arabe "${nextArWord}" (${conjInfo.type}) -> début suivant "${transTokens[idxNext]}" (#${idxNext})`
+        : `Premier mot partie suivante ("${transTokens[idxNext]}" #${idxNext}) -> coupure avant`;
     } else if (idxLast !== -1) {
       // ONLY the current part's last word was matched! (e.g. "them" at token 7)
       matchedIdx = idxLast;

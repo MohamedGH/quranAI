@@ -1,7 +1,9 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
-  getAuth,
+  initializeAuth,
   GoogleAuthProvider,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
 } from "firebase/auth";
 import {
   initializeFirestore,
@@ -30,7 +32,19 @@ export const firebaseConfig = {
 };
 
 export const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-export const firebaseAuth = getAuth(firebaseApp);
+
+// Explicitly configure persistent browser auth storage. The redirect flow
+// leaves localhost and comes back from Firebase/Google, so relying on the
+// implicit auth initialization can leave currentUser null after the return.
+export const firebaseAuth = initializeAuth(firebaseApp, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+});
+
+console.log("[AUTH] Firebase initialized", {
+  projectId: firebaseConfig.projectId,
+  authDomain: firebaseConfig.authDomain,
+  persistence: "indexedDBLocalPersistence + browserLocalPersistence",
+});
 
 // Initialize Firestore with long-polling to prevent WebChannel streaming dropouts in proxies & containers
 export const firebaseDb = initializeFirestore(firebaseApp, {

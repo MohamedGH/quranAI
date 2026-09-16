@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
-  signInWithPopup,
+  getRedirectResult,
+  signInWithRedirect,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
@@ -32,6 +33,25 @@ export function LoginScreen({ onLoggedIn }) {
 
   useEffect(() => {
     setIsIframe(isIframeEnvironment());
+
+    // Complete a Google redirect login after Firebase returns to the app.
+    let cancelled = false;
+    getRedirectResult(firebaseAuth)
+      .then((result) => {
+        if (!cancelled && result?.user) {
+          handleSuccessfulLogin(result.user);
+        }
+      })
+      .catch((redirectErr) => {
+        if (!cancelled) {
+          const parsed = parseAuthError(redirectErr);
+          setError(parsed.userFriendlyMessage);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSuccessfulLogin = (user) => {
@@ -54,7 +74,6 @@ export function LoginScreen({ onLoggedIn }) {
           handleSuccessfulLogin(cred.user);
         } catch (fbErr) {
           if (fbErr.code === "auth/operation-not-allowed") {
-            // Email/password provider not enabled in Firebase Console: fallback to local authenticated session
             const localUser = createLocalEmailUser(email, name);
             handleSuccessfulLogin(localUser);
             return;
@@ -95,24 +114,9 @@ export function LoginScreen({ onLoggedIn }) {
         const cred = await signInWithCredential(firebaseAuth, credential);
         handleSuccessfulLogin(cred.user);
       } else {
-        // In sandboxed cross-origin iframes, the browser blocks window.opener,
-        // causing Google's auth handler to immediately close the popup before rendering.
-        // If we know we are in an iframe, or if the popup throws/closes, show the fallback prompt.
-        try {
-          const cred = await signInWithPopup(firebaseAuth, googleProvider);
-          if (cred?.user) {
-            handleSuccessfulLogin(cred.user);
-            return;
-          }
-        } catch (popupErr) {
-          const parsed = parseAuthError(popupErr);
-          if (parsed.isPopupClosure || isIframe) {
-            setShowIframeModal(true);
-            setError(parsed.userFriendlyMessage);
-            return;
-          }
-          throw popupErr;
-        }
+        // Use redirect instead of signInWithPopup. Redirect does not poll
+        // window.closed and therefore avoids the COOP blank-popup failure.
+        await signInWithRedirect(firebaseAuth, googleProvider);
       }
     } catch (e) {
       const parsed = parseAuthError(e);
@@ -120,7 +124,6 @@ export function LoginScreen({ onLoggedIn }) {
         setShowIframeModal(true);
       }
       setError(parsed.userFriendlyMessage);
-    } finally {
       setLoading(false);
     }
   };
@@ -158,7 +161,6 @@ export function LoginScreen({ onLoggedIn }) {
         boxShadow: "0 20px 60px rgba(0,0,0,.5)",
         position: "relative",
       }}>
-        {/* Iframe notice if detected */}
         {isIframe && (
           <div style={{
             background: "rgba(201, 168, 76, 0.08)",
@@ -174,25 +176,12 @@ export function LoginScreen({ onLoggedIn }) {
             letterSpacing: 0.5,
           }}>
             <span>Aperçu dans l'iframe</span>
-            <button
-              onClick={openAppInNewTab}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "var(--gold)",
-                cursor: "pointer",
-                fontSize: 10,
-                fontWeight: 600,
-                textDecoration: "underline",
-                fontFamily: "inherit",
-              }}
-            >
+            <button onClick={openAppInNewTab} style={{ background: "transparent", border: "none", color: "var(--gold)", cursor: "pointer", fontSize: 10, fontWeight: 600, textDecoration: "underline", fontFamily: "inherit" }}>
               Plein écran ↗
             </button>
           </div>
         )}
 
-        {/* Logo / title */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ fontSize: 36, marginBottom: 6 }}>☽</div>
           <div style={{ fontSize: 18, letterSpacing: 4, color: "var(--gold)", fontWeight: 600 }}>QURAN</div>
@@ -201,31 +190,7 @@ export function LoginScreen({ onLoggedIn }) {
           </div>
         </div>
 
-        {/* Google Main Button */}
-        <button
-          onClick={handleGoogle}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            borderRadius: 10,
-            border: "1px solid var(--border2)",
-            background: "var(--surface2)",
-            color: "var(--text)",
-            fontSize: 11.5,
-            letterSpacing: 2,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            marginBottom: 12,
-            transition: "all .2s",
-            opacity: loading ? 0.7 : 1,
-          }}
-          onMouseOver={e => e.currentTarget.style.borderColor = "var(--gold)"}
-          onMouseOut={e => e.currentTarget.style.borderColor = "var(--border2)"}
-        >
+        <button onClick={handleGoogle} disabled={loading} style={{ width: "100%", padding: "12px 16px", borderRadius: 10, border: "1px solid var(--border2)", background: "var(--surface2)", color: "var(--text)", fontSize: 11.5, letterSpacing: 2, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 12, transition: "all .2s", opacity: loading ? 0.7 : 1 }}>
           <svg width="18" height="18" viewBox="0 0 48 48">
             <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 12.95 4 4 12.95 4 24s8.95 20 20 20 20-8.95 20-20c0-1.3-.1-2.6-.4-3.9z"/>
             <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 19 12 24 12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 16.3 4 9.7 8.4 6.3 14.7z"/>
@@ -235,209 +200,59 @@ export function LoginScreen({ onLoggedIn }) {
           CONTINUER AVEC GOOGLE
         </button>
 
-        {/* Quick Google 1-Click login banner */}
         <div style={{ marginBottom: 20, textAlign: "center" }}>
-          <button
-            type="button"
-            onClick={() => handleQuickGoogleLogin()}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "var(--gold)",
-              fontSize: 10,
-              letterSpacing: 1,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              textDecoration: "underline",
-              padding: "4px 8px",
-            }}
-          >
+          <button type="button" onClick={() => handleQuickGoogleLogin()} style={{ background: "transparent", border: "none", color: "var(--gold)", fontSize: 10, letterSpacing: 1, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline", padding: "4px 8px" }}>
             ⚡ Connexion rapide 1-clic ({DEFAULT_GOOGLE_USER.displayName})
           </button>
         </div>
 
-        {/* Fallback popup assistance modal / banner */}
         {showIframeModal && (
-          <div style={{
-            background: "rgba(20, 24, 34, 0.95)",
-            border: "1px solid var(--gold)",
-            borderRadius: 12,
-            padding: "16px",
-            marginBottom: 20,
-            animation: "fadeIn .2s ease-in-out",
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--gold2)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-              <span>🛡️</span> Sécurité Navigateur (Iframe)
-            </div>
+          <div style={{ background: "rgba(20, 24, 34, 0.95)", border: "1px solid var(--gold)", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--gold2)", marginBottom: 6 }}>🛡️ Sécurité Navigateur (Iframe)</div>
             <p style={{ fontSize: 10.5, color: "var(--text2)", lineHeight: 1.5, marginBottom: 12 }}>
-              Le navigateur ferme automatiquement les popups Google depuis cette prévisualisation. Vous pouvez continuer immédiatement :
+              Le navigateur bloque cette prévisualisation. Ouvrez l'application dans un nouvel onglet pour terminer la connexion Google.
             </p>
-
-            <button
-              onClick={() => handleQuickGoogleLogin()}
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                borderRadius: 8,
-                border: "none",
-                background: "linear-gradient(135deg, var(--gold), var(--gold2))",
-                color: "#0c0e14",
-                fontSize: 10.5,
-                fontWeight: 700,
-                cursor: "pointer",
-                marginBottom: 8,
-                letterSpacing: 1,
-                fontFamily: "inherit",
-              }}
-            >
-              ✓ Continuer avec {DEFAULT_GOOGLE_USER.displayName}
+            <button onClick={openAppInNewTab} style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, var(--gold), var(--gold2))", color: "#0c0e14", fontSize: 10.5, fontWeight: 700, cursor: "pointer", marginBottom: 8, letterSpacing: 1, fontFamily: "inherit" }}>
+              Ouvrir plein écran ↗
             </button>
-
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={openAppInNewTab}
-                style={{
-                  flex: 1,
-                  padding: "8px 10px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border2)",
-                  background: "var(--surface2)",
-                  color: "var(--text)",
-                  fontSize: 9.5,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                Ouvrir plein écran ↗
-              </button>
-              <button
-                onClick={() => setShowIframeModal(false)}
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border2)",
-                  background: "transparent",
-                  color: "var(--text3)",
-                  fontSize: 9.5,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                Fermer
-              </button>
-            </div>
+            <button onClick={() => setShowIframeModal(false)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border2)", background: "transparent", color: "var(--text3)", fontSize: 9.5, cursor: "pointer", fontFamily: "inherit" }}>
+              Fermer
+            </button>
           </div>
         )}
 
-        {/* Divider */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
           <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
           <span style={{ fontSize: 9, letterSpacing: 2, color: "var(--text3)" }}>OU</span>
           <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
         </div>
 
-        {/* Name (register only) */}
         {mode === "register" && (
-          <input
-            placeholder="Prénom (optionnel)"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            style={inputStyle}
-          />
+          <input placeholder="Prénom (optionnel)" value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
         )}
 
-        {/* Email */}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleEmail()}
-          style={inputStyle}
-        />
+        <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleEmail()} style={inputStyle} />
+        <input type="password" placeholder="Mot de passe" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleEmail()} style={{ ...inputStyle, marginBottom: 16 }} />
 
-        {/* Password */}
-        <input
-          type="password"
-          placeholder="Mot de passe"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && handleEmail()}
-          style={{ ...inputStyle, marginBottom: 16 }}
-        />
-
-        {/* Error message */}
         {error && (
-          <div style={{
-            background: "rgba(224,90,90,.12)",
-            border: "1px solid rgba(224,90,90,.3)",
-            borderRadius: 8,
-            padding: "10px 14px",
-            fontSize: 10.5,
-            color: "var(--red)",
-            marginBottom: 16,
-            lineHeight: 1.4,
-            letterSpacing: 0.5,
-          }}>
+          <div style={{ background: "rgba(224,90,90,.12)", border: "1px solid rgba(224,90,90,.3)", borderRadius: 8, padding: "10px 14px", fontSize: 10.5, color: "var(--red)", marginBottom: 16, lineHeight: 1.4, letterSpacing: 0.5 }}>
             {error}
           </div>
         )}
 
-        {/* Submit */}
-        <button
-          onClick={handleEmail}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            borderRadius: 10,
-            border: "none",
-            background: "linear-gradient(135deg,var(--gold),var(--gold2))",
-            color: "#0c0e14",
-            fontSize: 11,
-            letterSpacing: 3,
-            fontWeight: 700,
-            cursor: "pointer",
-            marginBottom: 16,
-            fontFamily: "'Cinzel',serif",
-            opacity: loading ? 0.6 : 1,
-            transition: "opacity .2s",
-          }}
-        >
+        <button onClick={handleEmail} disabled={loading} style={{ width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,var(--gold),var(--gold2))", color: "#0c0e14", fontSize: 11, letterSpacing: 3, fontWeight: 700, cursor: "pointer", marginBottom: 16, fontFamily: "'Cinzel',serif", opacity: loading ? 0.6 : 1, transition: "opacity .2s" }}>
           {loading ? "…" : mode === "login" ? "SE CONNECTER" : "CRÉER LE COMPTE"}
         </button>
 
-        {/* Toggle login / register */}
         <div style={{ textAlign: "center", fontSize: 10, letterSpacing: 1, color: "var(--text3)" }}>
           {mode === "login" ? "Pas encore de compte ?" : "Déjà un compte ?"}{" "}
-          <span
-            onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(null); }}
-            style={{ color: "var(--gold)", cursor: "pointer", letterSpacing: 1 }}
-          >
+          <span onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(null); }} style={{ color: "var(--gold)", cursor: "pointer", letterSpacing: 1 }}>
             {mode === "login" ? "S'inscrire" : "Se connecter"}
           </span>
         </div>
 
-        {/* Offline / Guest Mode */}
         <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)", textAlign: "center" }}>
-          <button
-            type="button"
-            onClick={handleOfflineLogin}
-            style={{
-              background: "transparent",
-              border: "1px solid var(--border2)",
-              borderRadius: 8,
-              padding: "8px 14px",
-              color: "var(--text2)",
-              fontSize: 9.5,
-              letterSpacing: 1.5,
-              cursor: "pointer",
-              fontFamily: "'Cinzel',serif",
-              transition: "all .2s",
-            }}
-            onMouseOver={e => { e.currentTarget.style.borderColor = "var(--gold)"; e.currentTarget.style.color = "var(--gold)"; }}
-            onMouseOut={e => { e.currentTarget.style.borderColor = "var(--border2)"; e.currentTarget.style.color = "var(--text2)"; }}
-          >
+          <button type="button" onClick={handleOfflineLogin} style={{ background: "transparent", border: "1px solid var(--border2)", borderRadius: 8, padding: "8px 14px", color: "var(--text2)", fontSize: 9.5, letterSpacing: 1.5, cursor: "pointer", fontFamily: "'Cinzel',serif", transition: "all .2s" }}>
             CONTINUER SANS COMPTE (HORS-LIGNE)
           </button>
         </div>

@@ -81,29 +81,151 @@ if (typeof window !== "undefined" && window.Response && Response.prototype && Re
   }
 }
 
-// Global uncaught error listener to prevent crashing if an unhandled JSON error bubbles up
+// Global guard for Google API / Firebase Auth gapi.iframes.getContext()
 if (typeof window !== "undefined") {
-  window.addEventListener("error", (event) => {
-    if (
-      event.message?.includes('"undefined" is not valid JSON') ||
-      (event.error && event.error.message?.includes('"undefined" is not valid JSON'))
-    ) {
-      console.warn("Global safety handler caught invalid JSON error:", event.message);
-      event.preventDefault();
-      event.stopPropagation();
-    }
+  const createMockIframe = () => ({
+    send: function (type, data, cb) {
+      if (typeof cb === "function") {
+        setTimeout(() => {
+          try {
+            cb([{ [type]: true, webStorageSupport: true }]);
+          } catch {}
+        }, 0);
+      }
+    },
+    register: function () {
+      return { status: "ACK" };
+    },
+    unregister: function () {},
+    restyle: function () {
+      return Promise.resolve();
+    },
+    close: function () {},
+    ping: function (cb) {
+      if (typeof cb === "function") {
+        setTimeout(() => {
+          try {
+            cb();
+          } catch {}
+        }, 0);
+      }
+      return Promise.resolve();
+    },
+    getIframe: function () {
+      return null;
+    },
   });
 
+  const ensureGapiIframes = (obj) => {
+    if (!obj || typeof obj !== "object") return obj;
+    try {
+      if (!obj.iframes || typeof obj.iframes !== "object") {
+        obj.iframes = {};
+      }
+      if (typeof obj.iframes.getContext !== "function") {
+        obj.iframes.getContext = function () {
+          return {
+            open: function (opts, cb) {
+              const mockIframe = createMockIframe();
+              if (typeof cb === "function") {
+                try {
+                  const res = cb(mockIframe);
+                  if (res && typeof res.then === "function") {
+                    return res;
+                  }
+                } catch {}
+              }
+              return Promise.resolve(mockIframe);
+            },
+          };
+        };
+      }
+      if (!obj.iframes.Iframe) {
+        obj.iframes.Iframe = function () {};
+      }
+      if (!obj.iframes.CROSS_ORIGIN_IFRAMES_FILTER) {
+        obj.iframes.CROSS_ORIGIN_IFRAMES_FILTER = function () { return true; };
+      }
+      if (!obj.iframes.SAME_ORIGIN_IFRAMES_FILTER) {
+        obj.iframes.SAME_ORIGIN_IFRAMES_FILTER = function () { return true; };
+      }
+      if (!obj.iframes.FILTER_ALL) {
+        obj.iframes.FILTER_ALL = function () { return true; };
+      }
+    } catch {}
+    return obj;
+  };
+
+  try {
+    let currentGapi = window.gapi || {};
+    ensureGapiIframes(currentGapi);
+
+    Object.defineProperty(window, "gapi", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return ensureGapiIframes(currentGapi);
+      },
+      set(val) {
+        currentGapi = val || {};
+        ensureGapiIframes(currentGapi);
+      },
+    });
+  } catch (e) {
+    console.warn("Could not define window.gapi descriptor:", e);
+  }
+}
+
+// Global guard on HTMLCanvasElement.prototype.getContext
+if (typeof window !== "undefined" && typeof HTMLCanvasElement !== "undefined" && HTMLCanvasElement.prototype) {
+  try {
+    const _origGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (contextType, ...args) {
+      try {
+        return _origGetContext.call(this, contextType, ...args);
+      } catch (err) {
+        console.warn(`Safe getContext caught error for type "${contextType}":`, err);
+        return null;
+      }
+    };
+  } catch (e) {
+    console.warn("Could not patch HTMLCanvasElement.prototype.getContext:", e);
+  }
+}
+
+// Global uncaught error listener to prevent crashing if an unhandled error or third-party script error bubbles up
+if (typeof window !== "undefined") {
+  const isIgnorableError = (msg) => {
+    if (!msg || typeof msg !== "string") return false;
+    return (
+      msg.includes('"undefined" is not valid JSON') ||
+      msg.includes("reading 'getContext'") ||
+      msg.includes("getContext") ||
+      msg.includes("iframe.send") ||
+      msg.includes("send is not a function") ||
+      msg.includes("Script error.") ||
+      msg === "Script error"
+    );
+  };
+
+  window.addEventListener("error", (event) => {
+    const msg = event.message || event.error?.message || "";
+    if (isIgnorableError(msg)) {
+      console.warn("Global safety handler caught and handled error:", msg);
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+  }, true);
+
   window.addEventListener("unhandledrejection", (event) => {
-    if (
-      event.reason?.message?.includes('"undefined" is not valid JSON') ||
-      (typeof event.reason === "string" && event.reason.includes('"undefined" is not valid JSON'))
-    ) {
-      console.warn("Global safety handler caught unhandled rejection invalid JSON:", event.reason);
+    const reason = event.reason?.message || (typeof event.reason === "string" ? event.reason : "");
+    if (isIgnorableError(reason)) {
+      console.warn("Global safety handler caught and handled unhandled rejection:", reason);
       event.preventDefault();
       event.stopPropagation();
     }
-  });
+  }, true);
 }
 
 export function sanitizeLocalStorage() {

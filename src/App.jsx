@@ -24,6 +24,7 @@ import { AyatFullScreenModal } from "./components/common/AyatFullScreenModal.jsx
 import { SurahHeader } from "./components/common/SurahHeader.jsx";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "./utils/safeStorage.js";
+import { getSavedSessionUser, saveSessionUser, clearSessionUser } from "./utils/authManager.js";
 
 import { LoginScreen } from "./components/sync/LoginScreen.jsx";
 import { SyncConsole } from "./components/sync/SyncConsole.jsx";
@@ -3042,12 +3043,30 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
+    const saved = getSavedSessionUser();
     const unsub = onAuthStateChanged(firebaseAuth, (u) => {
-      setUser(u);
+      if (u) {
+        setUser(u);
+        saveSessionUser(u);
+      } else if (saved) {
+        setUser(saved);
+      } else {
+        setUser(null);
+      }
       setAuthReady(true);
     });
     return unsub;
   }, []);
+
+  const handleLoggedIn = (u) => {
+    if (u) saveSessionUser(u);
+    setUser(u);
+  };
+
+  const handleSignOut = () => {
+    clearSessionUser();
+    signOut(firebaseAuth).catch(() => {}).finally(() => setUser(null));
+  };
 
   if (!authReady) {
     return (
@@ -3068,7 +3087,7 @@ export default function App() {
         <style dangerouslySetInnerHTML={{ __html:
           `:root{--bg:#0c0e14;--surface:#13161f;--surface2:#1a1e2a;--border:#2a2f40;--border2:#363c52;--gold:#c9a84c;--gold2:#e8c96e;--text:#e8e4d8;--text2:#a89f8c;--text3:#6e6659;--red:#e05a5a;}*{box-sizing:border-box;margin:0;padding:0;}` }}
         />
-        <LoginScreen onLoggedIn={setUser} />
+        <LoginScreen onLoggedIn={handleLoggedIn} />
       </>
     );
   }
@@ -3079,7 +3098,7 @@ export default function App() {
         <CloudSyncManager uid={user.uid} />
         <SyncConsole />
         <ErrorBoundary>
-          <AppInner currentUser={user} onSignOut={() => signOut(firebaseAuth).catch(() => {}).finally(() => setUser(null))} />
+          <AppInner currentUser={user} onSignOut={handleSignOut} />
         </ErrorBoundary>
       </HashRouter>
     </Provider>

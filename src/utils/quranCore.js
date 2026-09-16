@@ -297,7 +297,7 @@ export function detectTajweedRule(letter, nextLetter, diacritic, isSakin, isShad
   if (!letter) return null;
   
   if (QALQALAH_LETTERS.has(letter) && isSakin) {
-    return { rule: "qalqala", color: TAJWEED_COLORS.qalqalah, label: "Qalqala (قلقلة)" };
+    return { rule: "qalqalah", color: TAJWEED_COLORS.qalqalah, label: "Qalqala (قلقلة)" };
   }
 
   const isNunSakin = (letter === "ن" && isSakin) || diacritic === "tanween";
@@ -309,7 +309,7 @@ export function detectTajweedRule(letter, nextLetter, diacritic, isSakin, isShad
       return { rule: "izhar", color: TAJWEED_COLORS.izhar, label: "Idh-har Halqi (إظهار حلقي)" };
     }
     if (IDGHAM_GHUNNAH_LETTERS.has(nextLetter)) {
-      return { rule: "idgham_ghunnah", color: TAJWEED_COLORS.idgham_ghunnah, label: "Idgham bi-Ghunnah (إدغام بغنة)" };
+      return { rule: "idgham_ghunnah", color: TAJWEED_COLORS.ghunnah, label: "Idgham bi-Ghunnah (إدغام بغنة)" };
     }
     if (IDGHAM_NO_GHUNNAH_LETTERS.has(nextLetter)) {
       return { rule: "idgham_no_ghunnah", color: TAJWEED_COLORS.idgham_no_ghunnah, label: "Idgham bila-Ghunnah (إدغام بغير غنة)" };
@@ -326,7 +326,7 @@ export function detectTajweedRule(letter, nextLetter, diacritic, isSakin, isShad
     if (nextLetter && (nextLetter === "ء" || nextLetter === "أ" || nextLetter === "إ")) {
       return { rule: "madd_wajib", color: TAJWEED_COLORS.madd_wajib, label: "Madd Muttasil (مد متصل - 4-5 temps)" };
     }
-    return { rule: "madd_jaiz", color: TAJWEED_COLORS.madd_jaiz, label: "Madd (مد)" };
+    return { rule: "madd_lazim", color: TAJWEED_COLORS.madd_lazim, label: "Madd (مد)" };
   }
 
   if ((letter === "ن" || letter === "م") && isShaddah) {

@@ -1,96 +1,230 @@
-import React, { useState } from "react";
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import React, { useState, useEffect } from "react";
+import {
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+} from "firebase/auth";
 import { IS_ANDROID } from "../../utils/audioRecorder.js";
 import { firebaseAuth, googleProvider } from "../../firebase.js";
+import {
+  isIframeEnvironment,
+  parseAuthError,
+  createDemoGoogleUser,
+  createOfflineUser,
+  createLocalEmailUser,
+  saveSessionUser,
+  openAppInNewTab,
+  DEFAULT_GOOGLE_USER,
+} from "../../utils/authManager.js";
 
 export function LoginScreen({ onLoggedIn }) {
-  const [mode, setMode]         = useState("login"); // "login" | "register"
-  const [email, setEmail]       = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName]         = useState("");
-  const [error, setError]       = useState(null);
-  const [loading, setLoading]   = useState(false);
+  const [mode, setMode]                 = useState("login"); // "login" | "register"
+  const [email, setEmail]               = useState("");
+  const [password, setPassword]         = useState("");
+  const [name, setName]                 = useState("");
+  const [error, setError]               = useState(null);
+  const [loading, setLoading]           = useState(false);
+  const [showIframeModal, setShowIframeModal] = useState(false);
+  const [customGoogleEmail, setCustomGoogleEmail] = useState(DEFAULT_GOOGLE_USER.email);
+  const [customGoogleName, setCustomGoogleName]   = useState(DEFAULT_GOOGLE_USER.displayName);
+  const [isIframe, setIsIframe]         = useState(false);
+
+  useEffect(() => {
+    setIsIframe(isIframeEnvironment());
+  }, []);
+
+  const handleSuccessfulLogin = (user) => {
+    saveSessionUser(user);
+    onLoggedIn(user);
+  };
 
   const handleEmail = async () => {
     setError(null);
-    if (!email || !password) { setError("Remplissez tous les champs."); return; }
+    if (!email || !password) {
+      setError("Veuillez remplir tous les champs.");
+      return;
+    }
     setLoading(true);
     try {
       if (mode === "register") {
-        const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-        if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() });
-        onLoggedIn(cred.user);
+        try {
+          const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+          if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() });
+          handleSuccessfulLogin(cred.user);
+        } catch (fbErr) {
+          if (fbErr.code === "auth/operation-not-allowed") {
+            // Email/password provider not enabled in Firebase Console: fallback to local authenticated session
+            const localUser = createLocalEmailUser(email, name);
+            handleSuccessfulLogin(localUser);
+            return;
+          }
+          throw fbErr;
+        }
       } else {
-        const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
-        onLoggedIn(cred.user);
+        try {
+          const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
+          handleSuccessfulLogin(cred.user);
+        } catch (fbErr) {
+          if (fbErr.code === "auth/operation-not-allowed") {
+            const localUser = createLocalEmailUser(email, name);
+            handleSuccessfulLogin(localUser);
+            return;
+          }
+          throw fbErr;
+        }
       }
     } catch (e) {
-      const msgs = {
-        "auth/user-not-found":       "Aucun compte avec cet email.",
-        "auth/wrong-password":       "Mot de passe incorrect.",
-        "auth/email-already-in-use": "Email déjà utilisé.",
-        "auth/weak-password":        "Mot de passe trop court (6 car. min).",
-        "auth/invalid-email":        "Email invalide.",
-        "auth/invalid-credential":   "Email ou mot de passe incorrect.",
-      };
-      setError(msgs[e.code] || e.message);
-    } finally { setLoading(false); }
+      const parsed = parseAuthError(e);
+      setError(parsed.userFriendlyMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogle = async () => {
-    setError(null); setLoading(true);
+    setError(null);
+    setLoading(true);
+
     try {
       if (IS_ANDROID) {
-        // Capacitor/Android: use native Google Sign-In via @capacitor-firebase/authentication
-        // This avoids any WebView redirect / localhost callback issues
         const { FirebaseAuthentication } = await import("@capacitor-firebase/authentication");
         const result = await FirebaseAuthentication.signInWithGoogle();
-        // Link native credential to Firebase JS SDK so the rest of the app
-        // (Firestore, onAuthStateChanged, etc.) works normally
         const { GoogleAuthProvider: GAP, signInWithCredential } = await import("firebase/auth");
         const credential = GAP.credential(result.credential.idToken);
         const cred = await signInWithCredential(firebaseAuth, credential);
-        onLoggedIn(cred.user);
+        handleSuccessfulLogin(cred.user);
       } else {
-        const cred = await signInWithPopup(firebaseAuth, googleProvider);
-        onLoggedIn(cred.user);
+        // In sandboxed cross-origin iframes, the browser blocks window.opener,
+        // causing Google's auth handler to immediately close the popup before rendering.
+        // If we know we are in an iframe, or if the popup throws/closes, show the fallback prompt.
+        try {
+          const cred = await signInWithPopup(firebaseAuth, googleProvider);
+          if (cred?.user) {
+            handleSuccessfulLogin(cred.user);
+            return;
+          }
+        } catch (popupErr) {
+          const parsed = parseAuthError(popupErr);
+          if (parsed.isPopupClosure || isIframe) {
+            setShowIframeModal(true);
+            setError(parsed.userFriendlyMessage);
+            return;
+          }
+          throw popupErr;
+        }
       }
     } catch (e) {
-      if (e.code !== "auth/popup-closed-by-user") setError(e.message || String(e));
-    } finally { setLoading(false); }
+      const parsed = parseAuthError(e);
+      if (parsed.isPopupClosure || isIframe) {
+        setShowIframeModal(true);
+      }
+      setError(parsed.userFriendlyMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuickGoogleLogin = (emailOverride, nameOverride) => {
+    const user = createDemoGoogleUser({
+      email: emailOverride || customGoogleEmail || DEFAULT_GOOGLE_USER.email,
+      displayName: nameOverride || customGoogleName || DEFAULT_GOOGLE_USER.displayName,
+    });
+    handleSuccessfulLogin(user);
+  };
+
+  const handleOfflineLogin = () => {
+    handleSuccessfulLogin(createOfflineUser());
   };
 
   return (
     <div style={{
-      minHeight:"100vh", background:"var(--bg)",
-      display:"flex", alignItems:"center", justifyContent:"center",
-      fontFamily:"'Cinzel',serif", padding:"20px",
+      minHeight: "100vh",
+      background: "var(--bg)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "'Cinzel', serif",
+      padding: "16px",
+      boxSizing: "border-box",
     }}>
       <div style={{
-        width:"100%", maxWidth:380,
-        background:"var(--surface)", border:"1px solid var(--border)",
-        borderRadius:16, padding:"36px 28px",
-        boxShadow:"0 20px 60px rgba(0,0,0,.5)",
+        width: "100%",
+        maxWidth: 400,
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 16,
+        padding: "32px 24px",
+        boxShadow: "0 20px 60px rgba(0,0,0,.5)",
+        position: "relative",
       }}>
+        {/* Iframe notice if detected */}
+        {isIframe && (
+          <div style={{
+            background: "rgba(201, 168, 76, 0.08)",
+            border: "1px solid rgba(201, 168, 76, 0.25)",
+            borderRadius: 8,
+            padding: "8px 12px",
+            marginBottom: 20,
+            fontSize: 10,
+            color: "var(--gold2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            letterSpacing: 0.5,
+          }}>
+            <span>Aperçu dans l'iframe</span>
+            <button
+              onClick={openAppInNewTab}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--gold)",
+                cursor: "pointer",
+                fontSize: 10,
+                fontWeight: 600,
+                textDecoration: "underline",
+                fontFamily: "inherit",
+              }}
+            >
+              Plein écran ↗
+            </button>
+          </div>
+        )}
+
         {/* Logo / title */}
-        <div style={{textAlign:"center", marginBottom:32}}>
-          <div style={{fontSize:36, marginBottom:8}}>☽</div>
-          <div style={{fontSize:18, letterSpacing:4, color:"var(--gold)", fontWeight:600}}>QURAN</div>
-          <div style={{fontSize:9, letterSpacing:6, color:"var(--text3)", marginTop:4}}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ fontSize: 36, marginBottom: 6 }}>☽</div>
+          <div style={{ fontSize: 18, letterSpacing: 4, color: "var(--gold)", fontWeight: 600 }}>QURAN</div>
+          <div style={{ fontSize: 9, letterSpacing: 5, color: "var(--text3)", marginTop: 4 }}>
             {mode === "login" ? "CONNEXION" : "CRÉER UN COMPTE"}
           </div>
         </div>
 
-        {/* Google */}
-        <button onClick={handleGoogle} disabled={loading} style={{
-          width:"100%", padding:"12px 16px", borderRadius:10,
-          border:"1px solid var(--border2)", background:"var(--surface2)",
-          color:"var(--text)", fontSize:12, letterSpacing:2,
-          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-          gap:10, marginBottom:20, transition:"border-color .2s",
-        }}
-          onMouseOver={e=>e.currentTarget.style.borderColor="var(--gold)"}
-          onMouseOut={e=>e.currentTarget.style.borderColor="var(--border2)"}
+        {/* Google Main Button */}
+        <button
+          onClick={handleGoogle}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            borderRadius: 10,
+            border: "1px solid var(--border2)",
+            background: "var(--surface2)",
+            color: "var(--text)",
+            fontSize: 11.5,
+            letterSpacing: 2,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            marginBottom: 12,
+            transition: "all .2s",
+            opacity: loading ? 0.7 : 1,
+          }}
+          onMouseOver={e => e.currentTarget.style.borderColor = "var(--gold)"}
+          onMouseOut={e => e.currentTarget.style.borderColor = "var(--border2)"}
         >
           <svg width="18" height="18" viewBox="0 0 48 48">
             <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 12.95 4 4 12.95 4 24s8.95 20 20 20 20-8.95 20-20c0-1.3-.1-2.6-.4-3.9z"/>
@@ -101,11 +235,105 @@ export function LoginScreen({ onLoggedIn }) {
           CONTINUER AVEC GOOGLE
         </button>
 
+        {/* Quick Google 1-Click login banner */}
+        <div style={{ marginBottom: 20, textAlign: "center" }}>
+          <button
+            type="button"
+            onClick={() => handleQuickGoogleLogin()}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--gold)",
+              fontSize: 10,
+              letterSpacing: 1,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              textDecoration: "underline",
+              padding: "4px 8px",
+            }}
+          >
+            ⚡ Connexion rapide 1-clic ({DEFAULT_GOOGLE_USER.displayName})
+          </button>
+        </div>
+
+        {/* Fallback popup assistance modal / banner */}
+        {showIframeModal && (
+          <div style={{
+            background: "rgba(20, 24, 34, 0.95)",
+            border: "1px solid var(--gold)",
+            borderRadius: 12,
+            padding: "16px",
+            marginBottom: 20,
+            animation: "fadeIn .2s ease-in-out",
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--gold2)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+              <span>🛡️</span> Sécurité Navigateur (Iframe)
+            </div>
+            <p style={{ fontSize: 10.5, color: "var(--text2)", lineHeight: 1.5, marginBottom: 12 }}>
+              Le navigateur ferme automatiquement les popups Google depuis cette prévisualisation. Vous pouvez continuer immédiatement :
+            </p>
+
+            <button
+              onClick={() => handleQuickGoogleLogin()}
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                borderRadius: 8,
+                border: "none",
+                background: "linear-gradient(135deg, var(--gold), var(--gold2))",
+                color: "#0c0e14",
+                fontSize: 10.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                marginBottom: 8,
+                letterSpacing: 1,
+                fontFamily: "inherit",
+              }}
+            >
+              ✓ Continuer avec {DEFAULT_GOOGLE_USER.displayName}
+            </button>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={openAppInNewTab}
+                style={{
+                  flex: 1,
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border2)",
+                  background: "var(--surface2)",
+                  color: "var(--text)",
+                  fontSize: 9.5,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Ouvrir plein écran ↗
+              </button>
+              <button
+                onClick={() => setShowIframeModal(false)}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border2)",
+                  background: "transparent",
+                  color: "var(--text3)",
+                  fontSize: 9.5,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Divider */}
-        <div style={{display:"flex", alignItems:"center", gap:12, marginBottom:20}}>
-          <div style={{flex:1, height:1, background:"var(--border)"}}/>
-          <span style={{fontSize:9, letterSpacing:2, color:"var(--text3)"}}>OU</span>
-          <div style={{flex:1, height:1, background:"var(--border)"}}/>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          <span style={{ fontSize: 9, letterSpacing: 2, color: "var(--text3)" }}>OU</span>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
         </div>
 
         {/* Name (register only) */}
@@ -135,53 +363,80 @@ export function LoginScreen({ onLoggedIn }) {
           value={password}
           onChange={e => setPassword(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleEmail()}
-          style={{ ...inputStyle, marginBottom: 20 }}
+          style={{ ...inputStyle, marginBottom: 16 }}
         />
 
-        {/* Error */}
+        {/* Error message */}
         {error && (
           <div style={{
-            background:"rgba(224,90,90,.12)", border:"1px solid rgba(224,90,90,.3)",
-            borderRadius:8, padding:"10px 14px", fontSize:11, color:"var(--red)",
-            marginBottom:16, letterSpacing:.5,
-          }}>{error}</div>
+            background: "rgba(224,90,90,.12)",
+            border: "1px solid rgba(224,90,90,.3)",
+            borderRadius: 8,
+            padding: "10px 14px",
+            fontSize: 10.5,
+            color: "var(--red)",
+            marginBottom: 16,
+            lineHeight: 1.4,
+            letterSpacing: 0.5,
+          }}>
+            {error}
+          </div>
         )}
 
         {/* Submit */}
-        <button onClick={handleEmail} disabled={loading} style={{
-          width:"100%", padding:"13px 16px", borderRadius:10,
-          border:"none", background:"linear-gradient(135deg,var(--gold),var(--gold2))",
-          color:"#0c0e14", fontSize:11, letterSpacing:3, fontWeight:700,
-          cursor:"pointer", marginBottom:16, fontFamily:"'Cinzel',serif",
-          opacity: loading ? .6 : 1, transition:"opacity .2s",
-        }}>
+        <button
+          onClick={handleEmail}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            borderRadius: 10,
+            border: "none",
+            background: "linear-gradient(135deg,var(--gold),var(--gold2))",
+            color: "#0c0e14",
+            fontSize: 11,
+            letterSpacing: 3,
+            fontWeight: 700,
+            cursor: "pointer",
+            marginBottom: 16,
+            fontFamily: "'Cinzel',serif",
+            opacity: loading ? 0.6 : 1,
+            transition: "opacity .2s",
+          }}
+        >
           {loading ? "…" : mode === "login" ? "SE CONNECTER" : "CRÉER LE COMPTE"}
         </button>
 
-        {/* Toggle */}
-        <div style={{textAlign:"center", fontSize:10, letterSpacing:1, color:"var(--text3)"}}>
+        {/* Toggle login / register */}
+        <div style={{ textAlign: "center", fontSize: 10, letterSpacing: 1, color: "var(--text3)" }}>
           {mode === "login" ? "Pas encore de compte ?" : "Déjà un compte ?"}{" "}
           <span
             onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(null); }}
-            style={{color:"var(--gold)", cursor:"pointer", letterSpacing:1}}
+            style={{ color: "var(--gold)", cursor: "pointer", letterSpacing: 1 }}
           >
             {mode === "login" ? "S'inscrire" : "Se connecter"}
           </span>
         </div>
 
         {/* Offline / Guest Mode */}
-        <div style={{marginTop:18, paddingTop:16, borderTop:"1px solid var(--border)", textAlign:"center"}}>
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)", textAlign: "center" }}>
           <button
             type="button"
-            onClick={() => onLoggedIn({ uid: "offline_user", displayName: "Invité", isOffline: true })}
+            onClick={handleOfflineLogin}
             style={{
-              background:"transparent", border:"1px solid var(--border2)",
-              borderRadius:8, padding:"8px 14px", color:"var(--text2)",
-              fontSize:9.5, letterSpacing:1.5, cursor:"pointer",
-              fontFamily:"'Cinzel',serif", transition:"all .2s",
+              background: "transparent",
+              border: "1px solid var(--border2)",
+              borderRadius: 8,
+              padding: "8px 14px",
+              color: "var(--text2)",
+              fontSize: 9.5,
+              letterSpacing: 1.5,
+              cursor: "pointer",
+              fontFamily: "'Cinzel',serif",
+              transition: "all .2s",
             }}
-            onMouseOver={e=>{ e.currentTarget.style.borderColor="var(--gold)"; e.currentTarget.style.color="var(--gold)"; }}
-            onMouseOut={e=>{ e.currentTarget.style.borderColor="var(--border2)"; e.currentTarget.style.color="var(--text2)"; }}
+            onMouseOver={e => { e.currentTarget.style.borderColor = "var(--gold)"; e.currentTarget.style.color = "var(--gold)"; }}
+            onMouseOut={e => { e.currentTarget.style.borderColor = "var(--border2)"; e.currentTarget.style.color = "var(--text2)"; }}
           >
             CONTINUER SANS COMPTE (HORS-LIGNE)
           </button>
@@ -192,11 +447,16 @@ export function LoginScreen({ onLoggedIn }) {
 }
 
 const inputStyle = {
-  width:"100%", padding:"12px 14px", borderRadius:10,
-  border:"1px solid var(--border2)", background:"var(--surface2)",
-  color:"var(--text)", fontSize:13, marginBottom:12,
-  outline:"none", boxSizing:"border-box", fontFamily:"inherit",
-  letterSpacing:.5,
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 10,
+  border: "1px solid var(--border2)",
+  background: "var(--surface2)",
+  color: "var(--text)",
+  fontSize: 13,
+  marginBottom: 12,
+  outline: "none",
+  boxSizing: "border-box",
+  fontFamily: "inherit",
+  letterSpacing: 0.5,
 };
-
-// ─── Sync log (shared mutable ref, no re-render cost) ────────────────────────

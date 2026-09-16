@@ -115,10 +115,13 @@ export function getAyatLetterStats(ld, ayatText) {
 }
 
 export function computeMastery(ld, ayatText) {
-  if (!ld) return 0;
+  if (ld === undefined || ld === false) return 0;
+  if (ld === null) return 100;
+  if (ld.toRevise === true) return 0;
+  if (ld.toRevise === null && ld.learned === undefined && (!ld.parts || ld.parts.length === 0) && (!ld.wordsLearned || Object.keys(ld.wordsLearned).length === 0)) return 100;
   // Instant fast-paths to avoid unneeded calculations
   if (ld.learned && !ld.toRevise) return 100;
-  if (!ld.learned && (!ld.parts || ld.parts.length === 0) && (!ld.wordsLearned || Object.keys(ld.wordsLearned).length === 0)) return 0;
+  if (!ld.learned && (!ld.parts || ld.parts.length === 0) && (!ld.wordsLearned || Object.keys(ld.wordsLearned).length === 0) && !ld.toRevise) return 0;
   return getAyatLetterStats(ld, ayatText).masteryPct;
 }
 

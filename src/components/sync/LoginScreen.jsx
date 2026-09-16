@@ -32,31 +32,71 @@ export function LoginScreen({ onLoggedIn }) {
   const [isIframe, setIsIframe]         = useState(false);
 
   useEffect(() => {
-    setIsIframe(isIframeEnvironment());
+    console.log("[AUTH] LoginScreen mounted");
+    const iframe = isIframeEnvironment();
+    console.log("[AUTH] isIframe:", iframe);
+    setIsIframe(iframe);
 
-    // Complete a Google redirect login after Firebase returns to the app.
     let cancelled = false;
+    console.log("[AUTH] Calling getRedirectResult()");
+
     getRedirectResult(firebaseAuth)
       .then((result) => {
-        if (!cancelled && result?.user) {
+        console.log("[AUTH] getRedirectResult resolved:", result);
+
+        if (cancelled) {
+          console.log("[AUTH] Redirect result ignored: component already unmounted");
+          return;
+        }
+
+        if (result?.user) {
+          console.log("[AUTH] Redirect user found:", {
+            uid: result.user.uid,
+            email: result.user.email,
+            displayName: result.user.displayName,
+          });
+          console.log("[AUTH] Calling handleSuccessfulLogin()");
           handleSuccessfulLogin(result.user);
+          console.log("[AUTH] handleSuccessfulLogin() returned");
+        } else {
+          console.log("[AUTH] No redirect user found");
+          setLoading(false);
         }
       })
       .catch((redirectErr) => {
+        console.error("[AUTH] getRedirectResult ERROR:", redirectErr);
+        console.error("[AUTH] code:", redirectErr?.code);
+        console.error("[AUTH] message:", redirectErr?.message);
+
         if (!cancelled) {
           const parsed = parseAuthError(redirectErr);
+          console.log("[AUTH] Parsed redirect error:", parsed);
           setError(parsed.userFriendlyMessage);
+          setLoading(false);
         }
       });
 
     return () => {
       cancelled = true;
+      console.log("[AUTH] LoginScreen unmounted");
     };
   }, []);
 
   const handleSuccessfulLogin = (user) => {
+    console.log("[AUTH] handleSuccessfulLogin START", {
+      uid: user?.uid,
+      email: user?.email,
+      displayName: user?.displayName,
+    });
+
+    console.log("[AUTH] saveSessionUser START");
     saveSessionUser(user);
+    console.log("[AUTH] saveSessionUser DONE");
+
+    console.log("[AUTH] onLoggedIn START");
     onLoggedIn(user);
+    console.log("[AUTH] onLoggedIn RETURNED");
+    console.log("[AUTH] handleSuccessfulLogin END");
   };
 
   const handleEmail = async () => {
@@ -102,29 +142,39 @@ export function LoginScreen({ onLoggedIn }) {
   };
 
   const handleGoogle = async () => {
+    console.log("[AUTH] Google login START");
     setError(null);
     setLoading(true);
+    console.log("[AUTH] loading=true");
 
     try {
       if (IS_ANDROID) {
+        console.log("[AUTH] Android native Google flow");
         const { FirebaseAuthentication } = await import("@capacitor-firebase/authentication");
         const result = await FirebaseAuthentication.signInWithGoogle();
+        console.log("[AUTH] Native Google result received");
         const { GoogleAuthProvider: GAP, signInWithCredential } = await import("firebase/auth");
         const credential = GAP.credential(result.credential.idToken);
         const cred = await signInWithCredential(firebaseAuth, credential);
+        console.log("[AUTH] Firebase credential sign-in complete");
         handleSuccessfulLogin(cred.user);
       } else {
-        // Use redirect instead of signInWithPopup. Redirect does not poll
-        // window.closed and therefore avoids the COOP blank-popup failure.
+        console.log("[AUTH] Web redirect: calling signInWithRedirect()");
         await signInWithRedirect(firebaseAuth, googleProvider);
+        console.log("[AUTH] signInWithRedirect resolved");
       }
     } catch (e) {
+      console.error("[AUTH] Google login ERROR:", e);
+      console.error("[AUTH] code:", e?.code);
+      console.error("[AUTH] message:", e?.message);
       const parsed = parseAuthError(e);
+      console.log("[AUTH] Parsed Google error:", parsed);
       if (parsed.isPopupClosure || isIframe) {
         setShowIframeModal(true);
       }
       setError(parsed.userFriendlyMessage);
       setLoading(false);
+      console.log("[AUTH] loading=false after Google error");
     }
   };
 
@@ -139,6 +189,12 @@ export function LoginScreen({ onLoggedIn }) {
   const handleOfflineLogin = () => {
     handleSuccessfulLogin(createOfflineUser());
   };
+
+  console.log("[AUTH] RENDER", {
+    loading,
+    error,
+    isIframe,
+  });
 
   return (
     <div style={{

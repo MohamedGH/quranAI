@@ -6,7 +6,11 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3000,
+    strictPort: true,
     allowedHosts: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
     proxy: {
       // /audio-proxy/7.mp3  →  https://cdn.islamic.network/quran/audio/128/ar.alafasy/7.mp3
       // Same-origin from the browser's perspective → no CORS, SW can read ArrayBuffer → IDB

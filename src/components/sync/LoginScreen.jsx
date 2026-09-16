@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   getRedirectResult,
   onAuthStateChanged,
+  signInWithPopup,
   signInWithRedirect,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -31,6 +32,39 @@ export function LoginScreen({ onLoggedIn }) {
   const [customGoogleEmail, setCustomGoogleEmail] = useState(DEFAULT_GOOGLE_USER.email);
   const [customGoogleName, setCustomGoogleName] = useState(DEFAULT_GOOGLE_USER.displayName);
   const [isIframe, setIsIframe] = useState(false);
+  const completingRef = useRef(false);
+
+  const completeLogin = (user, source) => {
+    if (!user) {
+      console.warn("[AUTH] completeLogin called without user", source);
+      return;
+    }
+    if (completingRef.current) {
+      console.log("[AUTH] Login already completing; ignoring duplicate", source);
+      return;
+    }
+
+    completingRef.current = true;
+    console.log("[AUTH] COMPLETE LOGIN START", source, {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+    });
+
+    try {
+      saveSessionUser(user);
+      console.log("[AUTH] saveSessionUser DONE", source);
+      setLoading(false);
+      console.log("[AUTH] loading=false", source);
+      onLoggedIn(user);
+      console.log("[AUTH] onLoggedIn RETURNED", source);
+    } catch (e) {
+      console.error("[AUTH] COMPLETE LOGIN ERROR", source, e);
+      completingRef.current = false;
+      setError(e?.message || "Impossible de finaliser la connexion.");
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     console.log("[AUTH] LoginScreen mounted");
@@ -39,48 +73,44 @@ export function LoginScreen({ onLoggedIn }) {
     setIsIframe(iframe);
 
     let cancelled = false;
-    let redirectHandled = false;
 
     console.log("[AUTH] Installing onAuthStateChanged listener");
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
-      console.log("[AUTH] onAuthStateChanged:", user ? {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-      } : null);
+    const unsubscribe = onAuthStateChanged(
+      firebaseAuth,
+      (user) => {
+        console.log("[AUTH] onAuthStateChanged:", user ? {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+        } : null);
 
-      if (cancelled || !user || redirectHandled) return;
-
-      console.log("[AUTH] Auth state user found -> completing login");
-      redirectHandled = true;
-      handleSuccessfulLogin(user);
-      setLoading(false);
-      console.log("[AUTH] loading=false from onAuthStateChanged");
-    });
+        if (cancelled || !user) return;
+        completeLogin(user, "onAuthStateChanged");
+      },
+      (authErr) => {
+        console.error("[AUTH] onAuthStateChanged ERROR:", authErr);
+        console.error("[AUTH] code:", authErr?.code);
+        console.error("[AUTH] message:", authErr?.message);
+        if (!cancelled) {
+          const parsed = parseAuthError(authErr);
+          setError(parsed.userFriendlyMessage);
+          setLoading(false);
+        }
+      },
+    );
 
     console.log("[AUTH] Calling getRedirectResult()");
     getRedirectResult(firebaseAuth)
       .then((result) => {
         console.log("[AUTH] getRedirectResult resolved:", result);
-
         if (cancelled) {
           console.log("[AUTH] Redirect result ignored: component already unmounted");
           return;
         }
-
         if (result?.user) {
-          console.log("[AUTH] Redirect user found:", {
-            uid: result.user.uid,
-            email: result.user.email,
-            displayName: result.user.displayName,
-          });
-          redirectHandled = true;
-          console.log("[AUTH] Calling handleSuccessfulLogin() from redirect");
-          handleSuccessfulLogin(result.user);
-          setLoading(false);
-          console.log("[AUTH] loading=false from redirect result");
+          completeLogin(result.user, "getRedirectResult");
         } else {
-          console.log("[AUTH] No redirect user found; waiting for auth state");
+          console.log("[AUTH] No redirect result; auth listener remains active");
           setLoading(false);
         }
       })
@@ -88,13 +118,11 @@ export function LoginScreen({ onLoggedIn }) {
         console.error("[AUTH] getRedirectResult ERROR:", redirectErr);
         console.error("[AUTH] code:", redirectErr?.code);
         console.error("[AUTH] message:", redirectErr?.message);
-
         if (!cancelled) {
           const parsed = parseAuthError(redirectErr);
           console.log("[AUTH] Parsed redirect error:", parsed);
           setError(parsed.userFriendlyMessage);
           setLoading(false);
-          console.log("[AUTH] loading=false after redirect error");
         }
       });
 
@@ -104,23 +132,6 @@ export function LoginScreen({ onLoggedIn }) {
       console.log("[AUTH] LoginScreen unmounted; auth listener removed");
     };
   }, []);
-
-  const handleSuccessfulLogin = (user) => {
-    console.log("[AUTH] handleSuccessfulLogin START", {
-      uid: user?.uid,
-      email: user?.email,
-      displayName: user?.displayName,
-    });
-
-    console.log("[AUTH] saveSessionUser START");
-    saveSessionUser(user);
-    console.log("[AUTH] saveSessionUser DONE");
-
-    console.log("[AUTH] onLoggedIn START");
-    onLoggedIn(user);
-    console.log("[AUTH] onLoggedIn RETURNED");
-    console.log("[AUTH] handleSuccessfulLogin END");
-  };
 
   const handleEmail = async () => {
     console.log("[AUTH] Email login START");
@@ -135,11 +146,10 @@ export function LoginScreen({ onLoggedIn }) {
         try {
           const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
           if (name.trim()) await updateProfile(cred.user, { displayName: name.trim() });
-          handleSuccessfulLogin(cred.user);
+          completeLogin(cred.user, "email-register");
         } catch (fbErr) {
           if (fbErr.code === "auth/operation-not-allowed") {
-            const localUser = createLocalEmailUser(email, name);
-            handleSuccessfulLogin(localUser);
+            completeLogin(createLocalEmailUser(email, name), "local-register-fallback");
             return;
           }
           throw fbErr;
@@ -147,11 +157,10 @@ export function LoginScreen({ onLoggedIn }) {
       } else {
         try {
           const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
-          handleSuccessfulLogin(cred.user);
+          completeLogin(cred.user, "email-login");
         } catch (fbErr) {
           if (fbErr.code === "auth/operation-not-allowed") {
-            const localUser = createLocalEmailUser(email, name);
-            handleSuccessfulLogin(localUser);
+            completeLogin(createLocalEmailUser(email, name), "local-login-fallback");
             return;
           }
           throw fbErr;
@@ -170,6 +179,7 @@ export function LoginScreen({ onLoggedIn }) {
   const handleGoogle = async () => {
     console.log("[AUTH] Google login START");
     setError(null);
+    setShowIframeModal(false);
     setLoading(true);
     console.log("[AUTH] loading=true");
 
@@ -183,12 +193,42 @@ export function LoginScreen({ onLoggedIn }) {
         const credential = GAP.credential(result.credential.idToken);
         const cred = await signInWithCredential(firebaseAuth, credential);
         console.log("[AUTH] Firebase credential sign-in complete");
-        handleSuccessfulLogin(cred.user);
-        setLoading(false);
-      } else {
+        completeLogin(cred.user, "android-google");
+        return;
+      }
+
+      // Prefer popup on web. It keeps the OAuth result in the same page and
+      // avoids the cross-origin storage limitations that can break redirects
+      // through <project>.firebaseapp.com on modern browsers.
+      console.log("[AUTH] Web popup: calling signInWithPopup()");
+      try {
+        const cred = await signInWithPopup(firebaseAuth, googleProvider);
+        console.log("[AUTH] signInWithPopup SUCCESS", {
+          uid: cred.user?.uid,
+          email: cred.user?.email,
+        });
+        completeLogin(cred.user, "google-popup");
+        return;
+      } catch (popupErr) {
+        console.error("[AUTH] signInWithPopup ERROR:", popupErr);
+        console.error("[AUTH] popup code:", popupErr?.code);
+        console.error("[AUTH] popup message:", popupErr?.message);
+
+        // If the popup is blocked by the browser/iframe, use redirect as a
+        // fallback. The explicit Auth resolver is configured in firebase.js.
+        const popupParsed = parseAuthError(popupErr);
+        const shouldFallbackToRedirect =
+          popupParsed.isPopupClosure ||
+          popupErr?.code === "auth/popup-blocked" ||
+          popupErr?.code === "auth/cancelled-popup-request" ||
+          popupErr?.code === "auth/internal-error";
+
+        if (!shouldFallbackToRedirect) throw popupErr;
+
+        console.warn("[AUTH] Popup unavailable -> falling back to redirect");
         console.log("[AUTH] Web redirect: calling signInWithRedirect()");
         await signInWithRedirect(firebaseAuth, googleProvider);
-        console.log("[AUTH] signInWithRedirect resolved");
+        console.log("[AUTH] signInWithRedirect resolved (navigation may follow)");
       }
     } catch (e) {
       console.error("[AUTH] Google login ERROR:", e);
@@ -208,11 +248,11 @@ export function LoginScreen({ onLoggedIn }) {
       email: emailOverride || customGoogleEmail || DEFAULT_GOOGLE_USER.email,
       displayName: nameOverride || customGoogleName || DEFAULT_GOOGLE_USER.displayName,
     });
-    handleSuccessfulLogin(user);
+    completeLogin(user, "quick-google");
   };
 
   const handleOfflineLogin = () => {
-    handleSuccessfulLogin(createOfflineUser());
+    completeLogin(createOfflineUser(), "offline");
   };
 
   console.log("[AUTH] RENDER", { loading, error, isIframe });

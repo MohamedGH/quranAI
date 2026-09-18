@@ -8,6 +8,7 @@ import { splitArabicWords, splitArabicClusters } from "../../utils/arabicUtils.j
 import { ArabicHighlighted } from "../common/ArabicHighlighted.jsx";
 import { MasteryBar, MasteryBadge, MasteryDebug, computeMastery } from "../common/Mastery.jsx";
 import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
+import { AyatMemorisationWorkflow } from "../memorisation/AyatMemorisationWorkflow.jsx";
 
 export function MemoriseMode({ surahs, learnData, setLData, initialSurahNum, initialRangeFrom, initialRangeTo }) {
   // ── Persistence helpers ──
@@ -33,7 +34,8 @@ export function MemoriseMode({ surahs, learnData, setLData, initialSurahNum, ini
   const [showVerset,  setShowVerset]  = React.useState(false);
   const [showMemo,    setShowMemo]    = React.useState(false);
   const [showInfos,   setShowInfos]   = React.useState(false);
-    const [showScore, setShowScore] = React.useState(false);
+  const [showScore,   setShowScore]   = React.useState(false);
+  const [showWorkflow, setShowWorkflow] = React.useState(false);
 
   const [subMode,     setSubMode]     = React.useState("memorise"); // "memorise" | "multi"
   const [multiSns,    setMultiSns]    = React.useState([]); // selected surah numbers for multi mode
@@ -590,11 +592,27 @@ export function MemoriseMode({ surahs, learnData, setLData, initialSurahNum, ini
         <div style={{ fontSize:9, letterSpacing:1.5, color:"var(--text3)" }}>{surahInfo?.name ?? ""}</div>
         {/* Toggle buttons */}
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center", marginTop:4 }}>
+          {toggleBtn(showWorkflow, "🎯 ÉTAPES & QUIZZ", () => setShowWorkflow(v => !v))}
           {toggleBtn(showVerset, "📖 VERSET",       () => setShowVerset(v => !v))}
           {toggleBtn(showMemo,   "🗒 AIDE MÉMOIRE",  () => setShowMemo(v => !v))}
           {toggleBtn(showInfos,  "ℹ INFOS",          () => setShowInfos(v => !v))}
           {toggleBtn(showScore,  "🏆 MEILLEUR",       () => setShowScore(v => !v))}
         </div>
+        {showWorkflow && (
+          <div style={{ width: "100%", borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+            <AyatMemorisationWorkflow
+              ayat={{
+                numberInSurah: current,
+                number: ayatGlobalNum,
+                text: ayatText,
+              }}
+              surahNum={selectedSn}
+              surahInfo={surahInfo}
+              ld={ld}
+              setLData={setLData}
+            />
+          </div>
+        )}
         {showVerset && (
           <div style={{ width:"100%", padding:"12px 16px", background:"var(--surface3)", borderRadius:8, border:"1px solid var(--border2)", direction:"rtl", textAlign:"right" }}>
             {ayatText

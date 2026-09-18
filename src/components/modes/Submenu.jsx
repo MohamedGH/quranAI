@@ -10,6 +10,7 @@ import { InfoMode } from "./InfoMode.jsx";
 import { AideMemoireMode } from "./AideMemoireMode.jsx";
 import { RevisionEcritureMode } from "./RevisionEcritureMode.jsx";
 import { TajweedExercice } from "./TajweedExercice.jsx";
+import { AyatMemorisationWorkflow } from "../memorisation/AyatMemorisationWorkflow.jsx";
 import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 
 export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive, translationLang, ayatTranslation, wbwWords, onFullScreen }) {
@@ -42,6 +43,14 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
         </button>
         <button className={`mode-btn${submenuMode === "infos" ? " active" : ""}`} onClick={() => setSubmenuMode("infos")}>ℹ INFOS</button>
         <button className={`mode-btn${submenuMode === "memoire" ? " active" : ""}`} onClick={() => setSubmenuMode("memoire")}>📖 AIDE MÉMOIRE</button>
+        <button
+          className={`mode-btn${submenuMode === "progression" ? " active" : ""}`}
+          onClick={() => setSubmenuMode("progression")}
+          style={submenuMode !== "progression" && ld?.memorisationState?.stepProgress ? { color: "var(--gold2)" } : {}}
+          title="Système de mémorisation étape par étape et apprentissage mot à mot"
+        >
+          🎯 MÉMORISATION
+        </button>
         <button className={`mode-btn${submenuMode === "tajweed" ? " active" : ""}`} onClick={() => setSubmenuMode("tajweed")}>☪ TAJWEED</button>
         <button
           className={`mode-btn${submenuMode === "reviser" ? " active" : ""}`}
@@ -111,6 +120,16 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
             ? <InfoMode ayat={ayat} ld={ld} setLData={setLData} surahNum={surahNum} />
             : submenuMode === "memoire"
             ? <AideMemoireMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} clickMode={aideMemoireClickMode} setClickMode={setAideMemoireClickMode} spellCheck={spellCheck} />
+            : submenuMode === "progression"
+            ? <AyatMemorisationWorkflow
+                ayat={ayat}
+                surahNum={surahNum}
+                ld={ld}
+                setLData={setLData}
+                audioUrl={audioUrl}
+                ayatTranslation={ayatTranslation}
+                wbwWords={wbwWords}
+              />
             : submenuMode === "revision"
             ? <RevisionEcritureMode ayat={ayat} surahNum={surahNum} ld={ld} setLData={setLData} spellCheck={spellCheck} />
             : submenuMode === "tajweed"

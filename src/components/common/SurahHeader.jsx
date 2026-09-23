@@ -29,6 +29,8 @@ export function SurahHeader({
   toggleIzhar,
   showIdgham,
   toggleIdgham,
+  showTajweedTone,
+  toggleTajweedTone,
   // Options
   fullScreenSelectedAyat,
   toggleFullScreen,
@@ -79,8 +81,8 @@ export function SurahHeader({
   const totalUnk = pageAyats.reduce((s, a) => s + (learnData[lkey(sn, a.numberInSurah)]?.unknownWords?.length || 0), 0);
   const meta = pageMode && pageMeta ? pageMeta : surahMeta;
 
-  const anyTj = showQalqala || showMadd || showIzhar || showIdgham;
-  const activeTjCount = [showQalqala, showMadd, showIzhar, showIdgham].filter(Boolean).length;
+  const anyTj = showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone;
+  const activeTjCount = [showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone].filter(Boolean).length;
   const anyOpt = announceNum || spellCheck || showParts || pageMode || fullScreenSelectedAyat;
   const activeOptCount = [announceNum, spellCheck, showParts, pageMode, fullScreenSelectedAyat].filter(Boolean).length;
   const langLabel = translationLang ? (TRANS_LABELS[translationLang] || translationLang.toUpperCase()) : "OFF";
@@ -390,13 +392,14 @@ export function SurahHeader({
             <div className="m-drawer-title-group">
               <span className="m-drawer-icon">🎨</span>
               <span className="m-drawer-title">RÈGLES DE TAJWEED</span>
-              <span className="m-drawer-count">{activeTjCount}/4 ACTIVES</span>
+              <span className="m-drawer-count">{activeTjCount}/5 ACTIVES</span>
             </div>
             <button className="m-drawer-close" onClick={() => setShowTajweedDrawer(false)}>✕</button>
           </div>
 
           <div className="m-tajweed-rules-list">
             {[
+              { toggle: toggleTajweedTone, on: showTajweedTone, label: "تفخيم / ترقيق", sub: "Graves & Aiguës (Tafkhīm / Tarqīq)", color: "#06b6d4", bg: "rgba(6,182,212,.18)" },
               { toggle: toggleQalqala, on: showQalqala, label: "قلقلة", sub: "Qalqala (Rebond)", color: "#38bdf8", bg: "rgba(56,189,248,.18)" },
               { toggle: toggleMadd,    on: showMadd,    label: "مَدّ",   sub: "Madd (Prolongation)", color: "#fb923c", bg: "rgba(251,146,60,.18)" },
               { toggle: toggleIzhar,   on: showIzhar,   label: "إظهار", sub: "Idh-har (Clarté)",   color: "#34d399", bg: "rgba(52,211,153,.18)" },
@@ -428,15 +431,17 @@ export function SurahHeader({
               className="m-btn-toggle-all"
               onClick={() => {
                 if (anyTj) {
-                  if (showQalqala) toggleQalqala();
-                  if (showMadd) toggleMadd();
-                  if (showIzhar) toggleIzhar();
-                  if (showIdgham) toggleIdgham();
+                  if (showTajweedTone) toggleTajweedTone?.();
+                  if (showQalqala) toggleQalqala?.();
+                  if (showMadd) toggleMadd?.();
+                  if (showIzhar) toggleIzhar?.();
+                  if (showIdgham) toggleIdgham?.();
                 } else {
-                  if (!showQalqala) toggleQalqala();
-                  if (!showMadd) toggleMadd();
-                  if (!showIzhar) toggleIzhar();
-                  if (!showIdgham) toggleIdgham();
+                  if (!showTajweedTone) toggleTajweedTone?.();
+                  if (!showQalqala) toggleQalqala?.();
+                  if (!showMadd) toggleMadd?.();
+                  if (!showIzhar) toggleIzhar?.();
+                  if (!showIdgham) toggleIdgham?.();
                 }
               }}
             >

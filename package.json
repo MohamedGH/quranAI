@@ -26,7 +26,8 @@
     "react-dom": "^18.3.1",
     "react-redux": "^9.3.0",
     "react-router-dom": "^7.16.0",
-    "redux": "^5.0.1"
+    "redux": "^5.0.1",
+    "three": "^0.186.0"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

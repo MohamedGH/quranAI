@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ArabicHighlighted, PlayingArabicHighlighted } from "./ArabicHighlighted.jsx";
 import { Submenu } from "../modes/Submenu.jsx";
-import { isQalqala, getMaddType, isIzhar, isIdgham } from "../../utils/tajweedRules.js";
+import { isQalqala, getMaddType, isIzhar, isIdgham, isTafkhim, isTarqiq } from "../../utils/tajweedRules.js";
 import { arabicRoot } from "../../utils/arabicUtils.js";
 import { segmentAyatTranslation } from "../../utils/translationUtils.js";
 
@@ -32,6 +32,12 @@ export function AyatFullScreenModal({
   showMadd = false,
   showIzhar = false,
   showIdgham = false,
+  showTajweedTone = false,
+  toggleQalqala,
+  toggleMadd,
+  toggleIzhar,
+  toggleIdgham,
+  toggleTajweedTone,
   isPlaying = false,
   onTogglePlay,
   onSelectAyat,
@@ -99,9 +105,14 @@ export function AyatFullScreenModal({
   const [showSubmenu, setShowSubmenu] = useState(true);
   const [isNativeFs, setIsNativeFs] = useState(false);
   const [showQuickSettings, setShowQuickSettings] = useState(false);
+  const [showTajweedBar, setShowTajweedBar] = useState(false);
+  const [showTajweedGuide, setShowTajweedGuide] = useState(false);
   const [showReciterModal, setShowReciterModal] = useState(false);
   const [reciterSearch, setReciterSearch] = useState("");
   const scrollContainerRef = useRef(null);
+
+  const activeTajweedCount = [showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone].filter(Boolean).length;
+  const anyTajweedActive = activeTajweedCount > 0;
 
   // Touch swipe handling for mobile
   const touchStartX = useRef(null);
@@ -358,16 +369,23 @@ export function AyatFullScreenModal({
 
   // Tajweed character rendering helper
   const renderTajweedChar = (ch, ci, arr2) => {
-    const q  = showQalqala && isQalqala(arr2, ci);
-    const mt = showMadd ? getMaddType(arr2, ci) : null;
-    const iz = showIzhar && isIzhar(arr2, ci);
-    const id = showIdgham && isIdgham(arr2, ci);
-    return q               ? <span key={ci} style={{ color: "#5bc8f5", textShadow: "0 0 6px rgba(91,200,245,.5)" }}>{ch}</span>
-         : mt === "muttasil" ? <span key={ci} style={{ color: "#ff7eb3", textShadow: "0 0 8px rgba(255,126,179,.6)", fontWeight: 600 }}>{ch}</span>
-         : mt === "normal"   ? <span key={ci} style={{ color: "#f09de0", textShadow: "0 0 6px rgba(240,157,224,.5)" }}>{ch}</span>
-         : iz              ? <span key={ci} style={{ color: "#4caf81", textShadow: "0 0 6px rgba(76,175,129,.5)" }}>{ch}</span>
-         : id              ? <span key={ci} style={{ color: "#ffd166", textShadow: "0 0 6px rgba(255,209,102,.5)" }}>{ch}</span>
-         : <span key={ci}>{ch}</span>;
+    const q   = showQalqala && isQalqala(arr2, ci);
+    const mt  = showMadd ? getMaddType(arr2, ci) : null;
+    const iz  = showIzhar && isIzhar(arr2, ci);
+    const id  = showIdgham && isIdgham(arr2, ci);
+    const taf = showTajweedTone && isTafkhim(arr2, ci);
+    const tar = showTajweedTone && isTarqiq(arr2, ci);
+
+    if (q) return <span key={ci} style={{ color: "#38bdf8", textShadow: "0 0 6px rgba(56,189,248,.6)", fontWeight: 600 }}>{ch}</span>;
+    if (mt === "madd_lazim") return <span key={ci} style={{ color: "#e11d48", textShadow: "0 0 8px rgba(225,29,72,.6)", fontWeight: 700 }}>{ch}</span>;
+    if (mt === "madd_muttasil" || mt === "muttasil") return <span key={ci} style={{ color: "#f43f5e", textShadow: "0 0 8px rgba(244,63,94,.6)", fontWeight: 600 }}>{ch}</span>;
+    if (mt === "madd_munfasil") return <span key={ci} style={{ color: "#fb923c", textShadow: "0 0 6px rgba(251,146,60,.5)", fontWeight: 600 }}>{ch}</span>;
+    if (mt === "madd" || mt === "normal") return <span key={ci} style={{ color: "#eab308", textShadow: "0 0 6px rgba(234,179,8,.5)" }}>{ch}</span>;
+    if (iz) return <span key={ci} style={{ color: "#34d399", textShadow: "0 0 6px rgba(52,211,153,.55)", fontWeight: 600 }}>{ch}</span>;
+    if (id) return <span key={ci} style={{ color: "#fbbf24", textShadow: "0 0 6px rgba(251,191,36,.55)", fontWeight: 600 }}>{ch}</span>;
+    if (taf) return <span key={ci} style={{ color: "#06b6d4", textShadow: "0 0 6px rgba(6,182,212,.55)", fontWeight: 600 }}>{ch}</span>;
+    if (tar) return <span key={ci} style={{ color: "#f472b6", textShadow: "0 0 6px rgba(244,114,182,.45)" }}>{ch}</span>;
+    return <span key={ci}>{ch}</span>;
   };
 
   // Full Arabic Text Renderer with all display modes
@@ -382,6 +400,7 @@ export function AyatFullScreenModal({
           showMadd={showMadd}
           showIzhar={showIzhar}
           showIdgham={showIdgham}
+          showTajweedTone={showTajweedTone}
         />
       );
     }
@@ -398,6 +417,7 @@ export function AyatFullScreenModal({
           showMadd={showMadd}
           showIzhar={showIzhar}
           showIdgham={showIdgham}
+          showTajweedTone={showTajweedTone}
         />
       );
     }
@@ -600,7 +620,7 @@ export function AyatFullScreenModal({
                         borderBottom: isRevW && !wRevChars?.length ? "2px solid rgba(201,168,76,.6)" : "none",
                       }}
                     >
-                      {(showQalqala || showMadd || showIzhar || showIdgham)
+                      {(showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone)
                         ? (() => { const arr2 = [...w]; return arr2.map((ch, ci) => renderTajweedChar(ch, ci, arr2)); })()
                         : w}
                       {wii < seg.words.length - 1 ? " " : ""}
@@ -673,7 +693,7 @@ export function AyatFullScreenModal({
 
             return (
               <span key={wi} style={baseStyle}>
-                {(showQalqala || showMadd || showIzhar || showIdgham) && !hit && !unk
+                {(showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone) && !hit && !unk
                   ? (() => { const arr2 = [...w]; return arr2.map((ch, ci) => renderTajweedChar(ch, ci, arr2)); })()
                   : w}
                 {wi < ayatWords.length - 1 ? ' ' : ''}
@@ -694,11 +714,12 @@ export function AyatFullScreenModal({
           showMadd={showMadd}
           showIzhar={showIzhar}
           showIdgham={showIdgham}
+          showTajweedTone={showTajweedTone}
         />
       );
     }
 
-    if (showQalqala || showMadd || showIzhar || showIdgham) {
+    if (showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone) {
       const arr = [...ayat.text];
       return <span>{arr.map((ch, i) => renderTajweedChar(ch, i, arr))}</span>;
     }
@@ -868,9 +889,32 @@ export function AyatFullScreenModal({
             </button>
           </div>
 
-          {/* Right on Mobile: Quick Settings Gear + Close Button */}
+          {/* Right on Mobile: Tajweed + Quick Settings Gear + Close Button */}
           {isMobile ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                id="btn-fs-mobile-tajweed"
+                onClick={() => setShowTajweedBar((v) => !v)}
+                title="Options Tajweed (Graves/Aiguës, Qalqala, Madd, Idh-har, Idgham)"
+                style={{
+                  height: 34,
+                  padding: "0 8px",
+                  borderRadius: 6,
+                  border: `1px solid ${anyTajweedActive ? "var(--gold)" : "rgba(255,255,255,0.15)"}`,
+                  background: anyTajweedActive ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.05)",
+                  color: anyTajweedActive ? "var(--gold2)" : "var(--text2)",
+                  fontSize: 11,
+                  fontFamily: "'Cinzel',serif",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <span>🎨</span>
+                {activeTajweedCount > 0 && <span style={{ fontSize: 10, fontWeight: 700 }}>{activeTajweedCount}</span>}
+              </button>
+
               <button
                 id="btn-fs-mobile-settings"
                 onClick={() => setShowQuickSettings((v) => !v)}
@@ -1038,27 +1082,45 @@ export function AyatFullScreenModal({
               </button>
             )}
 
-            {/* Quick Tajweed badge */}
-            {(showQalqala || showMadd || showIzhar || showIdgham) && (
-              <div
-                title="Tajweed actif"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 3,
-                  padding: "4px 8px",
-                  borderRadius: "var(--radius-sm)",
-                  background: "rgba(201,168,76,0.1)",
-                  border: "1px solid rgba(201,168,76,0.3)",
-                  fontSize: 10,
-                  fontFamily: "'Cinzel',serif",
-                  color: "var(--gold2)",
-                }}
-              >
-                <span>☪</span>
-                <span>TAJWEED</span>
-              </div>
-            )}
+            {/* Interactive Tajweed Toolbar Button */}
+            <button
+              id="btn-fs-tajweed"
+              onClick={() => setShowTajweedBar((v) => !v)}
+              title="Options Tajweed (Graves/Aiguës, Qalqala, Madd, Idh-har, Idgham)"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: "var(--radius-sm)",
+                border: `1px solid ${anyTajweedActive ? "var(--gold)" : "rgba(255,255,255,0.12)"}`,
+                background: anyTajweedActive ? "rgba(201,168,76,0.18)" : "rgba(255,255,255,0.04)",
+                fontSize: 10,
+                fontFamily: "'Cinzel',serif",
+                color: anyTajweedActive ? "var(--gold2)" : "var(--text3)",
+                cursor: "pointer",
+                letterSpacing: 0.5,
+                transition: "all .15s",
+              }}
+            >
+              <span>🎨</span>
+              <span>TAJWEED</span>
+              {activeTajweedCount > 0 && (
+                <span
+                  style={{
+                    background: "var(--gold)",
+                    color: "#0c0f16",
+                    fontSize: 9,
+                    fontWeight: 800,
+                    borderRadius: "10px",
+                    padding: "0 4px",
+                    marginLeft: 2,
+                  }}
+                >
+                  {activeTajweedCount}
+                </span>
+              )}
+            </button>
 
             {/* Auto Open Fullscreen Preference */}
             {onToggleFullScreenOption && (
@@ -1237,7 +1299,7 @@ export function AyatFullScreenModal({
             )}
 
             {/* Native Fullscreen */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
               <span style={{ fontSize: 12, color: "var(--text)" }}>Plein écran navigateur</span>
               <button
                 onClick={toggleNativeFullscreen}
@@ -1253,6 +1315,428 @@ export function AyatFullScreenModal({
                 }}
               >
                 {isNativeFs ? "QUITTER ⤓" : "ACTIVER ⛶"}
+              </button>
+            </div>
+
+            {/* Mobile Tajweed Section */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 11, fontFamily: "'Cinzel',serif", fontWeight: 700, color: "var(--gold2)", letterSpacing: 0.8 }}>
+                  🎨 RÈGLES TAJWEED ({activeTajweedCount}/5)
+                </span>
+                <button
+                  onClick={() => setShowTajweedGuide(true)}
+                  style={{ background: "transparent", border: "none", color: "var(--gold)", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+                >
+                  Guide couleurs
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <button
+                  onClick={toggleTajweedTone}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: `1px solid ${showTajweedTone ? "#06b6d4" : "rgba(255,255,255,0.12)"}`,
+                    background: showTajweedTone ? "rgba(6,182,212,0.2)" : "rgba(255,255,255,0.04)",
+                    color: showTajweedTone ? "#22d3ee" : "var(--text2)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  Graves / Aiguës {showTajweedTone ? "✓" : ""}
+                </button>
+
+                <button
+                  onClick={toggleQalqala}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: `1px solid ${showQalqala ? "#38bdf8" : "rgba(255,255,255,0.12)"}`,
+                    background: showQalqala ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.04)",
+                    color: showQalqala ? "#7dd3fc" : "var(--text2)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  Qalqala {showQalqala ? "✓" : ""}
+                </button>
+
+                <button
+                  onClick={toggleMadd}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: `1px solid ${showMadd ? "#fb923c" : "rgba(255,255,255,0.12)"}`,
+                    background: showMadd ? "rgba(251,146,60,0.2)" : "rgba(255,255,255,0.04)",
+                    color: showMadd ? "#fdba74" : "var(--text2)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  Madd {showMadd ? "✓" : ""}
+                </button>
+
+                <button
+                  onClick={toggleIzhar}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: `1px solid ${showIzhar ? "#34d399" : "rgba(255,255,255,0.12)"}`,
+                    background: showIzhar ? "rgba(52,211,153,0.2)" : "rgba(255,255,255,0.04)",
+                    color: showIzhar ? "#6ee7b7" : "var(--text2)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  Idh-hâr {showIzhar ? "✓" : ""}
+                </button>
+
+                <button
+                  onClick={toggleIdgham}
+                  style={{
+                    gridColumn: "span 2",
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: `1px solid ${showIdgham ? "#fbbf24" : "rgba(255,255,255,0.12)"}`,
+                    background: showIdgham ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.04)",
+                    color: showIdgham ? "#fde68a" : "var(--text2)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  Idghâm (Assimilation) {showIdgham ? "✓" : ""}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tajweed Interactive Toolbar in Fullscreen ─────────────────── */}
+      {showTajweedBar && (
+        <div
+          id="fs-tajweed-toolbar"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 8,
+            padding: "8px 16px",
+            background: "linear-gradient(180deg, rgba(16,21,33,0.98) 0%, rgba(10,13,20,0.95) 100%)",
+            borderBottom: "1px solid rgba(201,168,76,0.25)",
+            zIndex: 19,
+            animation: "fadeIn .15s ease-out",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, fontFamily: "'Cinzel',serif", fontWeight: 700, color: "var(--gold2)", letterSpacing: 0.8, marginRight: 2 }}>
+              TAJWEED :
+            </span>
+
+            {/* Graves & Aiguës (Tafkhim / Tarqiq) */}
+            <button
+              id="btn-fs-tajweed-tone"
+              onClick={toggleTajweedTone}
+              title="Colorer selon le son Grave (Cyan) ou Aigu (Rose)"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: 6,
+                border: `1px solid ${showTajweedTone ? "#06b6d4" : "rgba(255,255,255,0.12)"}`,
+                background: showTajweedTone ? "rgba(6,182,212,0.18)" : "rgba(255,255,255,0.04)",
+                color: showTajweedTone ? "#22d3ee" : "var(--text2)",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all .15s",
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#06b6d4", display: "inline-block" }} />
+              <span>Graves / Aiguës (Tafkhīm/Tarqīq)</span>
+              {showTajweedTone && <span style={{ fontSize: 10 }}>✓</span>}
+            </button>
+
+            {/* Qalqala */}
+            <button
+              id="btn-fs-tajweed-qalqala"
+              onClick={toggleQalqala}
+              title="Qalqala (Rebond sur قطبجد)"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: 6,
+                border: `1px solid ${showQalqala ? "#38bdf8" : "rgba(255,255,255,0.12)"}`,
+                background: showQalqala ? "rgba(56,189,248,0.18)" : "rgba(255,255,255,0.04)",
+                color: showQalqala ? "#7dd3fc" : "var(--text2)",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all .15s",
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#38bdf8", display: "inline-block" }} />
+              <span>Qalqala</span>
+              {showQalqala && <span style={{ fontSize: 10 }}>✓</span>}
+            </button>
+
+            {/* Madd */}
+            <button
+              id="btn-fs-tajweed-madd"
+              onClick={toggleMadd}
+              title="Madd (Allongements)"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: 6,
+                border: `1px solid ${showMadd ? "#fb923c" : "rgba(255,255,255,0.12)"}`,
+                background: showMadd ? "rgba(251,146,60,0.18)" : "rgba(255,255,255,0.04)",
+                color: showMadd ? "#fdba74" : "var(--text2)",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all .15s",
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fb923c", display: "inline-block" }} />
+              <span>Madd</span>
+              {showMadd && <span style={{ fontSize: 10 }}>✓</span>}
+            </button>
+
+            {/* Idh-har */}
+            <button
+              id="btn-fs-tajweed-izhar"
+              onClick={toggleIzhar}
+              title="Idh-hâr (Clarté)"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: 6,
+                border: `1px solid ${showIzhar ? "#34d399" : "rgba(255,255,255,0.12)"}`,
+                background: showIzhar ? "rgba(52,211,153,0.18)" : "rgba(255,255,255,0.04)",
+                color: showIzhar ? "#6ee7b7" : "var(--text2)",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all .15s",
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#34d399", display: "inline-block" }} />
+              <span>Idh-hâr</span>
+              {showIzhar && <span style={{ fontSize: 10 }}>✓</span>}
+            </button>
+
+            {/* Idgham */}
+            <button
+              id="btn-fs-tajweed-idgham"
+              onClick={toggleIdgham}
+              title="Idghâm (Assimilation)"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: 6,
+                border: `1px solid ${showIdgham ? "#fbbf24" : "rgba(255,255,255,0.12)"}`,
+                background: showIdgham ? "rgba(251,191,36,0.18)" : "rgba(255,255,255,0.04)",
+                color: showIdgham ? "#fde68a" : "var(--text2)",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all .15s",
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fbbf24", display: "inline-block" }} />
+              <span>Idghâm</span>
+              {showIdgham && <span style={{ fontSize: 10 }}>✓</span>}
+            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {/* Guide Button */}
+            <button
+              id="btn-fs-tajweed-guide"
+              onClick={() => setShowTajweedGuide(true)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "3px 8px",
+                borderRadius: 4,
+                border: "1px solid rgba(201,168,76,0.4)",
+                background: "rgba(201,168,76,0.1)",
+                color: "var(--gold2)",
+                fontSize: 10,
+                fontFamily: "'Cinzel',serif",
+                cursor: "pointer",
+              }}
+            >
+              <span>📖</span>
+              <span>Guide des Couleurs</span>
+            </button>
+
+            <button
+              onClick={() => setShowTajweedBar(false)}
+              style={{ background: "transparent", border: "none", color: "var(--text3)", fontSize: 14, cursor: "pointer", padding: "0 4px" }}
+              title="Fermer la barre Tajweed"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Tajweed Color Guide Modal Dialog ─────────────────────────── */}
+      {showTajweedGuide && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 3600,
+            background: "rgba(0,0,0,0.8)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onClick={() => setShowTajweedGuide(false)}
+        >
+          <div
+            style={{
+              background: "#10141f",
+              border: "1px solid rgba(201,168,76,0.4)",
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 520,
+              maxHeight: "85vh",
+              overflowY: "auto",
+              padding: 20,
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+              boxShadow: "0 16px 48px rgba(0,0,0,0.9)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(201,168,76,0.2)", paddingBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 18 }}>🎨</span>
+                <span style={{ fontFamily: "'Cinzel',serif", fontSize: 14, fontWeight: 700, letterSpacing: 1.2, color: "var(--gold2)" }}>
+                  GUIDE DES COULEURS DU TAJWEED
+                </span>
+              </div>
+              <button
+                onClick={() => setShowTajweedGuide(false)}
+                style={{ background: "transparent", border: "none", color: "var(--text2)", fontSize: 18, cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Tafkhim */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 8, background: "rgba(6,182,212,0.1)", borderRadius: 8, border: "1px solid rgba(6,182,212,0.3)" }}>
+                <span style={{ width: 14, height: 14, borderRadius: "50%", background: "#06b6d4", marginTop: 3, flexShrink: 0 }} />
+                <div>
+                  <div style={{ color: "#22d3ee", fontWeight: 700, fontSize: 13 }}>Tafkhīm / Lettres Graves (تَفْخِيم)</div>
+                  <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
+                    Son lourd et emphase sur les 7 lettres : <strong>خ, ص, ض, غ, ط, ق, ظ</strong> (خص ضغط قظ), ainsi que le <strong>Lam</strong> du nom d'Allah (selon la voyelle) et le <strong>Râ</strong> avec Fatha/Damma.
+                  </div>
+                </div>
+              </div>
+
+              {/* Tarqiq */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 8, background: "rgba(244,114,182,0.1)", borderRadius: 8, border: "1px solid rgba(244,114,182,0.3)" }}>
+                <span style={{ width: 14, height: 14, borderRadius: "50%", background: "#f472b6", marginTop: 3, flexShrink: 0 }} />
+                <div>
+                  <div style={{ color: "#f472b6", fontWeight: 700, fontSize: 13 }}>Tarqīq / Lettres Aiguës (تَرْقِيق)</div>
+                  <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
+                    Prononciation fine et amincie de toutes les autres lettres de l'alphabet arabe, ainsi que le <strong>Râ</strong> avec Kasra.
+                  </div>
+                </div>
+              </div>
+
+              {/* Qalqala */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 8, background: "rgba(56,189,248,0.1)", borderRadius: 8, border: "1px solid rgba(56,189,248,0.3)" }}>
+                <span style={{ width: 14, height: 14, borderRadius: "50%", background: "#38bdf8", marginTop: 3, flexShrink: 0 }} />
+                <div>
+                  <div style={{ color: "#7dd3fc", fontWeight: 700, fontSize: 13 }}>Qalqala / Rebond (قَلْقَلَة)</div>
+                  <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
+                    Rebond vocalique lors de l'arrêt ou Soukoun sur les 5 lettres : <strong>ق, ط, ب, ج, د</strong> (قطب جد).
+                  </div>
+                </div>
+              </div>
+
+              {/* Madd */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 8, background: "rgba(251,146,60,0.1)", borderRadius: 8, border: "1px solid rgba(251,146,60,0.3)" }}>
+                <span style={{ width: 14, height: 14, borderRadius: "50%", background: "#fb923c", marginTop: 3, flexShrink: 0 }} />
+                <div>
+                  <div style={{ color: "#fdba74", fontWeight: 700, fontSize: 13 }}>Madd / Prolongations (مَدّ)</div>
+                  <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
+                    Allongement des voyelles longues : Rouge (6 temps / Lâzim), Rose (4-5 temps / Muttasil/Munfasil), Jaune/Orange (2 temps naturel).
+                  </div>
+                </div>
+              </div>
+
+              {/* Izhar */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 8, background: "rgba(52,211,153,0.1)", borderRadius: 8, border: "1px solid rgba(52,211,153,0.3)" }}>
+                <span style={{ width: 14, height: 14, borderRadius: "50%", background: "#34d399", marginTop: 3, flexShrink: 0 }} />
+                <div>
+                  <div style={{ color: "#6ee7b7", fontWeight: 700, fontSize: 13 }}>Idh-hâr / Clarté (إِظْهَار)</div>
+                  <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
+                    Prononciation nette et distincte du Noun Sakin ou Tanwin devant les lettres de la gorge : <strong>ء, هـ, ع, ح, غ, خ</strong>.
+                  </div>
+                </div>
+              </div>
+
+              {/* Idgham */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 8, background: "rgba(251,191,36,0.1)", borderRadius: 8, border: "1px solid rgba(251,191,36,0.3)" }}>
+                <span style={{ width: 14, height: 14, borderRadius: "50%", background: "#fbbf24", marginTop: 3, flexShrink: 0 }} />
+                <div>
+                  <div style={{ color: "#fde68a", fontWeight: 700, fontSize: 13 }}>Idghâm / Assimilation (إِدْغَام)</div>
+                  <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
+                    Fusion du Noun Sakin ou Tanwin dans les lettres de <strong>ي, ر, م, ل, و, ن</strong> (يرملون) avec ou sans grésillement (Ghunna).
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+              <button
+                onClick={() => setShowTajweedGuide(false)}
+                style={{
+                  padding: "6px 16px",
+                  borderRadius: 6,
+                  border: "1px solid var(--gold)",
+                  background: "var(--gold)",
+                  color: "#0c0f16",
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Compris ✓
               </button>
             </div>
           </div>

@@ -1,11 +1,11 @@
 import React, { useMemo, useRef, useEffect } from "react";
 import { fixChars } from "../../utils/reciterAudio.js";
-import { isQalqala, getMaddType, isIzhar, isIdgham, isIqlab, isIkhfa, isGhunnah } from "../../utils/tajweedRules.js";
+import { isQalqala, getMaddType, isIzhar, isIdgham, isIqlab, isIkhfa, isGhunnah, isTafkhim, isTarqiq } from "../../utils/tajweedRules.js";
 
 // ─── PlayingArabicHighlighted — zero-rerender highlight via DOM refs ─────────
 // Renders chars once, then updates active/done classes via direct RAF + DOM refs only.
 export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlighted({
-  text, timestamps, mode, playingPart, ld, showQalqala, showMadd, showIzhar, showIdgham
+  text, timestamps, mode, playingPart, ld, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone
 }) {
   const containerRef  = useRef(null);
   const charDataRef   = useRef(null); // flat array of {start,end,el}
@@ -97,7 +97,7 @@ export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlig
   // Render static chars (no active/done — DOM handles it)
   return <ArabicHighlighted ref={containerRef} text={text} timestamps={timestamps}
     currentMs={-1} showQalqala={showQalqala} showMadd={showMadd}
-    showIzhar={showIzhar} showIdgham={showIdgham} />;
+    showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
 }, (prev, next) =>
   prev.text === next.text &&
   prev.timestamps === next.timestamps &&
@@ -105,10 +105,11 @@ export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlig
   prev.showQalqala === next.showQalqala &&
   prev.showMadd === next.showMadd &&
   prev.showIzhar === next.showIzhar &&
-  prev.showIdgham === next.showIdgham);
+  prev.showIdgham === next.showIdgham &&
+  prev.showTajweedTone === next.showTajweedTone);
 
 export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHighlighted({
-  text, timestamps, currentMs, rangeStartMs, showQalqala, showMadd, showIzhar, showIdgham
+  text, timestamps, currentMs, rangeStartMs, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone
 }, ref) {
   if (!timestamps?.words) return <div className="ayat-arabic">{text}</div>;
 
@@ -144,6 +145,8 @@ export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHigh
         const iqlabOn     = (showIzhar || showIdgham) && isIqlab(fullChars, fullIdx);
         const ikhfaOn     = (showIzhar || showIdgham) && isIkhfa(fullChars, fullIdx);
         const ghunnahOn   = isGhunnah(fullChars, fullIdx);
+        const tafkhimOn   = showTajweedTone && isTafkhim(fullChars, fullIdx);
+        const tarqiqOn    = showTajweedTone && isTarqiq(fullChars, fullIdx);
 
         let tajStyle = undefined;
         if (isQalqalaOn) {
@@ -166,12 +169,16 @@ export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHigh
           tajStyle = { color: '#c084fc', textShadow: '0 0 6px rgba(192,132,252,.55)', fontWeight: 600 };
         } else if (ghunnahOn && (showIzhar || showIdgham)) {
           tajStyle = { color: '#10b981', textShadow: '0 0 6px rgba(16,185,129,.55)' };
+        } else if (tafkhimOn) {
+          tajStyle = { color: '#06b6d4', textShadow: '0 0 6px rgba(6,182,212,.55)', fontWeight: 600 };
+        } else if (tarqiqOn) {
+          tajStyle = { color: '#f472b6', textShadow: '0 0 6px rgba(244,114,182,.45)' };
         }
 
         return { char: c.char, start: c.start, end: c.end, tajStyle };
       });
     });
-  }, [timestamps, showQalqala, showMadd, showIzhar, showIdgham]);
+  }, [timestamps, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone]);
 
   // Static render — no active/done classes here (DOM updates them for playing mode)
   return (
@@ -193,4 +200,5 @@ export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHigh
   prev.showQalqala === next.showQalqala &&
   prev.showMadd === next.showMadd &&
   prev.showIzhar === next.showIzhar &&
-  prev.showIdgham === next.showIdgham);
+  prev.showIdgham === next.showIdgham &&
+  prev.showTajweedTone === next.showTajweedTone);

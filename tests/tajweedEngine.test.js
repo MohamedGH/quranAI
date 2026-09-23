@@ -83,4 +83,48 @@ describe("Tajweed Rule Detection Engine", () => {
     expect(madd).not.toBeNull();
     expect(madd.rule).toBe("madd_lazim");
   });
+
+  it("identifies Tafkhim (Graves) permanent letters (خص ضغط قظ)", async () => {
+    const { isTafkhim, isTarqiq, getTajweedTone, TAFKHIM_LETTERS } = await import("../src/utils/tajweedRules.js");
+    expect(TAFKHIM_LETTERS.size).toBe(7);
+    ["خ", "ص", "ض", "غ", "ط", "ق", "ظ"].forEach((l) => {
+      expect(TAFKHIM_LETTERS.has(l)).toBe(true);
+      const arr = [l];
+      expect(isTafkhim(arr, 0)).toBe(true);
+      expect(isTarqiq(arr, 0)).toBe(false);
+      expect(getTajweedTone(arr, 0)).toBe("tafkhim");
+    });
+  });
+
+  it("identifies Tarqiq (Aiguës) letters correctly", async () => {
+    const { isTafkhim, isTarqiq, getTajweedTone } = await import("../src/utils/tajweedRules.js");
+    ["ب", "ت", "ث", "ج", "د", "ذ", "ز", "س", "ش", "ف", "ك", "ل", "م", "ن", "ه", "و", "ي"].forEach((l) => {
+      const arr = [l];
+      expect(isTafkhim(arr, 0)).toBe(false);
+      expect(isTarqiq(arr, 0)).toBe(true);
+      expect(getTajweedTone(arr, 0)).toBe("tarqiq");
+    });
+  });
+
+  it("identifies Raa with Fatha/Damma as Tafkhim and Raa with Kasra as Tarqiq", async () => {
+    const { isTafkhim, isTarqiq } = await import("../src/utils/tajweedRules.js");
+    // Raa with Fatha (رَ)
+    const raaFatha = ["ر", "\u064E"];
+    expect(isTafkhim(raaFatha, 0)).toBe(true);
+    expect(isTarqiq(raaFatha, 0)).toBe(false);
+
+    // Raa with Kasra (رِ)
+    const raaKasra = ["ر", "\u0650"];
+    expect(isTafkhim(raaKasra, 0)).toBe(false);
+    expect(isTarqiq(raaKasra, 0)).toBe(true);
+  });
+
+  it("handles Redux store showTajweedTone state and toggle action", async () => {
+    const { store, uiActions, sel } = await import("../src/store.js");
+    const initial = sel.showTajweedTone(store.getState());
+    store.dispatch(uiActions.toggleTajweedTone());
+    expect(sel.showTajweedTone(store.getState())).toBe(!initial);
+    store.dispatch(uiActions.toggleTajweedTone());
+    expect(sel.showTajweedTone(store.getState())).toBe(initial);
+  });
 });

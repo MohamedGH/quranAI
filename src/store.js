@@ -18,6 +18,7 @@ const uiSlice = createSlice({
     showMadd:      load("quran_showMadd", false),
     showIzhar:     load("quran_showIzhar", false),
     showIdgham:    load("quran_showIdgham", false),
+    showTajweedTone: load("quran_showTajweedTone", false),
     announceNum:   load("quran_announceNum", false),
     showParts:     load("quran_showParts", true),
     spellCheck:    load("quran_spellCheck", true),
@@ -40,6 +41,8 @@ const uiSlice = createSlice({
     toggleMadd:        (s)  => { s.showMadd = !s.showMadd; save("quran_showMadd", s.showMadd); },
     toggleIzhar:       (s)  => { s.showIzhar = !s.showIzhar; save("quran_showIzhar", s.showIzhar); },
     toggleIdgham:       (s)  => { s.showIdgham= !s.showIdgham; save("quran_showIdgham", s.showIdgham); },
+    toggleTajweedTone:  (s)  => { s.showTajweedTone = !s.showTajweedTone; save("quran_showTajweedTone", s.showTajweedTone); },
+    setShowTajweedTone: (s, a) => { s.showTajweedTone = !!a.payload; save("quran_showTajweedTone", s.showTajweedTone); },
     toggleAnnounceNum:  (s)  => { s.announceNum = !s.announceNum; save("quran_announceNum", s.announceNum); },
     toggleSpellCheck:   (s)  => { s.spellCheck = !s.spellCheck; save("quran_spellCheck", s.spellCheck); },
     toggleShowParts:    (s)  => { s.showParts = !s.showParts; save("quran_showParts", s.showParts); },
@@ -346,7 +349,8 @@ export const sel = {
   showQalqala:     (s) => s.ui.showQalqala,
   showMadd:        (s) => s.ui.showMadd,
   showIzhar:       (s) => s.ui.showIzhar,
- showIdgham:       (s) => s.ui.showIdgham,
+  showIdgham:      (s) => s.ui.showIdgham,
+  showTajweedTone: (s) => s.ui.showTajweedTone,
   announceNum:     (s) => s.ui.announceNum,
   spellCheck:      (s) => s.ui.spellCheck,
   showParts:       (s) => s.ui.showParts,
@@ -409,6 +413,8 @@ export const sel = {
     return totalVerses > 0 ? Math.round((masteredCount / totalVerses) * 100) : 0;
   },
 };
+
+export const selectors = sel;
 
 // ─── Thunk : setLData (met à jour un ayat dans learnData) ────────────────────
 // Usage : dispatch(setLDataThunk(surahNum, ayatNum, fn))

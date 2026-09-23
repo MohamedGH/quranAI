@@ -261,6 +261,7 @@ function AppInner({ currentUser, onSignOut }) {
   const showMadd        = useSelector(sel.showMadd);
   const showIzhar       = useSelector(sel.showIzhar);
   const showIdgham      = useSelector(sel.showIdgham);
+  const showTajweedTone = useSelector(sel.showTajweedTone);
   const announceNum     = useSelector(sel.announceNum);
   const spellCheck      = useSelector(sel.spellCheck);
   const showParts       = useSelector(sel.showParts);
@@ -370,6 +371,7 @@ function AppInner({ currentUser, onSignOut }) {
   const toggleMadd         = () => dispatch(uiActions.toggleMadd());
   const toggleIzhar        = () => dispatch(uiActions.toggleIzhar());
   const toggleIdgham       = () => dispatch(uiActions.toggleIdgham());
+  const toggleTajweedTone  = () => dispatch(uiActions.toggleTajweedTone());
   const toggleAnnounceNum  = () => dispatch(uiActions.toggleAnnounceNum());
   const toggleSpellCheck   = () => dispatch(uiActions.toggleSpellCheck());
   const toggleShowParts    = () => dispatch(uiActions.toggleShowParts());
@@ -1870,11 +1872,29 @@ function AppInner({ currentUser, onSignOut }) {
                 <QuranBookPage surahs={surahs} />
               </AnimatedPage>
             } />
+            <Route path="/book" element={<Navigate to="/quran/book" replace />} />
             <Route path="/quran/book3d" element={
               <AnimatedPage pageKey="quran-book3d">
-                <QuranBook3DPage surahs={surahs} />
+                <QuranBook3DPage
+                  surahs={surahs}
+                  learnData={learnData}
+                  setLData={setLData}
+                  collections={collections}
+                  onToggleAyat={toggleAyatInCollection}
+                  showQalqala={showQalqala}
+                  showMadd={showMadd}
+                  showIzhar={showIzhar}
+                  showIdgham={showIdgham}
+                  showTajweedTone={showTajweedTone}
+                  toggleQalqala={toggleQalqala}
+                  toggleMadd={toggleMadd}
+                  toggleIzhar={toggleIzhar}
+                  toggleIdgham={toggleIdgham}
+                  toggleTajweedTone={toggleTajweedTone}
+                />
               </AnimatedPage>
             } />
+            <Route path="/book3d" element={<Navigate to="/quran/book3d" replace />} />
             <Route path="/quran/:surahNum?/:ayatNum?" element={(
             <AnimatedPage pageKey="quran"><main className="main">
               {!selectedSurah ? (
@@ -1923,6 +1943,8 @@ function AppInner({ currentUser, onSignOut }) {
                   toggleIzhar={toggleIzhar}
                   showIdgham={showIdgham}
                   toggleIdgham={toggleIdgham}
+                  showTajweedTone={showTajweedTone}
+                  toggleTajweedTone={toggleTajweedTone}
                   fullScreenSelectedAyat={fullScreenSelectedAyat}
                   toggleFullScreen={() => dispatch(uiActions.toggleFullScreenSelectedAyat())}
                   announceNum={announceNum}
@@ -2138,11 +2160,11 @@ function AppInner({ currentUser, onSignOut }) {
                       // Render the Arabic text — either TS-highlighted, inline-selectable, or plain
                       // _tsForAyat: basmala already stripped at parse time — pass ts directly
                       const renderAyatText = () => {
-                        if (isPlaying && ts && enableLetterByLetter) return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="main" showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} />;
+                        if (isPlaying && ts && enableLetterByLetter) return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="main" showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
                         if (playingPart?.ayatNum === ayat.numberInSurah && ts && enableLetterByLetter)
-                          return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="part" playingPart={playingPart} ld={ld} showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} />;
+                          return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="part" playingPart={playingPart} ld={ld} showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
                         if (localPlaying?.ayatNum === ayat.numberInSurah && ts && enableLetterByLetter)
-                          return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="local" showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} />;
+                          return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="local" showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
 
                         // Revise highlighting — declared early to avoid TDZ with showPartColors
                         const _reviseData = ld?.toRevise;
@@ -2155,7 +2177,7 @@ function AppInner({ currentUser, onSignOut }) {
 
                         // When timestamps loaded and not in word-select/aide-memoire mode: use ArabicHighlighted for tajweed coloring
                         if (ts && enableTimestamps && !showWordButtons && !showPartColors) {
-                          return <ArabicHighlighted text={ayat.text} timestamps={ts} currentMs={-1} showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} />;
+                          return <ArabicHighlighted text={ayat.text} timestamps={ts} currentMs={-1} showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
                         }
 
                         if (showWordButtons) {
@@ -2657,6 +2679,12 @@ function AppInner({ currentUser, onSignOut }) {
               showMadd={showMadd}
               showIzhar={showIzhar}
               showIdgham={showIdgham}
+              showTajweedTone={showTajweedTone}
+              toggleTajweedTone={toggleTajweedTone}
+              toggleQalqala={toggleQalqala}
+              toggleMadd={toggleMadd}
+              toggleIzhar={toggleIzhar}
+              toggleIdgham={toggleIdgham}
               isPlaying={isCurrentPlaying}
               onTogglePlay={handleTogglePlay}
               onSelectAyat={handleSelectAyat}

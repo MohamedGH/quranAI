@@ -20,6 +20,9 @@ export const HAMZA_SET = new Set(['ء', 'أ', 'إ', 'ؤ', 'ئ', 'آ', 'ٱ']);
 // 1. Qalqala letters: ق ط ب ج د (قطب جد)
 export const QALQALA_LETTERS = new Set(['ق', 'ط', 'ب', 'ج', 'د']);
 
+// 1.1 Tafkhim permanent letters (Isti'laa): خ ص ض غ ط ق ظ (خص ضغط قظ)
+export const TAFKHIM_LETTERS = new Set(['خ', 'ص', 'ض', 'غ', 'ط', 'ق', 'ظ']);
+
 // 2. Izhar halqi letters: 6 throat letters (ء هـ ع غ ح خ)
 export const IZHAR_LETTERS = new Set(['ء', 'ه', 'ع', 'غ', 'ح', 'خ', 'أ', 'إ', 'ؤ', 'ئ', 'آ', 'ٱ']);
 
@@ -57,6 +60,114 @@ export function isQalqala(arr, i) {
     if (isArabicLetter(nc)) break;
   }
   return hasSukun || (atWaqf && !hasVowel);
+}
+
+// ─── Tafkhim & Tarqiq (Graves & Aiguës) ─────────────────────────────────────
+export function isTafkhim(arr, i) {
+  if (!arr || i < 0 || i >= arr.length) return false;
+  const ch = arr[i];
+  if (!isArabicLetter(ch)) return false;
+
+  // 1. Permanent Tafkhim letters: خص ضغط قظ
+  if (TAFKHIM_LETTERS.has(ch)) return true;
+
+  // 2. Letter Raa (ر)
+  if (ch === 'ر') {
+    // Check direct diacritics on Raa
+    let hasFathaOrDamma = false;
+    let hasKasra = false;
+    let hasSukun = false;
+    for (let j = i + 1; j < arr.length && j <= i + 3; j++) {
+      const c = arr[j];
+      if (c === '\u064E' || c === '\u064F' || c === '\u064B' || c === '\u064C') {
+        hasFathaOrDamma = true;
+        break;
+      }
+      if (c === '\u0650' || c === '\u064D') {
+        hasKasra = true;
+        break;
+      }
+      if (SUKUN_CHARS.has(c)) {
+        hasSukun = true;
+      }
+      if (isArabicLetter(c)) break;
+    }
+    if (hasFathaOrDamma) return true;
+    if (hasKasra) return false;
+
+    // If Raa is Sakin (or unvoweled at Waqf), inspect the previous vowel
+    let prevVowel = null;
+    for (let k = i - 1; k >= 0 && k >= i - 4; k--) {
+      const pc = arr[k];
+      if (pc === '\u064E' || pc === '\u064F' || pc === '\u064B' || pc === '\u064C') {
+        prevVowel = 'fatha_damma';
+        break;
+      }
+      if (pc === '\u0650' || pc === '\u064D') {
+        prevVowel = 'kasra';
+        break;
+      }
+      if (isArabicLetter(pc)) break;
+    }
+    if (prevVowel === 'fatha_damma') return true;
+    if (prevVowel === 'kasra') return false;
+    return true; // default Raa leans tafkhim
+  }
+
+  // 3. Letter Lam (ل) in Allah (الله / اللهم)
+  if (ch === 'ل') {
+    // Check if in Allah
+    let inAllah = false;
+    for (let w = Math.max(0, i - 3); w <= Math.min(arr.length - 4, i); w++) {
+      const seg = arr.slice(w, w + 4).join('').replace(/[\u064B-\u065F\u0670]/g, '');
+      if (seg.includes('الله') || seg.includes('اللهم')) {
+        inAllah = true;
+        break;
+      }
+    }
+    if (inAllah) {
+      // Find previous vowel before the word Allah
+      let prevVowel = null;
+      for (let k = i - 1; k >= 0 && k >= i - 6; k--) {
+        const pc = arr[k];
+        if (pc === '\u064E' || pc === '\u064F') { prevVowel = 'fatha_damma'; break; }
+        if (pc === '\u0650') { prevVowel = 'kasra'; break; }
+      }
+      return prevVowel !== 'kasra'; // Tafkhim except if preceded by kasra (e.g. Bismillāh)
+    }
+  }
+
+  // 4. Letter Alif (ا / ى / ٰ) follows the previous letter
+  if (ch === 'ا' || ch === 'ى' || ch === '\u0670' || ch === 'آ') {
+    let prevLetter = null;
+    let prevIdx = -1;
+    for (let k = i - 1; k >= 0; k--) {
+      if (isArabicLetter(arr[k])) {
+        prevLetter = arr[k];
+        prevIdx = k;
+        break;
+      }
+    }
+    if (prevLetter && isTafkhim(arr, prevIdx)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function isTarqiq(arr, i) {
+  if (!arr || i < 0 || i >= arr.length) return false;
+  const ch = arr[i];
+  if (!isArabicLetter(ch)) return false;
+  return !isTafkhim(arr, i);
+}
+
+export function getTajweedTone(arr, i) {
+  if (!arr || i < 0 || i >= arr.length) return null;
+  const ch = arr[i];
+  if (!isArabicLetter(ch)) return null;
+  return isTafkhim(arr, i) ? 'tafkhim' : 'tarqiq';
 }
 
 // ─── Ghunnah Mushaddadah Detection (غنة مشددة) ──────────────────────────────
@@ -418,6 +529,7 @@ export const Q_CAT_LABELS = {
 
 // ─── Tajweed Rules Categories & Comprehensive Metadata ───────────────────────
 export const TAJWEED_CATEGORIES = {
+  tafkhim_tarqiq: { id: 'tafkhim_tarqiq', name: 'Graves & Aiguës (Tafkhīm / Tarqīq)', nameAr: 'التفخيم والترقيق', color: '#06b6d4' },
   qalqala: { id: 'qalqala', name: 'Qalqala', nameAr: 'القلقلة', color: '#38bdf8' },
   noun_tanwin: { id: 'noun_tanwin', name: 'Noun Sakin & Tanwin', nameAr: 'أحكام النون الساكنة والتنوين', color: '#34d399' },
   madd: { id: 'madd', name: 'Allongements (Madd)', nameAr: 'أحكام المدود', color: '#fb923c' },
@@ -425,6 +537,34 @@ export const TAJWEED_CATEGORIES = {
 };
 
 export const TAJWEED_RULES = [
+  {
+    id: 'tafkhim',
+    name: 'Tafkhīm (Lettres Graves / Emphatiques)',
+    label: 'Tafkhīm (Graves)',
+    nameAr: 'تفخيم',
+    labelAr: 'تفخيم',
+    color: '#06b6d4',
+    category: 'tafkhim_tarqiq',
+    duration: 'Pleine résonance buccale',
+    letters: 'خ، ص، ض، غ، ط، ق، ظ (خُصَّ ضَغْطٍ قِظْ) + ر (selon cas) + ل (nom d\'Allah)',
+    desc: 'Prononciation ample et grave où la bouche se remplit de l\'écho de la lettre.',
+    ruleSummary: 'Les 7 lettres d\'Isti\'la\' sont toujours graves, plus le Râ et le Lam d\'Allah selon voyelles.',
+    example: 'خَلَقَ · صِرَاطَ · الضَّالِّينَ · غَفُورٌ · طَهَ · قَالَ · ظَلَمُوا'
+  },
+  {
+    id: 'tarqiq',
+    name: 'Tarqīq (Lettres Aiguës / Amincies)',
+    label: 'Tarqīq (Aiguës)',
+    nameAr: 'ترقيق',
+    labelAr: 'ترقيق',
+    color: '#f472b6',
+    category: 'tafkhim_tarqiq',
+    duration: 'Résonance amincie',
+    letters: 'Toutes les autres lettres de l\'alphabet (Istifāl)',
+    desc: 'Prononciation claire, fine et amincie de la lettre sans élévation de la langue.',
+    ruleSummary: 'Lettres d\'abaissement (Istifal) prononcées avec douceur et clarté.',
+    example: 'بِسْمِ · الْحَمْدُ · إِيَّاكَ · نَعْبُدُ'
+  },
   {
     id: 'qalqala',
     name: 'Qalqala',

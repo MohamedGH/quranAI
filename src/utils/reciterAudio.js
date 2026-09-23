@@ -28,6 +28,16 @@ export const RECITATORS = [
   { id: 'ar.aymanswoaid',        label: 'Ayman Sowaid',                flag: '🇸🇾' },
 ];
 
+export const GLOBAL_RECITERS = [
+  { key: 'alafasy', id: 'ar.alafasy', name: 'Mishary Al-Afasy', url: 'https://everyayah.com/data/Alafasy_128kbps' },
+  { key: 'abdulbasit', id: 'ar.abdulbasitmurattal', name: 'Abdul Basit Murattal', url: 'https://everyayah.com/data/Abdul_Basit_Murattal_192kbps' },
+  { key: 'husary', id: 'ar.husary', name: 'Mahmoud Khalil Al-Husary', url: 'https://everyayah.com/data/Husary_128kbps' },
+  { key: 'minshawi', id: 'ar.minshawi', name: 'Mohamed Siddiq Al-Minshawi', url: 'https://everyayah.com/data/Minshawy_Murattal_128kbps' },
+  { key: 'ghamadi', id: 'ar.ghamadi', name: 'Saad Al-Ghamadi', url: 'https://everyayah.com/data/Ghamadi_40kbps' },
+  { key: 'sudais', id: 'ar.abdurrahmaansudais', name: 'Abdur-Rahman As-Sudais', url: 'https://everyayah.com/data/Abdurrahmaan_As-Sudais_192kbps' },
+  { key: 'hudhaify', id: 'ar.hudhaify', name: 'Ali Al-Hudhaify', url: 'https://everyayah.com/data/Hudhaify_128kbps' },
+];
+
 export let _recitatorId = safeGetItem('quran_recitator', 'ar.alafasy') || 'ar.alafasy';
 
 // Bitrate is automatic and per-reciter — not every reciter's audio is hosted at every bitrate.

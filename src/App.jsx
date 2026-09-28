@@ -1,4 +1,4 @@
-import { isQalqala, getMaddType, isIzhar, isIdgham } from "./utils/tajweedRules.js";
+import { isQalqala, getMaddType, isIzhar, isIdgham, getTajweedStyleForChar } from "./utils/tajweedRules.js";
 import { createPortal } from "react-dom";
 const normalizeAr = (s) => (s ? s.replace(/[ً-ٰٟ]/g, "").replace(/آ|أ|إ|ٱ/g, "ا").replace(/ى/g, "ي").trim() : "");
 import { masteryColor } from "./components/common/Mastery.jsx";
@@ -2174,10 +2174,36 @@ function AppInner({ currentUser, onSignOut }) {
                         const aideMemoireClickMode = aideMemoireClickModes[ayat.numberInSurah]||null;
                         const showWordButtons = isSelecting || aideMemoireClickMode !== null;
                         const showPartColors  = !isSelecting && showParts && Object.keys(wordPartMap).length > 0;
+                        const hasAnyTajweed = showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone;
 
-                        // When timestamps loaded and not in word-select/aide-memoire mode: use ArabicHighlighted for tajweed coloring
-                        if (ts && enableTimestamps && !showWordButtons && !showPartColors) {
-                          return <ArabicHighlighted text={ayat.text} timestamps={ts} currentMs={-1} showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
+                        // Build highlight index set from ld.highlight
+                        const hlIndices  = (() => {
+                          const set = new Set();
+                          if (!ld.highlight?.trim()) return set;
+                          ld.highlight.trim().split(/\s+/).forEach(hw => {
+                            const norm = normalizeAr(hw);
+                            ayatWords.forEach((aw, i) => { if (normalizeAr(aw) === norm) set.add(i); });
+                          });
+                          return set;
+                        })();
+                        const unkIndices = new Set(ld?.unknownWords || []);
+                        const hasRevise  = !!_reviseData;
+                        const hasAnnotations = (ld.highlight?.trim() && hlIndices.size > 0) || unkIndices.size > 0 || hasRevise;
+
+                        // When not in word-select/aide-memoire/custom annotation mode: use ArabicHighlighted for full Tajweed coloring
+                        if (!showWordButtons && !showPartColors && !hasAnnotations) {
+                          return (
+                            <ArabicHighlighted
+                              text={ayat.text}
+                              timestamps={ts && enableTimestamps ? ts : null}
+                              currentMs={-1}
+                              showQalqala={showQalqala}
+                              showMadd={showMadd}
+                              showIzhar={showIzhar}
+                              showIdgham={showIdgham}
+                              showTajweedTone={showTajweedTone}
+                            />
+                          );
                         }
 
                         if (showWordButtons) {
@@ -2292,16 +2318,8 @@ function AppInner({ currentUser, onSignOut }) {
                                       const wBg     = isUnk?"rgba(255,126,179,.15)":isHl?"rgba(255,209,102,.12)":isRevW&&!wRevChars?.length?"rgba(201,168,76,.2)":"transparent";
                                       const renderCh = (ch,ci,arr2) => {
                                         if(isUnk||isHl) return <span key={ci}>{ch}</span>;
-                                        const q  = showQalqala && isQalqala(arr2,ci);
-                                        const mt = showMadd ? getMaddType(arr2,ci) : null;
-                                        const iz = showIzhar && isIzhar(arr2,ci);
-                                        const id = showIdgham && isIdgham(arr2,ci);
-                                        return q               ? <span key={ci} style={{color:"#5bc8f5",textShadow:"0 0 6px rgba(91,200,245,.5)"}}>{ch}</span>
-                                             : mt==="muttasil" ? <span key={ci} style={{color:"#ff7eb3",textShadow:"0 0 8px rgba(255,126,179,.6)",fontWeight:600}}>{ch}</span>
-                                             : mt==="normal"   ? <span key={ci} style={{color:"#f09de0",textShadow:"0 0 6px rgba(240,157,224,.5)"}}>{ch}</span>
-                                             : iz              ? <span key={ci} style={{color:"#4caf81",textShadow:"0 0 6px rgba(76,175,129,.5)"}}>{ch}</span>
-                                             : id              ? <span key={ci} style={{color:"#ffd166",textShadow:"0 0 6px rgba(255,209,102,.5)"}}>{ch}</span>
-                                             : <span key={ci}>{ch}</span>;
+                                        const tajStyle = hasAnyTajweed ? getTajweedStyleForChar(arr2, ci, { showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone }) : null;
+                                        return <span key={ci} style={tajStyle || undefined}>{ch}</span>;
                                       };
                                       return (
                                         <span key={wii} style={{
@@ -2312,7 +2330,7 @@ function AppInner({ currentUser, onSignOut }) {
                                           padding: (isUnk||isHl||isRevW)?"0 1px":0,
                                           borderBottom: isRevW&&!wRevChars?.length ? '2px solid rgba(201,168,76,.5)' : 'none',
                                         }}>
-                                          {(showQalqala||showMadd||showIzhar||showIdgham)
+                                          {hasAnyTajweed
                                             ? (() => { const arr2=[...w]; return arr2.map((ch,ci)=>renderCh(ch,ci,arr2)); })()
                                             : w}
                                           {wii < seg.words.length-1 ? " " : ""}
@@ -2325,20 +2343,6 @@ function AppInner({ currentUser, onSignOut }) {
                             </div>
                           );
                         }
-
-                        // Build highlight index set from ld.highlight
-                        const hlIndices  = (() => {
-                          const set = new Set();
-                          if (!ld.highlight?.trim()) return set;
-                          ld.highlight.trim().split(/\s+/).forEach(hw => {
-                            const norm = normalizeAr(hw);
-                            ayatWords.forEach((aw, i) => { if (normalizeAr(aw) === norm) set.add(i); });
-                          });
-                          return set;
-                        })();
-                        const unkIndices = new Set(ld?.unknownWords || []);
-                        const hasRevise  = !!_reviseData;
-                        const hasAnnotations = (ld.highlight?.trim() && hlIndices.size > 0) || unkIndices.size > 0 || hasRevise;
 
                         if (hasAnnotations) {
                           return (
@@ -2381,9 +2385,17 @@ function AppInner({ currentUser, onSignOut }) {
                                   );
                                 }
 
+                                const arr2 = [...w];
+                                const tajContent = (hasAnyTajweed && !hit && !unk && !isRevWord)
+                                  ? arr2.map((ch, ci) => {
+                                      const style = getTajweedStyleForChar(arr2, ci, { showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone });
+                                      return <span key={ci} style={style || undefined}>{ch}</span>;
+                                    })
+                                  : w;
+
                                 return (
                                   <span key={wi} style={baseStyle}>
-                                    {w}{wi < ayatWords.length - 1 ? ' ' : ''}
+                                    {tajContent}{wi < ayatWords.length - 1 ? ' ' : ''}
                                   </span>
                                 );
                               })}
@@ -2392,22 +2404,16 @@ function AppInner({ currentUser, onSignOut }) {
                         }
 
                         return (
-                          <div className="ayat-arabic">
-                            {(showQalqala || showMadd)
-                              ? (() => { const arr = [...ayat.text]; return arr.map((ch, i) => {
-                                  const q = showQalqala && isQalqala(arr, i);
-                                  const mt = showMadd ? getMaddType(arr, i) : null;
-                                  const iz = showIzhar && isIzhar(arr, i);
-                                  const id = showIdgham && isIdgham(arr, i);
-                                  return q ? <span key={i} style={{color:'#5bc8f5',textShadow:'0 0 6px rgba(91,200,245,.5)'}}>{ch}</span>
-                                       : mt==='muttasil' ? <span key={i} style={{color:'#ff7eb3',textShadow:'0 0 8px rgba(255,126,179,.6)',fontWeight:600}}>{ch}</span>
-                                       : mt==='normal'   ? <span key={i} style={{color:'#f09de0',textShadow:'0 0 6px rgba(240,157,224,.5)'}}>{ch}</span>
-                                       : iz              ? <span key={i} style={{color:'#4caf81',textShadow:'0 0 6px rgba(76,175,129,.5)'}}>{ch}</span>
-                                       : id              ? <span key={i} style={{color:'#ffd166',textShadow:'0 0 6px rgba(255,209,102,.5)'}}>{ch}</span>
-                                       : <span key={i}>{ch}</span>;
-                                }); })()
-                              : ayat.text}
-                          </div>
+                          <ArabicHighlighted
+                            text={ayat.text}
+                            timestamps={null}
+                            currentMs={-1}
+                            showQalqala={showQalqala}
+                            showMadd={showMadd}
+                            showIzhar={showIzhar}
+                            showIdgham={showIdgham}
+                            showTajweedTone={showTajweedTone}
+                          />
                         );
                       };
 

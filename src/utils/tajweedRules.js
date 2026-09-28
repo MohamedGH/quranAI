@@ -734,3 +734,197 @@ export const TAJWEED_RULES = [
     example: 'قَالَ · يَقُولُ · قِيلَ'
   },
 ];
+
+// ─── Default Tajweed Colors & Presets ────────────────────────────────────────
+export const DEFAULT_TAJWEED_COLORS = {
+  qalqala: '#38bdf8',          // Qalqala (Rebond) - Cyan ciel
+  madd_lazim: '#e11d48',       // Madd Lazim (6 temps) - Rouge rubis
+  madd_muttasil: '#f43f5e',    // Madd Muttasil (4-5 temps) - Rose vif
+  madd_munfasil: '#fb923c',    // Madd Munfasil (2, 4, 5 temps) - Orange ambré
+  madd: '#eab308',             // Madd Tabii / Asli (2 temps) - Jaune doré
+  izhar: '#34d399',            // Idh-har (Clarté) - Vert émeraude
+  idgham: '#fbbf24',           // Idgham (Assimilation) - Or ambré
+  idgham_ghunnah: '#fbbf24',   // Idgham avec Ghunnah
+  idgham_no_ghunnah: '#d97706',// Idgham sans Ghunnah
+  iqlab: '#2dd4bf',            // Iqlab (Transformation) - Turquoise
+  ikhfa: '#c084fc',            // Ikhfa (Dissimulation) - Violet
+  ghunnah: '#10b981',          // Ghunnah Mushaddadah - Vert franc
+  tafkhim: '#06b6d4',          // Tafkhim (Graves) - Bleu profond
+  tarqiq: '#f472b6',           // Tarqiq (Aiguës) - Rose pastel
+};
+
+export const TAJWEED_PALETTES = {
+  classic: {
+    id: "classic",
+    name: "Standard Médine (Officiel)",
+    desc: "Couleurs authentiques des Mushafs Tajweed de Médine & Dar Al-Ma'rifah",
+    colors: { ...DEFAULT_TAJWEED_COLORS },
+  },
+  vibrant: {
+    id: "vibrant",
+    name: "Haute Visibilité (Néon)",
+    desc: "Contraste maximal et éclat lumineux pour une distinction rapide",
+    colors: {
+      qalqala: '#00f0ff',
+      madd_lazim: '#ff0055',
+      madd_muttasil: '#ff2d75',
+      madd_munfasil: '#ff9100',
+      madd: '#ffd600',
+      izhar: '#00e676',
+      idgham: '#ffc400',
+      idgham_ghunnah: '#ffab00',
+      idgham_no_ghunnah: '#ff6d00',
+      iqlab: '#00e5ff',
+      ikhfa: '#d500f9',
+      ghunnah: '#00c853',
+      tafkhim: '#00b0ff',
+      tarqiq: '#ff4081',
+    },
+  },
+  pastel: {
+    id: "pastel",
+    name: "Pastel Doux",
+    desc: "Nuances reposantes et feutrées pour les lectures prolongées",
+    colors: {
+      qalqala: '#7dd3fc',
+      madd_lazim: '#fda4af',
+      madd_muttasil: '#fbcfe8',
+      madd_munfasil: '#fed7aa',
+      madd: '#fef08a',
+      izhar: '#a7f3d0',
+      idgham: '#fde68a',
+      idgham_ghunnah: '#fef3c7',
+      idgham_no_ghunnah: '#fcd34d',
+      iqlab: '#99f6e4',
+      ikhfa: '#e9d5ff',
+      ghunnah: '#6ee7b7',
+      tafkhim: '#67e8f9',
+      tarqiq: '#fbcfe8',
+    },
+  },
+  gemstone: {
+    id: "gemstone",
+    name: "Pierres Précieuses (Impérial)",
+    desc: "Émeraude, Rubis, Saphir, Ambre et Améthyste impériaux",
+    colors: {
+      qalqala: '#0284c7',
+      madd_lazim: '#dc2626',
+      madd_muttasil: '#db2777',
+      madd_munfasil: '#d97706',
+      madd: '#ca8a04',
+      izhar: '#059669',
+      idgham: '#b45309',
+      idgham_ghunnah: '#d97706',
+      idgham_no_ghunnah: '#92400e',
+      iqlab: '#0d9488',
+      ikhfa: '#7e22ce',
+      ghunnah: '#15803d',
+      tafkhim: '#0369a1',
+      tarqiq: '#be185d',
+    },
+  },
+  golden: {
+    id: "golden",
+    name: "Or & Enluminures",
+    desc: "Palette d'or, bronze et reflets précieux pour une lecture noble",
+    colors: {
+      qalqala: '#38bdf8',
+      madd_lazim: '#e11d48',
+      madd_muttasil: '#f43f5e',
+      madd_munfasil: '#f59e0b',
+      madd: '#ffd700',
+      izhar: '#10b981',
+      idgham: '#d4af37',
+      idgham_ghunnah: '#eab308',
+      idgham_no_ghunnah: '#b45309',
+      iqlab: '#14b8a6',
+      ikhfa: '#a855f7',
+      ghunnah: '#059669',
+      tafkhim: '#0284c7',
+      tarqiq: '#ec4899',
+    },
+  },
+};
+
+export function getActiveTajweedColors(paletteId = 'classic', customColors = {}) {
+  const base = TAJWEED_PALETTES[paletteId]?.colors || TAJWEED_PALETTES.classic.colors;
+  return { ...base, ...(customColors || {}) };
+}
+
+// ─── Standard Tajweed Character Styling Helper ──────────────────────────────
+export function getTajweedStyleForChar(fullChars, fullIdx, options = {}) {
+  const {
+    showQalqala,
+    showMadd,
+    showIzhar,
+    showIdgham,
+    showTajweedTone,
+    palette = 'classic',
+    customColors = {},
+    colors = null,
+  } = options;
+
+  if (!fullChars || fullIdx < 0 || fullIdx >= fullChars.length) return null;
+
+  const activeColors = colors || getActiveTajweedColors(palette, customColors);
+
+  const isQalqalaOn = showQalqala && isQalqala(fullChars, fullIdx);
+  const maddType    = showMadd ? getMaddType(fullChars, fullIdx) : null;
+  const izharOn     = showIzhar && isIzhar(fullChars, fullIdx);
+  const idghamOn    = showIdgham && isIdgham(fullChars, fullIdx);
+  const iqlabOn     = (showIzhar || showIdgham) && isIqlab(fullChars, fullIdx);
+  const ikhfaOn     = (showIzhar || showIdgham) && isIkhfa(fullChars, fullIdx);
+  const ghunnahOn   = isGhunnah(fullChars, fullIdx);
+  const tafkhimOn   = showTajweedTone && isTafkhim(fullChars, fullIdx);
+  const tarqiqOn    = showTajweedTone && isTarqiq(fullChars, fullIdx);
+
+  if (isQalqalaOn) {
+    const c = activeColors.qalqala || DEFAULT_TAJWEED_COLORS.qalqala;
+    return { color: c, textShadow: `0 0 6px ${c}88`, fontWeight: 600 };
+  }
+  if (maddType === 'madd_lazim') {
+    const c = activeColors.madd_lazim || DEFAULT_TAJWEED_COLORS.madd_lazim;
+    return { color: c, textShadow: `0 0 8px ${c}99`, fontWeight: 700 };
+  }
+  if (maddType === 'madd_muttasil') {
+    const c = activeColors.madd_muttasil || DEFAULT_TAJWEED_COLORS.madd_muttasil;
+    return { color: c, textShadow: `0 0 8px ${c}99`, fontWeight: 600 };
+  }
+  if (maddType === 'madd_munfasil') {
+    const c = activeColors.madd_munfasil || DEFAULT_TAJWEED_COLORS.madd_munfasil;
+    return { color: c, textShadow: `0 0 6px ${c}88`, fontWeight: 600 };
+  }
+  if (maddType === 'madd' || maddType === 'normal') {
+    const c = activeColors.madd || DEFAULT_TAJWEED_COLORS.madd;
+    return { color: c, textShadow: `0 0 6px ${c}88` };
+  }
+  if (izharOn) {
+    const c = activeColors.izhar || DEFAULT_TAJWEED_COLORS.izhar;
+    return { color: c, textShadow: `0 0 6px ${c}88`, fontWeight: 600 };
+  }
+  if (idghamOn) {
+    const c = activeColors.idgham || DEFAULT_TAJWEED_COLORS.idgham;
+    return { color: c, textShadow: `0 0 6px ${c}88`, fontWeight: 600 };
+  }
+  if (iqlabOn) {
+    const c = activeColors.iqlab || DEFAULT_TAJWEED_COLORS.iqlab;
+    return { color: c, textShadow: `0 0 6px ${c}88`, fontWeight: 600 };
+  }
+  if (ikhfaOn) {
+    const c = activeColors.ikhfa || DEFAULT_TAJWEED_COLORS.ikhfa;
+    return { color: c, textShadow: `0 0 6px ${c}88`, fontWeight: 600 };
+  }
+  if (ghunnahOn && (showIzhar || showIdgham)) {
+    const c = activeColors.ghunnah || DEFAULT_TAJWEED_COLORS.ghunnah;
+    return { color: c, textShadow: `0 0 6px ${c}88` };
+  }
+  if (tafkhimOn) {
+    const c = activeColors.tafkhim || DEFAULT_TAJWEED_COLORS.tafkhim;
+    return { color: c, textShadow: `0 0 6px ${c}88`, fontWeight: 600 };
+  }
+  if (tarqiqOn) {
+    const c = activeColors.tarqiq || DEFAULT_TAJWEED_COLORS.tarqiq;
+    return { color: c, textShadow: `0 0 6px ${c}88` };
+  }
+  return null;
+}

@@ -1,5 +1,9 @@
 import React, { useState } from "react";
+import { useSelector } from "react-redux";
+import { sel } from "../../store.js";
 import { masteryColor } from "./Mastery.jsx";
+import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
+import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
 
 export function SurahHeader({
   selectedSurah,
@@ -63,6 +67,11 @@ export function SurahHeader({
   const [showTajweedDrawer, setShowTajweedDrawer] = useState(false);
   const [showOptionsDrawer, setShowOptionsDrawer] = useState(false);
   const [showLangDrawer, setShowLangDrawer] = useState(false);
+  const [showColorPickerModal, setShowColorPickerModal] = useState(false);
+
+  const tajweedPalette = useSelector(sel.tajweedPalette) || "classic";
+  const tajweedCustomColors = useSelector(sel.tajweedCustomColors) || {};
+  const activeTjColors = getActiveTajweedColors(tajweedPalette, tajweedCustomColors);
 
   if (!selectedSurah) return null;
 
@@ -399,11 +408,11 @@ export function SurahHeader({
 
           <div className="m-tajweed-rules-list">
             {[
-              { toggle: toggleTajweedTone, on: showTajweedTone, label: "تفخيم / ترقيق", sub: "Graves & Aiguës (Tafkhīm / Tarqīq)", color: "#06b6d4", bg: "rgba(6,182,212,.18)" },
-              { toggle: toggleQalqala, on: showQalqala, label: "قلقلة", sub: "Qalqala (Rebond)", color: "#38bdf8", bg: "rgba(56,189,248,.18)" },
-              { toggle: toggleMadd,    on: showMadd,    label: "مَدّ",   sub: "Madd (Prolongation)", color: "#fb923c", bg: "rgba(251,146,60,.18)" },
-              { toggle: toggleIzhar,   on: showIzhar,   label: "إظهار", sub: "Idh-har (Clarté)",   color: "#34d399", bg: "rgba(52,211,153,.18)" },
-              { toggle: toggleIdgham,  on: showIdgham,  label: "إدغام", sub: "Idgham (Assimilation)", color: "#fbbf24", bg: "rgba(251,191,36,.18)" },
+              { toggle: toggleTajweedTone, on: showTajweedTone, label: "تفخيم / ترقيق", sub: "Graves & Aiguës (Tafkhīm / Tarqīq)", color: activeTjColors.tafkhim || "#06b6d4", bg: `${activeTjColors.tafkhim || "#06b6d4"}2e` },
+              { toggle: toggleQalqala, on: showQalqala, label: "قلقلة", sub: "Qalqala (Rebond)", color: activeTjColors.qalqala || "#38bdf8", bg: `${activeTjColors.qalqala || "#38bdf8"}2e` },
+              { toggle: toggleMadd,    on: showMadd,    label: "مَدّ",   sub: "Madd (Prolongation)", color: activeTjColors.madd_munfasil || "#fb923c", bg: `${activeTjColors.madd_munfasil || "#fb923c"}2e` },
+              { toggle: toggleIzhar,   on: showIzhar,   label: "إظهار", sub: "Idh-har (Clarté)",   color: activeTjColors.izhar || "#34d399", bg: `${activeTjColors.izhar || "#34d399"}2e` },
+              { toggle: toggleIdgham,  on: showIdgham,  label: "إدغام", sub: "Idgham (Assimilation)", color: activeTjColors.idgham || "#fbbf24", bg: `${activeTjColors.idgham || "#fbbf24"}2e` },
             ].map(({ toggle, on, label, sub, color, bg }) => (
               <button
                 key={label}
@@ -415,8 +424,8 @@ export function SurahHeader({
                 }}
               >
                 <div className="m-tajweed-rule-left">
-                  <span className="m-tajweed-rule-dot" style={{ background: on ? color : 'var(--text3)' }} />
-                  <span className="m-tajweed-rule-arabic">{label}</span>
+                  <span className="m-tajweed-rule-dot" style={{ background: on ? color : 'var(--text3)', boxShadow: on ? `0 0 8px ${color}88` : 'none' }} />
+                  <span className="m-tajweed-rule-arabic" style={{ color: on ? color : undefined }}>{label}</span>
                   <span className="m-tajweed-rule-sub">({sub})</span>
                 </div>
                 <div className={`m-toggle-switch ${on ? 'on' : ''}`} style={{ borderColor: on ? color : undefined }}>
@@ -426,7 +435,33 @@ export function SurahHeader({
             ))}
           </div>
 
-          <div className="m-drawer-footer-actions">
+          <div className="m-drawer-footer-actions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button
+              className="m-btn-choose-colors"
+              onClick={() => {
+                setShowTajweedDrawer(false);
+                setShowColorPickerModal(true);
+              }}
+              style={{
+                width: "100%",
+                padding: "9px 12px",
+                background: "rgba(212, 175, 55, 0.15)",
+                border: "1px solid rgba(212, 175, 55, 0.4)",
+                borderRadius: 8,
+                color: "#ffd700",
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+              }}
+            >
+              <span>🎨</span>
+              <span>PERSONNALISER LES COULEURS DE TAJWEED</span>
+            </button>
+
             <button
               className="m-btn-toggle-all"
               onClick={() => {
@@ -605,6 +640,12 @@ export function SurahHeader({
           )}
         </div>
       )}
+
+      {/* ── Tajweed Color Customizer Modal ── */}
+      <TajweedColorPickerModal
+        isOpen={showColorPickerModal}
+        onClose={() => setShowColorPickerModal(false)}
+      />
     </div>
   );
 }

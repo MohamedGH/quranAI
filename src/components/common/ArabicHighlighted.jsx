@@ -1,11 +1,26 @@
 import React, { useMemo, useRef, useEffect } from "react";
+import { useSelector } from "react-redux";
+import { sel } from "../../store.js";
 import { fixChars } from "../../utils/reciterAudio.js";
-import { isQalqala, getMaddType, isIzhar, isIdgham, isIqlab, isIkhfa, isGhunnah, isTafkhim, isTarqiq } from "../../utils/tajweedRules.js";
+import {
+  isQalqala,
+  getMaddType,
+  isIzhar,
+  isIdgham,
+  isIqlab,
+  isIkhfa,
+  isGhunnah,
+  isTafkhim,
+  isTarqiq,
+  getTajweedStyleForChar,
+  getActiveTajweedColors,
+} from "../../utils/tajweedRules.js";
 
 // ─── PlayingArabicHighlighted — zero-rerender highlight via DOM refs ─────────
 // Renders chars once, then updates active/done classes via direct RAF + DOM refs only.
 export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlighted({
-  text, timestamps, mode, playingPart, ld, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone
+  text, timestamps, mode, playingPart, ld, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone,
+  palette, customColors, colors
 }) {
   const containerRef  = useRef(null);
   const charDataRef   = useRef(null); // flat array of {start,end,el}
@@ -95,30 +110,57 @@ export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlig
   }, [mode, timestamps, ld, playingPart]);
 
   // Render static chars (no active/done — DOM handles it)
-  return <ArabicHighlighted ref={containerRef} text={text} timestamps={timestamps}
-    currentMs={-1} showQalqala={showQalqala} showMadd={showMadd}
-    showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
-}, (prev, next) =>
-  prev.text === next.text &&
-  prev.timestamps === next.timestamps &&
-  prev.mode === next.mode &&
-  prev.showQalqala === next.showQalqala &&
-  prev.showMadd === next.showMadd &&
-  prev.showIzhar === next.showIzhar &&
-  prev.showIdgham === next.showIdgham &&
-  prev.showTajweedTone === next.showTajweedTone);
+  return (
+    <ArabicHighlighted
+      ref={containerRef}
+      text={text}
+      timestamps={timestamps}
+      currentMs={-1}
+      showQalqala={showQalqala}
+      showMadd={showMadd}
+      showIzhar={showIzhar}
+      showIdgham={showIdgham}
+      showTajweedTone={showTajweedTone}
+      palette={palette}
+      customColors={customColors}
+      colors={colors}
+    />
+  );
+});
 
 export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHighlighted({
-  text, timestamps, currentMs, rangeStartMs, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone
+  text, timestamps, currentMs, rangeStartMs, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone,
+  palette, customColors, colors
 }, ref) {
-  if (!timestamps?.words) return <div className="ayat-arabic">{text}</div>;
+  let storePalette = "classic";
+  let storeCustomColors = {};
+  try {
+    storePalette = useSelector(sel.tajweedPalette) || "classic";
+    storeCustomColors = useSelector(sel.tajweedCustomColors) || {};
+  } catch {
+    // Fallback if rendered outside Provider
+  }
 
-  // Pre-compute tajweed styles and fixed chars once per timestamps+tajweed change
+  const activePalette = palette || storePalette;
+  const activeCustom = customColors || storeCustomColors;
+  const activeColors = colors || getActiveTajweedColors(activePalette, activeCustom);
+
+  const hasTajweed = showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone;
+
+  // Pre-compute tajweed styles and fixed chars once per text/timestamps+tajweed change
   // We reconstruct the full sequence across all words so cross-word rules (Idgham, Madd Munfasil) are accurately detected.
   const wordData = useMemo(() => {
-    if (!timestamps?.words) return [];
+    let wordsWithChars = [];
 
-    const wordsWithChars = timestamps.words.map(w => fixChars(w.chars || []));
+    if (timestamps?.words && timestamps.words.length > 0) {
+      wordsWithChars = timestamps.words.map(w => fixChars(w.chars || []));
+    } else if (text) {
+      const rawWords = text.split(' ');
+      wordsWithChars = rawWords.map(w => [...w].map(ch => ({ char: ch, start: 0, end: 0 })));
+    } else {
+      return [];
+    }
+
     const fullChars = [];
     const wordCharMap = []; // [wordIdx][charIdx] => index in fullChars
 
@@ -133,52 +175,30 @@ export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHigh
       }
     });
 
+    const tajweedOptions = {
+      showQalqala,
+      showMadd,
+      showIzhar,
+      showIdgham,
+      showTajweedTone,
+      colors: activeColors,
+    };
+
     return wordsWithChars.map((chars, wi) => {
       return chars.map((c, ci) => {
         const fullIdx = wordCharMap[wi]?.[ci] ?? -1;
-        if (fullIdx === -1) return { char: c.char, start: c.start, end: c.end };
+        if (fullIdx === -1) return { char: c.char, start: c.start, end: c.end, tajStyle: undefined };
 
-        const isQalqalaOn = showQalqala && isQalqala(fullChars, fullIdx);
-        const maddType    = showMadd ? getMaddType(fullChars, fullIdx) : null;
-        const izharOn     = showIzhar && isIzhar(fullChars, fullIdx);
-        const idghamOn    = showIdgham && isIdgham(fullChars, fullIdx);
-        const iqlabOn     = (showIzhar || showIdgham) && isIqlab(fullChars, fullIdx);
-        const ikhfaOn     = (showIzhar || showIdgham) && isIkhfa(fullChars, fullIdx);
-        const ghunnahOn   = isGhunnah(fullChars, fullIdx);
-        const tafkhimOn   = showTajweedTone && isTafkhim(fullChars, fullIdx);
-        const tarqiqOn    = showTajweedTone && isTarqiq(fullChars, fullIdx);
-
-        let tajStyle = undefined;
-        if (isQalqalaOn) {
-          tajStyle = { color: '#38bdf8', textShadow: '0 0 6px rgba(56,189,248,.55)', fontWeight: 600 };
-        } else if (maddType === 'madd_lazim') {
-          tajStyle = { color: '#e11d48', textShadow: '0 0 8px rgba(225,29,72,.6)', fontWeight: 700 };
-        } else if (maddType === 'madd_muttasil') {
-          tajStyle = { color: '#f43f5e', textShadow: '0 0 8px rgba(244,63,94,.6)', fontWeight: 600 };
-        } else if (maddType === 'madd_munfasil') {
-          tajStyle = { color: '#fb923c', textShadow: '0 0 6px rgba(251,146,60,.5)', fontWeight: 600 };
-        } else if (maddType === 'madd' || maddType === 'normal') {
-          tajStyle = { color: '#eab308', textShadow: '0 0 6px rgba(234,179,8,.5)' };
-        } else if (izharOn) {
-          tajStyle = { color: '#34d399', textShadow: '0 0 6px rgba(52,211,153,.55)', fontWeight: 600 };
-        } else if (idghamOn) {
-          tajStyle = { color: '#fbbf24', textShadow: '0 0 6px rgba(251,191,36,.55)', fontWeight: 600 };
-        } else if (iqlabOn) {
-          tajStyle = { color: '#2dd4bf', textShadow: '0 0 6px rgba(45,212,191,.55)', fontWeight: 600 };
-        } else if (ikhfaOn) {
-          tajStyle = { color: '#c084fc', textShadow: '0 0 6px rgba(192,132,252,.55)', fontWeight: 600 };
-        } else if (ghunnahOn && (showIzhar || showIdgham)) {
-          tajStyle = { color: '#10b981', textShadow: '0 0 6px rgba(16,185,129,.55)' };
-        } else if (tafkhimOn) {
-          tajStyle = { color: '#06b6d4', textShadow: '0 0 6px rgba(6,182,212,.55)', fontWeight: 600 };
-        } else if (tarqiqOn) {
-          tajStyle = { color: '#f472b6', textShadow: '0 0 6px rgba(244,114,182,.45)' };
-        }
+        const tajStyle = hasTajweed ? getTajweedStyleForChar(fullChars, fullIdx, tajweedOptions) || undefined : undefined;
 
         return { char: c.char, start: c.start, end: c.end, tajStyle };
       });
     });
-  }, [timestamps, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone]);
+  }, [text, timestamps, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone, hasTajweed, activeColors]);
+
+  if (!wordData || wordData.length === 0) {
+    return <div className="ayat-arabic" ref={ref}>{text}</div>;
+  }
 
   // Static render — no active/done classes here (DOM updates them for playing mode)
   return (
@@ -193,12 +213,4 @@ export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHigh
       ))}
     </div>
   );
-}), (prev, next) =>
-  prev.text === next.text &&
-  prev.timestamps === next.timestamps &&
-  prev.currentMs === next.currentMs &&
-  prev.showQalqala === next.showQalqala &&
-  prev.showMadd === next.showMadd &&
-  prev.showIzhar === next.showIzhar &&
-  prev.showIdgham === next.showIdgham &&
-  prev.showTajweedTone === next.showTajweedTone);
+}));

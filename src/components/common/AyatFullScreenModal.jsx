@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ArabicHighlighted, PlayingArabicHighlighted } from "./ArabicHighlighted.jsx";
 import { Submenu } from "../modes/Submenu.jsx";
-import { isQalqala, getMaddType, isIzhar, isIdgham, isTafkhim, isTarqiq } from "../../utils/tajweedRules.js";
+import { isQalqala, getMaddType, isIzhar, isIdgham, isTafkhim, isTarqiq, getTajweedStyleForChar } from "../../utils/tajweedRules.js";
 import { arabicRoot } from "../../utils/arabicUtils.js";
 import { segmentAyatTranslation } from "../../utils/translationUtils.js";
+import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
 
 // Helper for Arabic Eastern digits: e.g. 108 -> ۱۰۸
 function toArabicDigits(num) {
@@ -107,6 +108,7 @@ export function AyatFullScreenModal({
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [showTajweedBar, setShowTajweedBar] = useState(false);
   const [showTajweedGuide, setShowTajweedGuide] = useState(false);
+  const [showColorPickerModal, setShowColorPickerModal] = useState(false);
   const [showReciterModal, setShowReciterModal] = useState(false);
   const [reciterSearch, setReciterSearch] = useState("");
   const scrollContainerRef = useRef(null);
@@ -369,23 +371,10 @@ export function AyatFullScreenModal({
 
   // Tajweed character rendering helper
   const renderTajweedChar = (ch, ci, arr2) => {
-    const q   = showQalqala && isQalqala(arr2, ci);
-    const mt  = showMadd ? getMaddType(arr2, ci) : null;
-    const iz  = showIzhar && isIzhar(arr2, ci);
-    const id  = showIdgham && isIdgham(arr2, ci);
-    const taf = showTajweedTone && isTafkhim(arr2, ci);
-    const tar = showTajweedTone && isTarqiq(arr2, ci);
-
-    if (q) return <span key={ci} style={{ color: "#38bdf8", textShadow: "0 0 6px rgba(56,189,248,.6)", fontWeight: 600 }}>{ch}</span>;
-    if (mt === "madd_lazim") return <span key={ci} style={{ color: "#e11d48", textShadow: "0 0 8px rgba(225,29,72,.6)", fontWeight: 700 }}>{ch}</span>;
-    if (mt === "madd_muttasil" || mt === "muttasil") return <span key={ci} style={{ color: "#f43f5e", textShadow: "0 0 8px rgba(244,63,94,.6)", fontWeight: 600 }}>{ch}</span>;
-    if (mt === "madd_munfasil") return <span key={ci} style={{ color: "#fb923c", textShadow: "0 0 6px rgba(251,146,60,.5)", fontWeight: 600 }}>{ch}</span>;
-    if (mt === "madd" || mt === "normal") return <span key={ci} style={{ color: "#eab308", textShadow: "0 0 6px rgba(234,179,8,.5)" }}>{ch}</span>;
-    if (iz) return <span key={ci} style={{ color: "#34d399", textShadow: "0 0 6px rgba(52,211,153,.55)", fontWeight: 600 }}>{ch}</span>;
-    if (id) return <span key={ci} style={{ color: "#fbbf24", textShadow: "0 0 6px rgba(251,191,36,.55)", fontWeight: 600 }}>{ch}</span>;
-    if (taf) return <span key={ci} style={{ color: "#06b6d4", textShadow: "0 0 6px rgba(6,182,212,.55)", fontWeight: 600 }}>{ch}</span>;
-    if (tar) return <span key={ci} style={{ color: "#f472b6", textShadow: "0 0 6px rgba(244,114,182,.45)" }}>{ch}</span>;
-    return <span key={ci}>{ch}</span>;
+    const tajStyle = (showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone)
+      ? getTajweedStyleForChar(arr2, ci, { showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone })
+      : null;
+    return <span key={ci} style={tajStyle || undefined}>{ch}</span>;
   };
 
   // Full Arabic Text Renderer with all display modes
@@ -1573,6 +1562,29 @@ export function AyatFullScreenModal({
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {/* Palette & Custom Colors Button */}
+            <button
+              id="btn-fs-tajweed-palette"
+              onClick={() => setShowColorPickerModal(true)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "3px 8px",
+                borderRadius: 4,
+                border: "1px solid rgba(212,175,55,0.4)",
+                background: "rgba(212,175,55,0.15)",
+                color: "#ffd700",
+                fontSize: 10,
+                fontFamily: "'Cinzel',serif",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              <span>🎨</span>
+              <span>Couleurs</span>
+            </button>
+
             {/* Guide Button */}
             <button
               id="btn-fs-tajweed-guide"
@@ -1592,7 +1604,7 @@ export function AyatFullScreenModal({
               }}
             >
               <span>📖</span>
-              <span>Guide des Couleurs</span>
+              <span>Guide</span>
             </button>
 
             <button
@@ -2663,6 +2675,12 @@ export function AyatFullScreenModal({
           </button>
         </div>
       </footer>
+
+      {/* ── Tajweed Color Customizer Modal ── */}
+      <TajweedColorPickerModal
+        isOpen={showColorPickerModal}
+        onClose={() => setShowColorPickerModal(false)}
+      />
     </div>
   );
 }

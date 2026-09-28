@@ -127,4 +127,73 @@ describe("Tajweed Rule Detection Engine", () => {
     store.dispatch(uiActions.toggleTajweedTone());
     expect(sel.showTajweedTone(store.getState())).toBe(initial);
   });
+
+  it("applies getTajweedStyleForChar correctly to words across all Tajweed rules in main text", async () => {
+    const { getTajweedStyleForChar } = await import("../src/utils/tajweedRules.js");
+
+    // 1. Qalqala on Sakin Dal (دْ)
+    const qalqalaWord = ["ق", "َ", "د", "ْ"];
+    const dalStyle = getTajweedStyleForChar(qalqalaWord, 2, { showQalqala: true });
+    expect(dalStyle).not.toBeNull();
+    expect(dalStyle.color).toBe("#38bdf8");
+
+    // 2. Madd Lazim on Alif with Madd mark (~ or ٓ)
+    const maddWord = ["ال", "ض", "َّ", "ا", "ٓ", "ل", "ّ", "ِ", "ي", "ن", "َ"];
+    const maddStyle = getTajweedStyleForChar(maddWord, 3, { showMadd: true });
+    expect(maddStyle).not.toBeNull();
+    expect(maddStyle.color).toBeDefined();
+
+    // 3. Tafkhim on Saad (ص)
+    const tafkhimWord = ["ص", "ِ", "ر", "َ", "ٰ", "ط", "َ"];
+    const saadStyle = getTajweedStyleForChar(tafkhimWord, 0, { showTajweedTone: true });
+    expect(saadStyle).not.toBeNull();
+    expect(saadStyle.color).toBe("#06b6d4");
+
+    // 4. Returns null when rules are toggled off
+    const disabledStyle = getTajweedStyleForChar(tafkhimWord, 0, { showTajweedTone: false });
+    expect(disabledStyle).toBeNull();
+  });
+
+  it("supports customizable Tajweed color palettes and custom rule colors", async () => {
+    const { TAJWEED_PALETTES, getActiveTajweedColors, getTajweedStyleForChar } = await import("../src/utils/tajweedRules.js");
+    const { store, uiActions, sel } = await import("../src/store.js");
+
+    // 1. Verify standard presets exist
+    expect(TAJWEED_PALETTES.classic).toBeDefined();
+    expect(TAJWEED_PALETTES.vibrant).toBeDefined();
+    expect(TAJWEED_PALETTES.pastel).toBeDefined();
+    expect(TAJWEED_PALETTES.gemstone).toBeDefined();
+    expect(TAJWEED_PALETTES.golden).toBeDefined();
+
+    // 2. Test getActiveTajweedColors
+    const classicColors = getActiveTajweedColors("classic");
+    expect(classicColors.qalqala).toBe("#38bdf8");
+
+    const vibrantColors = getActiveTajweedColors("vibrant");
+    expect(vibrantColors.qalqala).toBe("#00f0ff");
+
+    // 3. Test overriding with custom colors
+    const customMerged = getActiveTajweedColors("classic", { qalqala: "#ff007f" });
+    expect(customMerged.qalqala).toBe("#ff007f");
+
+    // 4. Test Redux store palette actions
+    store.dispatch(uiActions.setTajweedPalette("vibrant"));
+    expect(sel.tajweedPalette(store.getState())).toBe("vibrant");
+
+    store.dispatch(uiActions.setTajweedCustomColor({ ruleId: "qalqala", color: "#123456" }));
+    expect(sel.tajweedCustomColors(store.getState()).qalqala).toBe("#123456");
+
+    // 5. Test getTajweedStyleForChar using custom colors
+    const qalqalaWord = ["ق", "َ", "د", "ْ"];
+    const styledWithCustom = getTajweedStyleForChar(qalqalaWord, 2, {
+      showQalqala: true,
+      customColors: { qalqala: "#123456" },
+    });
+    expect(styledWithCustom.color).toBe("#123456");
+
+    // Reset back
+    store.dispatch(uiActions.resetTajweedColors());
+    expect(sel.tajweedPalette(store.getState())).toBe("classic");
+    expect(sel.tajweedCustomColors(store.getState())).toEqual({});
+  });
 });

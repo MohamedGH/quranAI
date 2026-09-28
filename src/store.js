@@ -19,6 +19,8 @@ const uiSlice = createSlice({
     showIzhar:     load("quran_showIzhar", false),
     showIdgham:    load("quran_showIdgham", false),
     showTajweedTone: load("quran_showTajweedTone", false),
+    tajweedPalette:  load("quran_tajweedPalette", "classic"), // "classic" | "vibrant" | "pastel" | "gemstone" | "golden"
+    tajweedCustomColors: load("quran_tajweedCustomColors", {}), // { [ruleId]: hexColor }
     announceNum:   load("quran_announceNum", false),
     showParts:     load("quran_showParts", true),
     spellCheck:    load("quran_spellCheck", true),
@@ -43,6 +45,18 @@ const uiSlice = createSlice({
     toggleIdgham:       (s)  => { s.showIdgham= !s.showIdgham; save("quran_showIdgham", s.showIdgham); },
     toggleTajweedTone:  (s)  => { s.showTajweedTone = !s.showTajweedTone; save("quran_showTajweedTone", s.showTajweedTone); },
     setShowTajweedTone: (s, a) => { s.showTajweedTone = !!a.payload; save("quran_showTajweedTone", s.showTajweedTone); },
+    setTajweedPalette:  (s, a) => { s.tajweedPalette = a.payload; save("quran_tajweedPalette", s.tajweedPalette); },
+    setTajweedCustomColor: (s, a) => {
+      // a.payload = { ruleId: string, color: string }
+      s.tajweedCustomColors = { ...s.tajweedCustomColors, [a.payload.ruleId]: a.payload.color };
+      save("quran_tajweedCustomColors", s.tajweedCustomColors);
+    },
+    resetTajweedColors: (s) => {
+      s.tajweedCustomColors = {};
+      s.tajweedPalette = "classic";
+      save("quran_tajweedCustomColors", {});
+      save("quran_tajweedPalette", "classic");
+    },
     toggleAnnounceNum:  (s)  => { s.announceNum = !s.announceNum; save("quran_announceNum", s.announceNum); },
     toggleSpellCheck:   (s)  => { s.spellCheck = !s.spellCheck; save("quran_spellCheck", s.spellCheck); },
     toggleShowParts:    (s)  => { s.showParts = !s.showParts; save("quran_showParts", s.showParts); },
@@ -351,6 +365,8 @@ export const sel = {
   showIzhar:       (s) => s.ui.showIzhar,
   showIdgham:      (s) => s.ui.showIdgham,
   showTajweedTone: (s) => s.ui.showTajweedTone,
+  tajweedPalette:  (s) => s.ui.tajweedPalette || 'classic',
+  tajweedCustomColors: (s) => s.ui.tajweedCustomColors || {},
   announceNum:     (s) => s.ui.announceNum,
   spellCheck:      (s) => s.ui.spellCheck,
   showParts:       (s) => s.ui.showParts,

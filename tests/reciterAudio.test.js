@@ -52,4 +52,16 @@ describe("Reciter & Audio Utilities", () => {
     expect(parsed["test:1:1"]).toBeDefined();
     expect(parsed["test:1:1"].words.length).toBe(1);
   });
+
+  it("handles verse and surah caching with multi-tier storage", async () => {
+    const { idbGetQuran, idbSetQuran } = await import("../src/utils/reciterAudio.js");
+    const testAyats = { number: 1, ayahs: [{ numberInSurah: 1, text: "بِسْمِ اللَّهِ" }] };
+
+    await idbSetQuran("alafasy:1", testAyats);
+    const retrieved = await idbGetQuran("alafasy:1");
+
+    expect(retrieved).not.toBeNull();
+    expect(retrieved.number).toBe(1);
+    expect(retrieved.ayahs[0].text).toBe("بِسْمِ اللَّهِ");
+  });
 });

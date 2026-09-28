@@ -47,7 +47,22 @@ async function idbSet(key, buf) {
   });
 }
 
-const urlToKey = url => url.split('/').pop(); // "7456.mp3"
+const urlToKey = (url) => {
+  if (!url) return "";
+  try {
+    const parts = url.split("/").filter(Boolean);
+    if (parts.length === 1) return parts[0];
+    const filename = parts.pop() || "";
+    const reciter = parts.pop() || "default";
+    const bitrate = parts.pop() || "128";
+    if (filename.endsWith(".mp3")) {
+      return `${reciter}_${bitrate}_${filename}`;
+    }
+    return filename;
+  } catch {
+    return url.split("/").pop() || url;
+  }
+};
 
 function isAudioRequest(url) {
   return (url.includes(PROXY_PATH) || url.startsWith(CDN_ORIGIN)) && url.endsWith('.mp3');

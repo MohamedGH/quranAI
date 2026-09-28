@@ -38,7 +38,7 @@ export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlig
 
   charDataRef.current = charData;
 
-  // Direct DOM highlight loop driven by RAF — zero React re-renders, zero Redux overhead
+  // Direct DOM highlight loop driven by RAF + events — zero React re-renders, zero Redux overhead
   useEffect(() => {
     const flat = charDataRef.current;
     if (!flat || !containerRef.current) return;
@@ -53,55 +53,85 @@ export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlig
     let rafId = null;
     let lastMs = -1;
 
-    const tick = () => {
-      let curMs = 0;
+    const getCurMs = () => {
       if (mode === 'main') {
         const audio = window.__quranMainAudio;
-        curMs = audio ? audio.currentTime * 1000 : 0;
+        return audio ? audio.currentTime * 1000 : 0;
       } else if (mode === 'part') {
         const audio = window.__quranPartAudio;
-        curMs = audio ? audio.currentTime * 1000 : 0;
+        return audio ? audio.currentTime * 1000 : 0;
       } else {
         const audio = window.__quranLocalAudio;
-        curMs = audio ? audio.currentTime * 1000 : (window.__quranLocalMs ?? 0);
+        return audio ? audio.currentTime * 1000 : (window.__quranLocalMs ?? 0);
       }
+    };
 
-      // Only perform DOM class updates if playback time moved significantly
-      if (Math.abs(curMs - lastMs) >= 12) {
-        lastMs = curMs;
-        const spans = containerRef.current ? containerRef.current.querySelectorAll('.char-span') : null;
-        if (spans && spans.length === flat.length) {
-          for (let i = 0; i < flat.length; i++) {
-            const { start, end } = flat[i];
-            const active = curMs >= start && curMs <= end;
-            const done   = curMs > end && curMs > 0 && (rangeStartMs == null || end > rangeStartMs);
-            const el = spans[i];
-            if (active) {
-              if (!el.classList.contains('char-active')) {
-                el.classList.add('char-active');
-                el.classList.remove('char-done');
-              }
-            } else if (done) {
-              if (!el.classList.contains('char-done')) {
-                el.classList.add('char-done');
-                el.classList.remove('char-active');
-              }
-            } else {
-              if (el.classList.contains('char-active') || el.classList.contains('char-done')) {
-                el.classList.remove('char-active', 'char-done');
-              }
+    const updateDomClasses = (curMs) => {
+      const spans = containerRef.current ? containerRef.current.querySelectorAll('.char-span') : null;
+      if (spans && spans.length === flat.length) {
+        for (let i = 0; i < flat.length; i++) {
+          const { start, end } = flat[i];
+          const active = curMs >= start && curMs <= end;
+          const done   = curMs > end && curMs > 0 && (rangeStartMs == null || end > rangeStartMs);
+          const el = spans[i];
+          if (active) {
+            if (!el.classList.contains('char-active')) {
+              el.classList.add('char-active');
+              el.classList.remove('char-done');
+            }
+          } else if (done) {
+            if (!el.classList.contains('char-done')) {
+              el.classList.add('char-done');
+              el.classList.remove('char-active');
+            }
+          } else {
+            if (el.classList.contains('char-active') || el.classList.contains('char-done')) {
+              el.classList.remove('char-active', 'char-done');
             }
           }
         }
       }
+    };
 
+    const tick = () => {
+      const curMs = getCurMs();
+      if (Math.abs(curMs - lastMs) >= 12) {
+        lastMs = curMs;
+        updateDomClasses(curMs);
+      }
       rafId = requestAnimationFrame(tick);
     };
 
     rafId = requestAnimationFrame(tick);
 
+    // Event-based immediate sync for mobile wake/focus/timeupdate
+    const handleSync = () => {
+      const curMs = getCurMs();
+      lastMs = curMs;
+      updateDomClasses(curMs);
+    };
+
+    document.addEventListener('visibilitychange', handleSync);
+    window.addEventListener('pageshow', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    const targetAudio = mode === 'main' ? window.__quranMainAudio : mode === 'part' ? window.__quranPartAudio : window.__quranLocalAudio;
+    if (targetAudio) {
+      targetAudio.addEventListener('timeupdate', handleSync);
+      targetAudio.addEventListener('seeked', handleSync);
+      targetAudio.addEventListener('play', handleSync);
+    }
+
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
+      document.removeEventListener('visibilitychange', handleSync);
+      window.removeEventListener('pageshow', handleSync);
+      window.removeEventListener('focus', handleSync);
+      if (targetAudio) {
+        targetAudio.removeEventListener('timeupdate', handleSync);
+        targetAudio.removeEventListener('seeked', handleSync);
+        targetAudio.removeEventListener('play', handleSync);
+      }
       if (containerRef.current) {
         const spans = containerRef.current.querySelectorAll('.char-span');
         spans.forEach(s => s.classList.remove('char-active', 'char-done'));

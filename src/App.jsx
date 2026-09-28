@@ -480,7 +480,6 @@ function AppInner({ currentUser, onSignOut }) {
   const [wbwTranslations, setWbwTranslations] = useState({}); // { 'fr:2': { [ayahNum]: [word1, word2] } }
   const [activePageCoran,  setactivePageCoran]  = useState(null);
   React.useEffect(() => { safeSetItem('quran_page_mode', pageMode); }, [pageMode]);
-  const rafRef       = useRef(null);
   const wakeLockRef  = useRef(null);
 
   const [showRappel, setShowRappel] = useState(false);
@@ -601,9 +600,33 @@ function AppInner({ currentUser, onSignOut }) {
   const silentAudioRef  = useRef(null);   // <audio> silencieux en boucle
   const prefetchRef     = useRef(null);   // <audio> de pré-chargement
   const isPlayingRef    = useRef(false);  // ref miroir pour closures
+  const rafRef          = useRef(null);
+  const lastTimeDispatchRef = useRef(0);
 
   // Maintenir ref miroir de isMainPlaying (utilisable dans les callbacks)
   useEffect(() => { isPlayingRef.current = isMainPlaying; }, [isMainPlaying]);
+
+  const startRaf = useCallback(() => {
+    const tick = () => {
+      if (mainAudioRef.current) {
+        const ms = mainAudioRef.current.currentTime * 1000;
+        mainCurrentMsRef.current = ms;
+        const now = performance.now();
+        // Throttle Redux dispatch to 4Hz (every 250ms) to avoid high-frequency store churn
+        if (now - lastTimeDispatchRef.current >= 250) {
+          lastTimeDispatchRef.current = now;
+          setMainCurrentMs(ms);
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  const stopRaf = useCallback(() => {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+  }, []);
 
   // Robust "resume playback" helper — tries immediately, and again as soon as the
   // audio element signals it's actually ready (more reliable in background than a
@@ -618,6 +641,51 @@ function AppInner({ currentUser, onSignOut }) {
       a.addEventListener('canplay', onReady, { once: true });
     }
   }, []);
+
+  const playMainAyat = useCallback((idx) => {
+    if (!ayats.length) return;
+    const i = Math.max(0, Math.min(idx, ayats.length - 1));
+    const changed = i !== mainAyatIdx;
+    setMainAyatIdx(i); setPlayingAyatNum(ayats[i]?.numberInSurah);
+    if (changed) setMainCurrentMs(0); // only reset elapsed time on an actual ayat change, not on resume
+    const targetAyat = ayats[i];
+    // Page mode: if the target ayat lives on a different page than the one currently
+    // displayed, switch page first (its DOM node doesn't exist until we do) then scroll to it.
+    if (pageMode && targetAyat?.page != null) {
+      const curPage = activePageCoran ?? ayats[0]?.page;
+      if (targetAyat.page !== curPage) {
+        setactivePageCoran(targetAyat.page);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            ayatRefs.current[targetAyat.numberInSurah]?.scrollIntoView({ behavior: "smooth", block: "center" });
+          });
+        });
+        return;
+      }
+    }
+    if (changed) ayatRefs.current[ayats[i]?.numberInSurah]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [ayats, mainAyatIdx, pageMode, activePageCoran]);
+
+  const handleMainEnded = useCallback(() => {
+    const next = mainAyatIdx + 1;
+    if (loopActive) {
+      const end = Math.min(loopEnd, ayats.length - 1);
+      if (mainAyatIdx < end) {
+        playMainAyat(next); playWhenReady();
+      } else {
+        const nc = loopCount + 1;
+        if (loopMax === 0 || nc < loopMax) {
+          setLoopCount(nc); playMainAyat(loopStart); playWhenReady();
+        } else {
+          setLoopActive(false); setLoopCount(0);
+          setIsMainPlaying(false); setPlayingAyatNum(null); setMainCurrentMs(0);
+        }
+      }
+      return;
+    }
+    if (next < ayats.length) { playMainAyat(next); playWhenReady(); }
+    else { setIsMainPlaying(false); setPlayingAyatNum(null); setMainCurrentMs(0); }
+  }, [mainAyatIdx, ayats, playMainAyat, loopActive, loopStart, loopEnd, loopCount, loopMax, playWhenReady]);
 
   // ── 1. Media Session API ──────────────────────────────────────────
   const updateMediaSession = useCallback((ayat, surah) => {
@@ -685,27 +753,62 @@ function AppInner({ currentUser, onSignOut }) {
     }
   }, [isMainPlaying]);
 
-  // ── 3. visibilitychange — reprend si suspendu par le WebView ──────
+  // ── 3. visibilitychange & Focus recovery — reprend et resynchronise si suspendu ──────
   useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState !== 'visible') return;
+    const syncAudioState = () => {
       const audio = mainAudioRef.current;
-      if (!audio || !isPlayingRef.current) return;
-      // Petit délai pour laisser le WebView se réveiller complètement
-      setTimeout(() => {
-        if (audio.paused && isPlayingRef.current) {
-          audio.play().catch(() => {});
+      if (!audio) return;
+
+      // Resync currentTime and RAF immediately
+      const ms = (audio.currentTime || 0) * 1000;
+      mainCurrentMsRef.current = ms;
+      window.__quranMainMs = ms;
+
+      if (isPlayingRef.current) {
+        startRaf();
+
+        // If audio finished while in background, trigger next ayat
+        if (audio.ended || (audio.duration && audio.currentTime >= audio.duration - 0.25)) {
+          handleMainEnded();
+          return;
         }
+
+        // If paused or stalled while playing state is true, resume cleanly
+        if (audio.paused) {
+          audio.play().catch(() => {
+            // If play rejected, wait for canplay or reload
+            if (audio.readyState < 2) {
+              audio.load();
+              audio.play().catch(() => {});
+            }
+          });
+        }
+
         silentAudioRef.current?.play().catch(() => {});
-        // Re-signaler à Android que le média est actif
+
         if ('mediaSession' in navigator) {
           try { navigator.mediaSession.playbackState = 'playing'; } catch {}
         }
-      }, 300);
+      }
     };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncAudioState();
+        setTimeout(syncAudioState, 200);
+        setTimeout(syncAudioState, 600);
+      }
+    };
+
+    const handleFocus = () => {
+      syncAudioState();
+    };
+
     document.addEventListener('visibilitychange', handleVisibility);
-    // Aussi sur 'resume' pour les WebView qui émettent cet événement
     document.addEventListener('resume', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('pageshow', handleFocus);
+    window.addEventListener('touchstart', handleFocus, { passive: true, once: false });
 
     // Capacitor natif : plus fiable que 'visibilitychange' dans certaines WebView Android
     let removeCapListener = null;
@@ -722,9 +825,12 @@ function AppInner({ currentUser, onSignOut }) {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       document.removeEventListener('resume', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('pageshow', handleFocus);
+      window.removeEventListener('touchstart', handleFocus);
       removeCapListener?.();
     };
-  }, []);
+  }, [handleMainEnded, startRaf]);
 
   // ── 4. Wake Lock API (Chromium WebView récent) ────────────────────
   useEffect(() => {
@@ -749,20 +855,21 @@ function AppInner({ currentUser, onSignOut }) {
   }, [isMainPlaying]);
 
   // ── 6. Watchdog — auto-relance si l'OS a mis l'audio en pause en arrière-plan ──
-  // Contrairement à un setTimeout ponctuel (peut être différé indéfiniment quand le
-  // WebView est en arrière-plan), un setInterval continue de se déclencher (throttled
-  // mais jamais totalement gelé) : c'est le filet de sécurité qui répare toute lecture
-  // interrompue par le système, sans dépendre du retour au premier plan de l'utilisateur.
   useEffect(() => {
     if (!isMainPlaying) return;
     const iv = setInterval(() => {
       const a = mainAudioRef.current;
-      if (a && isPlayingRef.current && a.paused && !a.ended) {
+      if (!a || !isPlayingRef.current) return;
+      if (a.ended) {
+        handleMainEnded();
+        return;
+      }
+      if (a.paused && a.readyState >= 2 && !a.seeking) {
         a.play().catch(() => {});
       }
-    }, 1000);
+    }, 1200);
     return () => clearInterval(iv);
-  }, [isMainPlaying]);
+  }, [isMainPlaying, handleMainEnded]);
 
   // ── 5. Pré-chargement de l'ayat suivant ──────────────────────────
   useEffect(() => {
@@ -888,27 +995,6 @@ function AppInner({ currentUser, onSignOut }) {
     }
   }, [openAyatNum, selectedSurah?.number]);
 
-  // RAF
-  const lastTimeDispatchRef = useRef(0);
-  const startRaf = useCallback(() => {
-    const tick = () => {
-      if (mainAudioRef.current) {
-        const ms = mainAudioRef.current.currentTime * 1000;
-        mainCurrentMsRef.current = ms;
-        const now = performance.now();
-        // Throttle Redux dispatch to 4Hz (every 250ms) to avoid high-frequency store churn
-        if (now - lastTimeDispatchRef.current >= 250) {
-          lastTimeDispatchRef.current = now;
-          setMainCurrentMs(ms);
-        }
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-  }, []);
-  const stopRaf = useCallback(() => {
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-  }, []);
   useEffect(() => {
     if (isMainPlaying) startRaf(); else stopRaf(); // keep mainCurrentMs as-is on pause so playback can resume from the same spot
     return stopRaf;
@@ -942,51 +1028,6 @@ function AppInner({ currentUser, onSignOut }) {
       ss.speak(utter);
     });
   }, []);
-
-  const playMainAyat = useCallback((idx) => {
-    if (!ayats.length) return;
-    const i = Math.max(0, Math.min(idx, ayats.length - 1));
-    const changed = i !== mainAyatIdx;
-    setMainAyatIdx(i); setPlayingAyatNum(ayats[i]?.numberInSurah);
-    if (changed) setMainCurrentMs(0); // only reset elapsed time on an actual ayat change, not on resume
-    const targetAyat = ayats[i];
-    // Page mode: if the target ayat lives on a different page than the one currently
-    // displayed, switch page first (its DOM node doesn't exist until we do) then scroll to it.
-    if (pageMode && targetAyat?.page != null) {
-      const curPage = activePageCoran ?? ayats[0]?.page;
-      if (targetAyat.page !== curPage) {
-        setactivePageCoran(targetAyat.page);
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            ayatRefs.current[targetAyat.numberInSurah]?.scrollIntoView({ behavior: "smooth", block: "center" });
-          });
-        });
-        return;
-      }
-    }
-    if (changed) ayatRefs.current[ayats[i]?.numberInSurah]?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [ayats, mainAyatIdx, pageMode, activePageCoran]);
-
-  const handleMainEnded = useCallback(() => {
-    const next = mainAyatIdx + 1;
-    if (loopActive) {
-      const end = Math.min(loopEnd, ayats.length - 1);
-      if (mainAyatIdx < end) {
-        playMainAyat(next); playWhenReady();
-      } else {
-        const nc = loopCount + 1;
-        if (loopMax === 0 || nc < loopMax) {
-          setLoopCount(nc); playMainAyat(loopStart); playWhenReady();
-        } else {
-          setLoopActive(false); setLoopCount(0);
-          setIsMainPlaying(false); setPlayingAyatNum(null); setMainCurrentMs(0);
-        }
-      }
-      return;
-    }
-    if (next < ayats.length) { playMainAyat(next); playWhenReady(); }
-    else { setIsMainPlaying(false); setPlayingAyatNum(null); setMainCurrentMs(0); }
-  }, [mainAyatIdx, ayats, playMainAyat, loopActive, loopStart, loopEnd, loopCount, loopMax, playWhenReady]);
 
   const loadedAyatIdxRef = useRef(null);
   useEffect(() => {
@@ -2809,6 +2850,30 @@ function AppInner({ currentUser, onSignOut }) {
           }}
           src={audioUrl(currentMainAyat)}
           onEnded={handleMainEnded}
+          onTimeUpdate={() => {
+            const a = mainAudioRef.current;
+            if (a) {
+              const ms = a.currentTime * 1000;
+              mainCurrentMsRef.current = ms;
+              window.__quranMainMs = ms;
+            }
+          }}
+          onPlay={() => {
+            setIsMainPlaying(true);
+            startRaf();
+          }}
+          onPause={() => {
+            if (!isPlayingRef.current) stopRaf();
+          }}
+          onStalled={() => {
+            if (isPlayingRef.current && mainAudioRef.current) {
+              // Try gentle reload if stalled
+              if (mainAudioRef.current.readyState < 2) {
+                mainAudioRef.current.load();
+                if (isPlayingRef.current) playWhenReady();
+              }
+            }
+          }}
           onError={() => {
             // Current bitrate 404s for this reciter → fall back to the next candidate
             // automatically (and remember it), then retry without interrupting playback.

@@ -96,16 +96,27 @@ export const getGlobalRecitator = () => _recitatorId;
 
 export async function fetchSurahs() {
   const idbKey = 'surahs';
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
+  try {
+    const c = await idbGetQuran(idbKey);
+    if (Array.isArray(c) && c.length === 114) return c;
+  } catch {}
+
   try {
     const r = await fetch(`${API}/surah`);
-    if (!r.ok) return [];
-    const data = (await r.json())?.data || [];
-    idbSetQuran(idbKey, data).catch(() => {});
-    return data;
-  } catch {
-    return [];
+    if (r.ok) {
+      const data = (await r.json())?.data || [];
+      if (Array.isArray(data) && data.length > 0) {
+        idbSetQuran(idbKey, data).catch(() => {});
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn("fetchSurahs network error:", err);
   }
+
+  const fallback = safeGetItem(`quran_fallback_surahs`, null);
+  if (Array.isArray(fallback) && fallback.length > 0) return fallback;
+  return [];
 }
 
 // Translation editions keyed by lang code
@@ -126,91 +137,153 @@ export async function fetchSurahTranslation(sn, lang) {
   const edition = TRANS_EDITIONS[lang];
   if (!edition) return [];
   const idbKey = `trans:${lang}:${sn}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
+  try {
+    const c = await idbGetQuran(idbKey);
+    if (Array.isArray(c) && c.length > 0) return c;
+  } catch {}
+
   try {
     const r = await fetch(`${API}/surah/${sn}/${edition}`);
-    if (!r.ok) return [];
-    const ayahs = (await r.json())?.data?.ayahs || [];
-    const result = ayahs.map(a => ({ numberInSurah: a.numberInSurah, text: a.text }));
-    idbSetQuran(idbKey, result).catch(() => {});
-    return result;
-  } catch {
-    return [];
-  }
+    if (r.ok) {
+      const ayahs = (await r.json())?.data?.ayahs || [];
+      const result = ayahs.map(a => ({ numberInSurah: a.numberInSurah, text: a.text }));
+      if (result.length > 0) {
+        idbSetQuran(idbKey, result).catch(() => {});
+        return result;
+      }
+    }
+  } catch {}
+
+  const fallback = safeGetItem(`quran_fallback_trans_${lang}_${sn}`, null);
+  return Array.isArray(fallback) ? fallback : [];
 }
 
 // fetchSurahWbw(sn, lang) → { [numberInSurah]: [word1Trans, word2Trans, ...] } cached in IDB
 export async function fetchSurahWbw(sn, lang = 'fr') {
   if (!lang) return {};
   const idbKey = `wbw:${lang}:${sn}`;
-  try { const c = await idbGetQuran(idbKey); if (c && Object.keys(c).length > 0) return c; } catch {}
+  try {
+    const c = await idbGetQuran(idbKey);
+    if (c && Object.keys(c).length > 0) return c;
+  } catch {}
+
   try {
     const r = await fetch(`https://api.quran.com/api/v4/verses/by_chapter/${sn}?words=true&language=${encodeURIComponent(lang)}&word_translation_language=${encodeURIComponent(lang)}&per_page=300`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const j = await r.json();
-    const verses = j.verses || [];
-    const result = {};
-    verses.forEach(v => {
-      const realWords = (v.words || []).filter(w => w.char_type_name !== 'end');
-      result[v.verse_number] = realWords.map(w => {
-        const t = w.translation?.text || '';
-        return t.replace(/<[^>]*>?/gm, '').trim();
+    if (r.ok) {
+      const j = await r.json();
+      const verses = j.verses || [];
+      const result = {};
+      verses.forEach(v => {
+        const realWords = (v.words || []).filter(w => w.char_type_name !== 'end');
+        result[v.verse_number] = realWords.map(w => {
+          const t = w.translation?.text || '';
+          return t.replace(/<[^>]*>?/gm, '').trim();
+        });
       });
-    });
-    idbSetQuran(idbKey, result).catch(() => {});
-    return result;
+      if (Object.keys(result).length > 0) {
+        idbSetQuran(idbKey, result).catch(() => {});
+        return result;
+      }
+    }
   } catch (err) {
     console.warn("fetchSurahWbw error:", err);
-    return {};
   }
+
+  const fallback = safeGetItem(`quran_fallback_wbw_${lang}_${sn}`, null);
+  return fallback && typeof fallback === 'object' ? fallback : {};
 }
+
 export async function fetchAyats(n) {
   const idbKey = `alafasy:${n}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
+  try {
+    const c = await idbGetQuran(idbKey);
+    if (c && Array.isArray(c.ayahs) && c.ayahs.length > 0) return c;
+  } catch {}
+
   try {
     const r = await fetch(`${API}/surah/${n}/ar.alafasy`);
-    if (!r.ok) return { ayahs: [] };
-    const data = (await r.json())?.data || { ayahs: [] };
-    idbSetQuran(idbKey, data).catch(() => {});
-    return data;
-  } catch {
-    return { ayahs: [] };
+    if (r.ok) {
+      const data = (await r.json())?.data || { ayahs: [] };
+      if (Array.isArray(data.ayahs) && data.ayahs.length > 0) {
+        idbSetQuran(idbKey, data).catch(() => {});
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn(`fetchAyats(${n}) error, checking fallbacks:`, err);
   }
+
+  // Resilient fallback: Try default uthmani text
+  try {
+    const defAyahs = await fetchSurahDefault(n);
+    if (Array.isArray(defAyahs) && defAyahs.length > 0) {
+      const constructed = { number: n, ayahs: defAyahs };
+      idbSetQuran(idbKey, constructed).catch(() => {});
+      return constructed;
+    }
+  } catch {}
+
+  const fallback = safeGetItem(`quran_fallback_alafasy_${n}`, null);
+  if (fallback && Array.isArray(fallback.ayahs) && fallback.ayahs.length > 0) return fallback;
+
+  return { ayahs: [] };
 }
+
 // /surah/${n}/quran-simple  →  [{num, text}, …]
 export async function fetchSurahSimple(n) {
   const idbKey = `text:${n}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
+  try {
+    const c = await idbGetQuran(idbKey);
+    if (Array.isArray(c) && c.length > 0) return c;
+  } catch {}
+
   try {
     const r = await fetch(`${API}/surah/${n}/quran-simple`);
-    if (!r.ok) return [];
-    const data = (await r.json())?.data?.ayahs || [];
-    const ayats = data.map(a => ({ num: a.numberInSurah, text: a.text }));
-    idbSetQuran(idbKey, ayats).catch(() => {});
-    return ayats;
-  } catch {
-    return [];
-  }
+    if (r.ok) {
+      const data = (await r.json())?.data?.ayahs || [];
+      const ayats = data.map(a => ({ num: a.numberInSurah, text: a.text }));
+      if (ayats.length > 0) {
+        idbSetQuran(idbKey, ayats).catch(() => {});
+        return ayats;
+      }
+    }
+  } catch {}
+
+  const fallback = safeGetItem(`quran_fallback_text_${n}`, null);
+  return Array.isArray(fallback) ? fallback : [];
 }
+
 // /surah/${n}  (default edition — used for ayat texts in MemoriseMode etc.)
-// Returns raw ayahs array from API data.ayahs
 export async function fetchSurahDefault(n) {
   const idbKey = `simple:${n}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
+  try {
+    const c = await idbGetQuran(idbKey);
+    if (Array.isArray(c) && c.length > 0) return c;
+  } catch {}
+
   try {
     const r = await fetch(`${API}/surah/${n}`);
-    if (!r.ok) return [];
-    const ayahs = (await r.json())?.data?.ayahs || [];
-    idbSetQuran(idbKey, ayahs).catch(() => {});
-    return ayahs;
-  } catch {
-    return [];
-  }
+    if (r.ok) {
+      const ayahs = (await r.json())?.data?.ayahs || [];
+      if (ayahs.length > 0) {
+        idbSetQuran(idbKey, ayahs).catch(() => {});
+        return ayahs;
+      }
+    }
+  } catch {}
+
+  const fallback = safeGetItem(`quran_fallback_simple_${n}`, null);
+  return Array.isArray(fallback) ? fallback : [];
 }
+
 // Static surah metadata cache: hizb, juz, page (from ayat 1) + total word count
 export async function fetchSurahMeta(n) {
   const idbKey = `smeta:${n}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
+  try {
+    const c = await idbGetQuran(idbKey);
+    if (c && c.wordCount != null) return c;
+  } catch {}
+
   const ayahs = await fetchSurahDefault(n);
   const a1 = ayahs[0] || {};
   const wordCount = ayahs.reduce((s, a) => s + splitArabicWords(a.text || '').length, 0);
@@ -220,32 +293,47 @@ export async function fetchSurahMeta(n) {
     page:      a1.page ?? null,
     wordCount,
   };
-  idbSetQuran(idbKey, meta).catch(() => {});
+  if (wordCount > 0) idbSetQuran(idbKey, meta).catch(() => {});
   return meta;
 }
+
 // Single-ayah meta (page, juz, hizb, manzil, ruku, sajda) — cached per-surah
 export async function fetchAyahMeta(sn, an) {
   const ayahs = await fetchSurahDefault(sn);
   return ayahs.find(a => a.numberInSurah === an) || null;
 }
 export const fetchAyatMeta = fetchAyahMeta;
+
 export async function fetchQuranPage(pageNum) {
   const key = `mushaf_page:${pageNum}`;
-  try { const c = await idbGetQuran(key); if (c) return c; } catch {}
+  try {
+    const c = await idbGetQuran(key);
+    if (Array.isArray(c) && c.length > 0) return c;
+  } catch {}
+
   try {
     const r = await fetch(`${API}/page/${pageNum}/quran-uthmani`);
-    if (!r.ok) return [];
-    const ayahs = (await r.json())?.data?.ayahs || [];
-    idbSetQuran(key, ayahs).catch(() => {});
-    return ayahs;
-  } catch {
-    return [];
-  }
+    if (r.ok) {
+      const ayahs = (await r.json())?.data?.ayahs || [];
+      if (ayahs.length > 0) {
+        idbSetQuran(key, ayahs).catch(() => {});
+        return ayahs;
+      }
+    }
+  } catch {}
+
+  const fallback = safeGetItem(`quran_fallback_page_${pageNum}`, null);
+  return Array.isArray(fallback) ? fallback : [];
 }
+
 // Static page-level metadata: hizb, juz, word count — cached in IDB as pmeta:N
 export async function fetchPageMeta(pageNum) {
   const idbKey = `pmeta:${pageNum}`;
-  try { const c = await idbGetQuran(idbKey); if (c) return c; } catch {}
+  try {
+    const c = await idbGetQuran(idbKey);
+    if (c && c.wordCount != null) return c;
+  } catch {}
+
   const ayahs = await fetchQuranPage(pageNum);
   const a1 = ayahs[0] || {};
   const wordCount = ayahs.reduce((s, a) => s + splitArabicWords(a.text || '').length, 0);
@@ -255,7 +343,7 @@ export async function fetchPageMeta(pageNum) {
     ayatCount: ayahs.length,
     wordCount,
   };
-  idbSetQuran(idbKey, meta).catch(() => {});
+  if (wordCount > 0) idbSetQuran(idbKey, meta).catch(() => {});
   return meta;
 }
 
@@ -277,7 +365,7 @@ export function parseTimestampsFile(data, surahNum, keyPrefix) {
   };
   if (Array.isArray(data)) {
     data.forEach(item => { if (item.ayat && item.words) addEntry(item.surah || surahNum, item.ayat, item.words); });
-  } else if (data.ayat && data.words) {
+  } else if (data && data.ayat && data.words) {
     addEntry(data.surah || surahNum, data.ayat, data.words);
   }
   return result;
@@ -290,107 +378,189 @@ export const IDB_QURAN_STORE = 'quran';
 export const tsMemCache    = {};
 export const quranMemCache = {};
 export let _tsDbPromise = null;
+
 export function openTsDb() {
+  if (typeof indexedDB === 'undefined') return Promise.reject(new Error("No indexedDB"));
   if (!_tsDbPromise) {
     _tsDbPromise = new Promise((res, rej) => {
-      const req = indexedDB.open(IDB_NAME, 3);
-      req.onupgradeneeded = e => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains(IDB_STORE))       db.createObjectStore(IDB_STORE);
-        if (!db.objectStoreNames.contains(IDB_QURAN_STORE)) db.createObjectStore(IDB_QURAN_STORE);
-        if (!db.objectStoreNames.contains('audio'))         db.createObjectStore('audio');
-      };
-      req.onsuccess = e => res(e.target.result);
-      req.onerror = e => { _tsDbPromise = null; rej(e.target.error); };
+      try {
+        const req = indexedDB.open(IDB_NAME, 3);
+        req.onupgradeneeded = e => {
+          try {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_STORE))       db.createObjectStore(IDB_STORE);
+            if (!db.objectStoreNames.contains(IDB_QURAN_STORE)) db.createObjectStore(IDB_QURAN_STORE);
+            if (!db.objectStoreNames.contains('audio'))         db.createObjectStore('audio');
+          } catch (err) {
+            rej(err);
+          }
+        };
+        req.onsuccess = e => {
+          const db = e.target.result;
+          db.onversionchange = () => { db.close(); _tsDbPromise = null; };
+          db.onclose = () => { _tsDbPromise = null; };
+          res(db);
+        };
+        req.onerror = e => { _tsDbPromise = null; rej(e.target.error || new Error("IDB Open Error")); };
+        req.onblocked = () => { _tsDbPromise = null; rej(new Error("IDB Blocked")); };
+      } catch (err) {
+        _tsDbPromise = null;
+        rej(err);
+      }
     });
   }
   return _tsDbPromise;
 }
+
 export async function idbGetQuran(key) {
-  if (quranMemCache[key] !== undefined) return quranMemCache[key];
-  const db = await openTsDb();
-  return new Promise((res, rej) => {
-    const tx  = db.transaction(IDB_QURAN_STORE, 'readonly');
-    const req = tx.objectStore(IDB_QURAN_STORE).get(key);
-    req.onsuccess = () => { quranMemCache[key] = req.result ?? null; res(req.result ?? null); };
-    req.onerror   = e => rej(e.target.error);
-  });
+  if (quranMemCache[key] != null) return quranMemCache[key];
+  try {
+    const db = await openTsDb();
+    const result = await new Promise((res) => {
+      try {
+        const tx  = db.transaction(IDB_QURAN_STORE, 'readonly');
+        const req = tx.objectStore(IDB_QURAN_STORE).get(key);
+        req.onsuccess = () => res(req.result ?? null);
+        req.onerror   = () => res(null);
+      } catch {
+        res(null);
+      }
+    });
+    if (result != null) {
+      quranMemCache[key] = result;
+      return result;
+    }
+  } catch {}
+
+  // Local fallback
+  try {
+    const local = safeGetItem(`quran_fallback_${key}`, null);
+    if (local != null) {
+      quranMemCache[key] = local;
+      return local;
+    }
+  } catch {}
+
+  return null;
 }
+
 export async function idbSetQuran(key, val) {
+  if (val == null) return;
   quranMemCache[key] = val;
-  const db = await openTsDb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_QURAN_STORE, 'readwrite');
-    tx.objectStore(IDB_QURAN_STORE).put(val, key);
-    tx.oncomplete = () => res();
-    tx.onerror    = e => rej(e.target.error);
-  });
+  try {
+    safeSetItem(`quran_fallback_${key}`, val);
+  } catch {}
+  try {
+    const db = await openTsDb();
+    await new Promise((res) => {
+      try {
+        const tx = db.transaction(IDB_QURAN_STORE, 'readwrite');
+        tx.objectStore(IDB_QURAN_STORE).put(val, key);
+        tx.oncomplete = () => res();
+        tx.onerror    = () => res();
+      } catch {
+        res();
+      }
+    });
+  } catch {}
 }
+
 export async function idbGet(key) {
-  const db = await openTsDb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_STORE, 'readonly');
-    const req = tx.objectStore(IDB_STORE).get(key);
-    req.onsuccess = () => res(req.result);
-    req.onerror = e => rej(e.target.error);
-  });
+  if (tsMemCache[key] != null) return tsMemCache[key];
+  try {
+    const db = await openTsDb();
+    return await new Promise((res) => {
+      try {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).get(key);
+        req.onsuccess = () => res(req.result ?? null);
+        req.onerror = () => res(null);
+      } catch {
+        res(null);
+      }
+    });
+  } catch {
+    return null;
+  }
 }
+
 export async function idbSet(key, val) {
-  const db = await openTsDb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(val, key);
-    tx.oncomplete = res;
-    tx.onerror = e => rej(e.target.error);
-  });
+  if (val == null) return;
+  tsMemCache[key] = val;
+  try {
+    const db = await openTsDb();
+    await new Promise((res) => {
+      try {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(val, key);
+        tx.oncomplete = () => res();
+        tx.onerror = () => res();
+      } catch {
+        res();
+      }
+    });
+  } catch {}
 }
 
 // ─── Auto-load timestamps for a surah (per reciter) ──────────────────────────
-// Path scheme — one subfolder per reciter id, same file-naming pattern as before:
-//   Android (bundled assets): public/assets/timestamps/{recitatorId}/surah_XXX.json
-//   Web (server):              http://localhost:3000/sourate/{recitatorId}/surah_XXX.json
-// e.g. for sourate 1 / ar.husary → public/assets/timestamps/ar.husary/surah_001.json
 export const TS_SERVER_BASE   = 'http://localhost:3000/sourate';
 export const TS_ANDROID_BASE  = 'public/assets/timestamps';
+
 export async function loadTimestampsForSurah(surahNum, recitatorId = 'ar.alafasy') {
   const memKey = `${recitatorId}:${surahNum}`;
-  if (tsMemCache[memKey]) return tsMemCache[memKey];
+  if (tsMemCache[memKey] && Object.keys(tsMemCache[memKey]).length > 0) return tsMemCache[memKey];
   const cacheKey = `ts:${recitatorId}:${surahNum}`;
   const file     = `surah_${String(surahNum).padStart(3,'0')}.json`;
 
   if (IS_ANDROID) {
-    // Capacitor: load directly from bundled assets, no IDB needed
     const url = `${TS_ANDROID_BASE}/${recitatorId}/${file}`;
     try {
       const r = await fetch(url);
-      if (!r.ok) return null;
-      const data = await r.json();
-      const parsed = parseTimestampsFile(data, surahNum, recitatorId);
-      if (parsed) tsMemCache[memKey] = parsed;
-      return parsed;
-    } catch { return null; }
+      if (r.ok) {
+        const data = await r.json();
+        const parsed = parseTimestampsFile(data, surahNum, recitatorId);
+        if (parsed && Object.keys(parsed).length > 0) {
+          tsMemCache[memKey] = parsed;
+          return parsed;
+        }
+      }
+    } catch {}
   }
 
-  // Web: try IDB cache first, then fetch from server and cache
+  // Web / Fallback: Try IDB cache first
   try {
     const cached = await idbGet(cacheKey);
-    if (cached) { tsMemCache[memKey] = cached; return cached; }
+    if (cached && Object.keys(cached).length > 0) {
+      tsMemCache[memKey] = cached;
+      return cached;
+    }
   } catch {}
 
-  try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 5000); // 5s timeout — don't stall UI
-    const r = await fetch(`${TS_SERVER_BASE}/${recitatorId}/${file}`, { signal: ctrl.signal });
-    clearTimeout(tid);
-    if (!r.ok) return null;
-    const data   = await r.json();
-    const parsed = parseTimestampsFile(data, surahNum, recitatorId);
-    if (Object.keys(parsed).length > 0) {
-      tsMemCache[memKey] = parsed;
-      idbSet(cacheKey, parsed).catch(() => {});
-    }
-    return parsed;
-  } catch { return null; }
+  const urlsToTry = [
+    `/sourate/${recitatorId}/${file}`,
+    `/assets/timestamps/${recitatorId}/${file}`,
+    `${TS_SERVER_BASE}/${recitatorId}/${file}`
+  ];
+
+  for (const url of urlsToTry) {
+    try {
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 4000);
+      const r = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(tid);
+      if (r.ok) {
+        const data = await r.json();
+        const parsed = parseTimestampsFile(data, surahNum, recitatorId);
+        if (parsed && Object.keys(parsed).length > 0) {
+          tsMemCache[memKey] = parsed;
+          idbSet(cacheKey, parsed).catch(() => {});
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 

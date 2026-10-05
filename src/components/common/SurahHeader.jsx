@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { useSelector } from "react-redux";
-import { sel } from "../../store.js";
+import { useSelector, useDispatch } from "react-redux";
+import { sel, uiActions } from "../../store.js";
 import { masteryColor } from "./Mastery.jsx";
 import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
@@ -18,6 +18,10 @@ export function SurahHeader({
   setPageMode,
   activePageCoran,
   setactivePageCoran,
+  hizbMode = false,
+  setHizbMode = () => {},
+  activeHizbCoran = null,
+  setActiveHizbCoran = () => {},
   mainAyatIdx,
   learnData,
   lkey,
@@ -69,6 +73,8 @@ export function SurahHeader({
   const [showLangDrawer, setShowLangDrawer] = useState(false);
   const [showColorPickerModal, setShowColorPickerModal] = useState(false);
 
+  const dispatch = useDispatch();
+  const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
   const tajweedPalette = useSelector(sel.tajweedPalette) || "classic";
   const tajweedCustomColors = useSelector(sel.tajweedCustomColors) || {};
   const activeTjColors = getActiveTajweedColors(tajweedPalette, tajweedCustomColors);
@@ -84,16 +90,25 @@ export function SurahHeader({
   const totalMasteryPct = totalAyahs > 0 ? Math.round((st?.mastery || 0) / totalAyahs) : 0;
 
   const sn = selectedSurah.number;
-  const curPage = pageMode ? (activePageCoran ?? ayats[mainAyatIdx]?.page ?? null) : null;
-  const pageAyats = curPage ? ayats.filter(a => a.page === curPage) : ayats;
+  const getAyatHizb = (a) => a?.hizb != null ? a.hizb : (a?.hizbQuarter != null ? Math.ceil(a.hizbQuarter / 4) : null);
+  const activeAyat = ayats[mainAyatIdx] || ayats[0];
+  const curPage = pageMode ? (activePageCoran ?? activeAyat?.page ?? null) : null;
+  const curHizb = hizbMode ? (activeHizbCoran ?? getAyatHizb(activeAyat)) : null;
+  const displayPage = curPage ?? activeAyat?.page ?? surahMeta?.page ?? null;
+  const displayHizb = curHizb ?? getAyatHizb(activeAyat) ?? pageMeta?.hizb ?? surahMeta?.hizb ?? null;
+  const pageAyats = curPage
+    ? ayats.filter(a => a.page === curPage)
+    : curHizb
+    ? ayats.filter(a => getAyatHizb(a) === curHizb)
+    : ayats;
   const totalParts = pageAyats.reduce((s, a) => s + (learnData[lkey(sn, a.numberInSurah)]?.parts?.length || 0), 0);
   const totalUnk = pageAyats.reduce((s, a) => s + (learnData[lkey(sn, a.numberInSurah)]?.unknownWords?.length || 0), 0);
   const meta = pageMode && pageMeta ? pageMeta : surahMeta;
 
   const anyTj = showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone;
   const activeTjCount = [showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone].filter(Boolean).length;
-  const anyOpt = announceNum || spellCheck || showParts || pageMode || fullScreenSelectedAyat;
-  const activeOptCount = [announceNum, spellCheck, showParts, pageMode, fullScreenSelectedAyat].filter(Boolean).length;
+  const anyOpt = announceNum || spellCheck || showParts || pageMode || hizbMode || fullScreenSelectedAyat;
+  const activeOptCount = [announceNum, spellCheck, showParts, pageMode, hizbMode, fullScreenSelectedAyat].filter(Boolean).length;
   const langLabel = translationLang ? (TRANS_LABELS[translationLang] || translationLang.toUpperCase()) : "OFF";
 
   // Prev / Next Surah
@@ -156,6 +171,8 @@ export function SurahHeader({
             <span className="m-compact-en">{selectedSurah.englishName}</span>
             <span className="m-compact-meta">
               {selectedSurah.numberOfAyahs}v · {isMeccan ? 'Mecq' : 'Méd'}
+              {displayPage ? ` · P.${displayPage}` : ''}
+              {displayHizb ? ` · H.${displayHizb}` : ''}
             </span>
             <span className="m-compact-chevron">▾</span>
           </div>
@@ -218,14 +235,12 @@ export function SurahHeader({
         {/* Expandable Detailed Stats Grid */}
         {showSurahInfo && (
           <div className="m-surah-info-grid">
-            {curPage && (
-              <div className="m-info-stat-card page">
-                <div className="m-stat-num" style={{ color: '#c878ff' }}>{curPage}</div>
-                <div className="m-stat-tag">PAGE DU MUSHAF</div>
-              </div>
-            )}
-            <div className="m-info-stat-card">
-              <div className="m-stat-num" style={{ color: '#ffd166' }}>{meta?.hizb ?? '—'}</div>
+            <div className="m-info-stat-card page">
+              <div className="m-stat-num" style={{ color: '#c878ff' }}>{displayPage ?? '—'}</div>
+              <div className="m-stat-tag">PAGE DU MUSHAF</div>
+            </div>
+            <div className="m-info-stat-card hizb">
+              <div className="m-stat-num" style={{ color: '#ffd166' }}>{displayHizb ?? '—'}</div>
               <div className="m-stat-tag">HIZB</div>
             </div>
             <div className="m-info-stat-card">
@@ -304,6 +319,40 @@ export function SurahHeader({
           <span className="m-act-label">OPTIONS</span>
           {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
         </button>
+
+        {/* Text Size Quick Controls (A- / A+) */}
+        <div className="m-fontsize-bar-ctrl" role="group" aria-label="Taille du texte des versets">
+          <button
+            type="button"
+            id="header-fontsize-dec"
+            onClick={() => dispatch(uiActions.decreaseAyatFontSize())}
+            disabled={ayatFontSize <= 16}
+            className="m-fontsize-btn"
+            title="Réduire la taille du texte des versets (A−)"
+            aria-label="Réduire la taille du texte"
+          >
+            A−
+          </button>
+          <span
+            id="header-fontsize-val"
+            className="m-fontsize-badge"
+            onClick={() => dispatch(uiActions.resetAyatFontSize())}
+            title={`Taille actuelle : ${ayatFontSize}px (cliquer pour réinitialiser à 26px)`}
+          >
+            {ayatFontSize}
+          </span>
+          <button
+            type="button"
+            id="header-fontsize-inc"
+            onClick={() => dispatch(uiActions.increaseAyatFontSize())}
+            disabled={ayatFontSize >= 48}
+            className="m-fontsize-btn"
+            title="Augmenter la taille du texte des versets (A+)"
+            aria-label="Augmenter la taille du texte"
+          >
+            A+
+          </button>
+        </div>
 
         {/* Timestamps Sync Button */}
         <button
@@ -498,6 +547,100 @@ export function SurahHeader({
             <button className="m-drawer-close" onClick={() => setShowOptionsDrawer(false)}>✕</button>
           </div>
 
+          {/* ── Verse Text Size Adjuster ── */}
+          <div
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "rgba(201, 168, 76, 0.06)",
+              border: "1px solid rgba(201, 168, 76, 0.25)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, color: "var(--gold2)", fontFamily: "'Cinzel', serif" }}>
+                🔤 TAILLE DU TEXTE DES VERSETS
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text)", fontFamily: "'Cinzel', serif" }}>
+                  {ayatFontSize} px
+                </span>
+                {ayatFontSize !== 26 && (
+                  <button
+                    type="button"
+                    onClick={() => dispatch(uiActions.resetAyatFontSize())}
+                    style={{
+                      fontSize: 7.5,
+                      padding: "2px 6px",
+                      borderRadius: 5,
+                      border: "1px solid rgba(201, 168, 76, 0.4)",
+                      background: "rgba(201, 168, 76, 0.12)",
+                      color: "var(--gold2)",
+                      fontFamily: "'Cinzel', serif",
+                      cursor: "pointer",
+                    }}
+                  >
+                    RÉINITIALISER
+                  </button>
+                )}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => dispatch(uiActions.decreaseAyatFontSize())}
+                disabled={ayatFontSize <= 16}
+                aria-label="Réduire la taille du texte"
+                style={{
+                  width: 34,
+                  height: 30,
+                  borderRadius: 6,
+                  border: "1px solid rgba(201, 168, 76, 0.35)",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  color: ayatFontSize <= 16 ? "var(--text3)" : "var(--gold2)",
+                  fontFamily: "'Cinzel', serif",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: ayatFontSize <= 16 ? "not-allowed" : "pointer",
+                }}
+              >
+                A−
+              </button>
+              <input
+                type="range"
+                min={16}
+                max={48}
+                step={2}
+                value={ayatFontSize}
+                onChange={e => dispatch(uiActions.setAyatFontSize(Number(e.target.value)))}
+                aria-label="Curseur de taille du texte des versets"
+                style={{ flex: 1, accentColor: "var(--gold)", cursor: "pointer" }}
+              />
+              <button
+                type="button"
+                onClick={() => dispatch(uiActions.increaseAyatFontSize())}
+                disabled={ayatFontSize >= 48}
+                aria-label="Augmenter la taille du texte"
+                style={{
+                  width: 34,
+                  height: 30,
+                  borderRadius: 6,
+                  border: "1px solid rgba(201, 168, 76, 0.35)",
+                  background: "rgba(255, 255, 255, 0.04)",
+                  color: ayatFontSize >= 48 ? "var(--text3)" : "var(--gold2)",
+                  fontFamily: "'Cinzel', serif",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: ayatFontSize >= 48 ? "not-allowed" : "pointer",
+                }}
+              >
+                A+
+              </button>
+            </div>
+          </div>
+
           <div className="m-options-grid">
             <button
               onClick={() => toggleFullScreen()}
@@ -548,26 +691,48 @@ export function SurahHeader({
             </button>
 
             <button
-              onClick={() => { setPageMode(v => !v); setactivePageCoran(null); }}
+              onClick={() => {
+                const next = !pageMode;
+                setPageMode(next);
+                setactivePageCoran(null);
+                if (next && hizbMode) { setHizbMode(false); setActiveHizbCoran(null); }
+              }}
               className={`m-option-card ${pageMode ? 'active' : ''}`}
             >
               <span className="m-opt-card-icon">📖</span>
               <div className="m-opt-card-text">
                 <span className="m-opt-card-title">MODE PAGE MUSHAF</span>
-                <span className="m-opt-card-desc">Disposition du Mushaf standard</span>
+                <span className="m-opt-card-desc">Disposition du Mushaf par page</span>
               </div>
               <span className="m-opt-indicator">{pageMode ? 'ON' : 'OFF'}</span>
             </button>
 
-            {pageMode && (
+            <button
+              onClick={() => {
+                const next = !hizbMode;
+                setHizbMode(next);
+                setActiveHizbCoran(null);
+                if (next && pageMode) { setPageMode(false); setactivePageCoran(null); }
+              }}
+              className={`m-option-card ${hizbMode ? 'active' : ''}`}
+            >
+              <span className="m-opt-card-icon">۞</span>
+              <div className="m-opt-card-text">
+                <span className="m-opt-card-title">MODE HIZB</span>
+                <span className="m-opt-card-desc">Afficher et naviguer par Hizb</span>
+              </div>
+              <span className="m-opt-indicator">{hizbMode ? 'ON' : 'OFF'}</span>
+            </button>
+
+            {(pageMode || hizbMode) && (
               <button
                 onClick={() => setAutoPageFollow(v => !v)}
                 className={`m-option-card ${autoPageFollow ? 'active' : ''}`}
               >
                 <span className="m-opt-card-icon">⇄</span>
                 <div className="m-opt-card-text">
-                  <span className="m-opt-card-title">SUIVI AUTO DE PAGE</span>
-                  <span className="m-opt-card-desc">Tourner la page automatiquement</span>
+                  <span className="m-opt-card-title">{hizbMode ? 'SUIVI AUTO DE HIZB' : 'SUIVI AUTO DE PAGE'}</span>
+                  <span className="m-opt-card-desc">{hizbMode ? 'Changer de Hizb automatiquement' : 'Tourner la page automatiquement'}</span>
                 </div>
                 <span className="m-opt-indicator">{autoPageFollow ? 'ON' : 'OFF'}</span>
               </button>

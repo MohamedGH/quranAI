@@ -1,4 +1,6 @@
 import React from "react";
+import { useSelector } from "react-redux";
+import { sel } from "../../store.js";
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 export const CSS = `
@@ -16,6 +18,7 @@ export const CSS = `
     --header-h:calc(48px + env(safe-area-inset-top, 0px));
     --radius:8px; --radius-sm:5px;
     --transition:.18s ease;
+    --ayat-font-size:26px;
   }
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
   html{font-size:16px;}
@@ -525,6 +528,59 @@ export const CSS = `
     font-size: 6.5px;
     opacity: 0.6;
     margin-left: 1px;
+  }
+
+  /* Inline Header Font Size Controls */
+  .m-fontsize-bar-ctrl {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(201, 168, 76, 0.28);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .m-fontsize-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 0 7px;
+    background: transparent;
+    border: none;
+    color: var(--gold2);
+    font-family: 'Cinzel', serif;
+    font-size: 8.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .m-fontsize-btn:hover:not(:disabled) {
+    background: rgba(201, 168, 76, 0.18);
+  }
+  .m-fontsize-btn:active:not(:disabled) {
+    background: rgba(201, 168, 76, 0.28);
+  }
+  .m-fontsize-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  .m-fontsize-badge {
+    font-family: 'Cinzel', serif;
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--text2);
+    padding: 0 5px;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    user-select: none;
+    line-height: 24px;
+  }
+  .m-fontsize-badge:hover {
+    color: var(--gold2);
   }
 
   /* Inline Jump Stepper */
@@ -1059,15 +1115,29 @@ export const CSS = `
   .ayat-row.page-start::before{content:'';position:absolute;top:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(200,120,255,.15),#c878ff,rgba(200,120,255,.15),transparent);}
   .ayat-row.page-end{position:relative;margin-bottom:22px;}
   .ayat-row.page-end::after{content:'';position:absolute;bottom:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(200,120,255,.15),#c878ff,rgba(200,120,255,.15),transparent);}
+  .ayat-row.hizb-start{position:relative;margin-top:22px;}
+  .ayat-row.hizb-start:not(.page-start)::before{content:'';position:absolute;top:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,209,102,.18),#ffd166,rgba(255,209,102,.18),transparent);}
+  .ayat-row.page-start.hizb-start::before{background:linear-gradient(90deg,transparent,rgba(200,120,255,.2),#c878ff,#ffd166,rgba(255,209,102,.2),transparent);}
+  .ayat-row.hizb-end{position:relative;margin-bottom:22px;}
+  .ayat-row.hizb-end:not(.page-end)::after{content:'';position:absolute;bottom:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,209,102,.18),#ffd166,rgba(255,209,102,.18),transparent);}
+  .ayat-row.page-end.hizb-end::after{background:linear-gradient(90deg,transparent,rgba(200,120,255,.2),#c878ff,#ffd166,rgba(255,209,102,.2),transparent);}
   .page-edge-pill{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,#d896ff,#9a4fd1);color:#fff;font-size:7px;letter-spacing:2px;padding:4px 12px;border-radius:20px;font-family:'Cinzel',serif;box-shadow:0 3px 14px rgba(178,90,255,.45),0 0 0 3px var(--surface1,#12141c);white-space:nowrap;z-index:2;}
   .page-edge-pill.start{top:-11px;transform:translate(-50%,-50%);}
   .page-edge-pill.end{bottom:-11px;transform:translate(-50%,50%);}
   .page-edge-pill svg{width:8px;height:8px;}
+  .hizb-edge-pill{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,#ffd166,#c9972c);color:#141008;font-weight:700;font-size:7px;letter-spacing:2px;padding:4px 12px;border-radius:20px;font-family:'Cinzel',serif;box-shadow:0 3px 14px rgba(255,209,102,.45),0 0 0 3px var(--surface1,#12141c);white-space:nowrap;z-index:2;}
+  .hizb-edge-pill.start{top:-11px;transform:translate(-50%,-50%);}
+  .hizb-edge-pill.end{bottom:-11px;transform:translate(-50%,50%);}
+  .hizb-edge-pill svg{width:8px;height:8px;}
+  .ayat-row.page-start.hizb-start .page-edge-pill.start{left:calc(50% - 56px);}
+  .ayat-row.page-start.hizb-start .hizb-edge-pill.start{left:calc(50% + 56px);}
+  .ayat-row.page-end.hizb-end .page-edge-pill.end{left:calc(50% - 68px);}
+  .ayat-row.page-end.hizb-end .hizb-edge-pill.end{left:calc(50% + 68px);}
   .ayat-main{display:flex;align-items:flex-start;gap:14px;padding:14px 22px;cursor:pointer;}
   .ayat-main:hover{background:rgba(255,255,255,.02);}
   .ayat-number-badge{width:32px;height:32px;border:1px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text3);flex-shrink:0;margin-top:4px;transition:all var(--transition);font-weight:600;}
   .ayat-playing .ayat-number-badge{border-color:var(--gold);color:var(--gold);box-shadow:0 0 12px rgba(201,168,76,.3);}
-  .ayat-arabic{font-family:'Amiri Quran',serif;font-size:26px;line-height:2;direction:rtl;text-align:right;flex:1;min-width:0;overflow-wrap:break-word;word-break:break-word;color:var(--text);}
+  .ayat-arabic{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 26px);line-height:2;direction:rtl;text-align:right;flex:1;min-width:0;overflow-wrap:break-word;word-break:break-word;color:var(--text);}
   .char-span{display:inline;transition:color .04s;color:var(--text);}
   .char-span.char-done{color:var(--teal);}
   .char-span.char-active{color:var(--gold2);text-shadow:0 0 14px rgba(232,201,110,.65);}
@@ -1119,7 +1189,7 @@ export const CSS = `
   .part-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--surface3);flex-wrap:wrap;}
   .part-label{font-size:10px;letter-spacing:1px;color:var(--text3);min-width:110px;}
   .part-header-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-  .part-arabic{font-family:'Amiri Quran',serif;font-size:18px;direction:rtl;text-align:right;padding:8px 12px 10px;color:var(--text2);line-height:1.8;}
+  .part-arabic{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 18px);direction:rtl;text-align:right;padding:8px 12px 10px;color:var(--text2);line-height:1.8;}
   .part-learned .part-arabic{color:var(--green2);}
 
   /* ── RECITATION ───────────────────────────────────────────────────── */
@@ -1157,7 +1227,7 @@ export const CSS = `
   .recit-score-label.perfect{color:var(--green2);}
   .recit-score-label.good{color:var(--gold2);}
   .recit-score-label.bad{color:var(--red);}
-  .recit-compare{font-family:'Amiri Quran',serif;font-size:26px;direction:rtl;text-align:right;line-height:2.4;padding:12px 16px;background:var(--surface3);border-radius:var(--radius);border:1px solid var(--border);}
+  .recit-compare{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 26px);direction:rtl;text-align:right;line-height:2.4;padding:12px 16px;background:var(--surface3);border-radius:var(--radius);border:1px solid var(--border);}
   .recit-char-ok{color:var(--green2);}
   .recit-char-near{color:#e8a020;text-decoration:underline wavy #e8a020;}
   .recit-char-err{color:var(--red);text-decoration:underline wavy var(--red);}
@@ -1213,7 +1283,7 @@ export const CSS = `
   .rev-ayat-score-badge.bad{border:1px solid var(--red);color:var(--red);}
   .rev-ayat-score-badge.none{border:1px solid var(--border2);color:var(--text3);}
   .rev-ayat-body{padding:14px 14px 10px;display:flex;flex-direction:column;gap:12px;}
-  .rev-ayat-arabic{font-family:'Amiri Quran',serif;font-size:24px;direction:rtl;text-align:right;color:var(--text);line-height:1.9;padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);}
+  .rev-ayat-arabic{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 24px);direction:rtl;text-align:right;color:var(--text);line-height:1.9;padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm);}
   .rev-empty{text-align:center;padding:60px 20px;color:var(--text3);font-size:11px;letter-spacing:2px;}
   .rev-progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:4px;}
   .rev-progress-fill{height:100%;border-radius:2px;transition:width .4s ease;}
@@ -1675,7 +1745,7 @@ export const CSS = `
   @media (max-width:900px) {
     :root{ --sidebar-w:240px; }
     .header-bismillah{ display:none; }
-    .ayat-arabic{ font-size:22px; }
+    .ayat-arabic{ font-size:var(--ayat-font-size, 22px); }
     .recit-compare{ font-size:22px; line-height:2.2; }
     .surah-header{ padding:4px 10px; }
     .surah-header-ornament{ font-size:18px; }
@@ -1743,7 +1813,7 @@ export const CSS = `
     /* Ayat list */
     .ayat-scroll{ padding-bottom:calc(var(--player-h) + var(--player-loop-h) + env(safe-area-inset-bottom, 0px) + 36px); }
     .ayat-main{ padding:10px 12px; gap:8px; }
-    .ayat-arabic{ font-size:20.5px; line-height:1.95; }
+    .ayat-arabic{ font-size:var(--ayat-font-size, 20.5px); line-height:1.95; }
     .ayat-number-badge{ width:28px; height:28px; font-size:9px; }
     .submenu{ padding:10px 12px 14px; }
     .submenu-tabs{ overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; gap:4px; }
@@ -1845,7 +1915,7 @@ export const CSS = `
     .header-tool-btn{ width:30px; height:30px; font-size:12px; border-radius:7px; }
     .header-user-btn{ width:30px; height:30px; }
     .header-avatar,.header-avatar-placeholder{ width:24px; height:24px; font-size:10px; }
-    .ayat-arabic{ font-size:18px; line-height:1.9; }
+    .ayat-arabic{ font-size:var(--ayat-font-size, 18px); line-height:1.9; }
     .recit-compare{ font-size:16px; }
     .surah-header{ padding:2px 6px; }
     .surah-header-ornament{ font-size:15px; }
@@ -1879,7 +1949,7 @@ export const CSS = `
   .coll-ayat-ref{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;width:46px;}
   .coll-ayat-surah{font-size:8px;letter-spacing:1px;color:var(--text3);}
   .coll-ayat-num{width:28px;height:28px;border:1px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--gold);font-weight:600;}
-  .coll-ayat-text{font-family:'Amiri Quran',serif;font-size:20px;line-height:1.9;direction:rtl;text-align:right;flex:1;color:var(--text);}
+  .coll-ayat-text{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 20px);line-height:1.9;direction:rtl;text-align:right;flex:1;color:var(--text);}
   .coll-ayat-btns{display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-self:center;}
   .coll-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:14px;color:var(--text3);}
   .coll-empty-arabic{font-family:'Amiri Quran',serif;font-size:36px;color:var(--gold);opacity:.3;direction:rtl;}
@@ -1899,7 +1969,7 @@ export const CSS = `
   .coll-modal-item-count{font-size:9px;color:var(--text3);}
   .coll-modal-actions{display:flex;gap:8px;justify-content:flex-end;}
   .coll-modal-new{display:flex;gap:8px;padding-top:8px;border-top:1px solid var(--border);}
-  @media(max-width:640px){.collections-page{padding:16px 14px 80px;}.coll-top-bar{flex-direction:column;align-items:stretch;}.coll-ayat-text{font-size:17px;}}
+  @media(max-width:640px){.collections-page{padding:16px 14px 80px;}.coll-top-bar{flex-direction:column;align-items:stretch;}.coll-ayat-text{font-size:var(--ayat-font-size, 17px);}}
   .coll-search-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border2);flex-shrink:0;}
   .coll-search-input{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:7px 12px;color:var(--text);font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;outline:none;flex:1;min-width:140px;transition:border-color .2s;}
   .coll-search-input:focus{border-color:#c878ff;}
@@ -1909,7 +1979,7 @@ export const CSS = `
   .coll-search-result-item{display:flex;align-items:flex-start;gap:10px;padding:10px 20px;border-bottom:1px solid rgba(42,47,64,.4);cursor:pointer;transition:background .15s;}
   .coll-search-result-item:hover{background:var(--surface2);}
   .coll-search-meta{font-size:9px;letter-spacing:1.5px;color:#c878ff;margin-bottom:4px;}
-  .coll-search-arabic{font-family:'Amiri Quran',serif;font-size:18px;direction:rtl;text-align:right;line-height:1.8;color:var(--text);flex:1;}
+  .coll-search-arabic{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 18px);direction:rtl;text-align:right;line-height:1.8;color:var(--text);flex:1;}
 
   /* ── CALENDAR & GOALS ────────────────────────────────────────────── */
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
@@ -2067,7 +2137,7 @@ export const CSS = `
   .concord-ayat-item:last-child{border-bottom:none;}
   .concord-ayat-item:hover{background:rgba(255,255,255,.02);}
   .concord-ayat-num{width:30px;height:30px;border:1px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text3);flex-shrink:0;margin-top:4px;}
-  .concord-ayat-text{font-family:'Amiri Quran',serif;font-size:22px;direction:rtl;text-align:right;flex:1;line-height:2;color:var(--text);}
+  .concord-ayat-text{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 22px);direction:rtl;text-align:right;flex:1;line-height:2;color:var(--text);}
   .concord-highlight{background:rgba(201,168,76,.25);color:var(--gold2);border-radius:3px;padding:0 2px;}
   .concord-ayat-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:flex-end;}
   .concord-go-btn{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;padding:5px 10px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;border-radius:var(--radius-sm);transition:all .2s;white-space:nowrap;}
@@ -2097,8 +2167,17 @@ export const CSS = `
     100% { transform: translateY(0) scale(1); opacity: 1; }
   }
 
-  @media(max-width:700px){.concord-page{padding:16px 14px 80px;}.concord-ayat-text{font-size:18px;}.concord-search-bar input{font-size:16px;}}
+  @media(max-width:700px){.concord-page{padding:16px 14px 80px;}.concord-ayat-text{font-size:var(--ayat-font-size, 18px);}.concord-search-bar input{font-size:16px;}}
 
 `;
 
-export const StyleTag = () => <style dangerouslySetInnerHTML={{ __html: CSS }} />;
+export const StyleTag = () => {
+  const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
+  return (
+    <style
+      dangerouslySetInnerHTML={{
+        __html: `${CSS}\n:root { --ayat-font-size: ${ayatFontSize}px; }`,
+      }}
+    />
+  );
+};

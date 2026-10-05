@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { fetchQuranPage } from "../../utils/reciterAudio.js";
+import { fetchQuranPage, stripBasmalaFromAyah } from "../../utils/reciterAudio.js";
 const MUSHAF_TOTAL = 604;
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSelector } from "react-redux";
@@ -138,6 +138,8 @@ export function QuranBookPage({ surahs }) {
 
     const fs = Math.max(Math.min(sz.h / 20, sz.w / 14, 16), 10);
 
+    const pageHizb = ayahs?.[0]?.hizb ?? (ayahs?.[0]?.hizbQuarter != null ? Math.ceil(ayahs[0].hizbQuarter / 4) : null);
+
     return (
       <div className={`qbook-page-content${side === 'right' ? ' qbook-page-content-right' : ''}`}>
         {groups.map((g, gi) => (
@@ -148,7 +150,7 @@ export function QuranBookPage({ surahs }) {
                   {g.eng.toUpperCase()}
                   <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:'1.3em', margin:'0 5px' }}>{g.name}</span>
                 </div>
-                {g.sn !== 9 && (
+                {g.sn !== 1 && g.sn !== 9 && (
                   <div className="qbook-basmala" style={{ fontSize: fs + 1 }}>
                     بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
                   </div>
@@ -158,13 +160,13 @@ export function QuranBookPage({ surahs }) {
             <div className="qbook-ayah-text" style={{ fontSize: fs }}>
               {g.ayahs.map(a => (
                 <React.Fragment key={a.numberInSurah}>
-                  {a.text}<span className="qbook-ayah-num">﴿{a.numberInSurah}﴾</span>{' '}
+                  {stripBasmalaFromAyah(a.text, g.sn, a.numberInSurah)}<span className="qbook-ayah-num">﴿{a.numberInSurah}﴾</span>{' '}
                 </React.Fragment>
               ))}
             </div>
           </React.Fragment>
         ))}
-        <div className="qbook-page-num">{pageNum}</div>
+        <div className="qbook-page-num">{pageNum}{pageHizb ? ` · Hizb ${pageHizb}` : ''}</div>
       </div>
     );
   }, [pageCache, sz]);

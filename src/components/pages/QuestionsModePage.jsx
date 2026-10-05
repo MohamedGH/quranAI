@@ -45,7 +45,7 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
   const ensureQPageData = React.useCallback((sn) => {
     if (!sn || qPageData[sn]) return;
     fetchSurahDefault(sn).then(ayahs => {
-      setQPageData(p => ({ ...p, [sn]: ayahs.map(a => ({ numberInSurah: a.numberInSurah, page: a.page })) }));
+      setQPageData(p => ({ ...p, [sn]: ayahs.map(a => ({ numberInSurah: a.numberInSurah, page: a.page, hizb: a.hizb ?? (a.hizbQuarter != null ? Math.ceil(a.hizbQuarter / 4) : null) })) }));
     }).catch(() => {});
   }, [qPageData]);
 
@@ -570,8 +570,10 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                           const items = [];
                           if (pd?.length) {
                             let lastPage = null;
-                            pd.forEach(({ numberInSurah: an, page }) => {
+                            let lastHizb = null;
+                            pd.forEach(({ numberInSurah: an, page, hizb }) => {
                               if (page !== lastPage) { items.push({ type:'badge', page }); lastPage = page; }
+                              if (hizb != null && hizb !== lastHizb) { items.push({ type:'hizb', hizb }); lastHizb = hizb; }
                               items.push({ type:'cell', an });
                             });
                           } else { Array.from({ length: maxA }, (_, i) => i+1).forEach(an => items.push({ type:'cell', an })); }
@@ -581,6 +583,12 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                                 fontFamily:"'Cinzel',serif", padding:'0 3px',
                                 borderLeft: i > 0 ? '1px solid rgba(200,120,255,.2)' : 'none',
                                 marginLeft: i > 0 ? 3 : 0, lineHeight:'18px' }}>P{item.page}</span>
+                            );
+                            if (item.type === 'hizb') return (
+                              <span key={`h${item.hizb}-${i}`} style={{ fontSize:6, letterSpacing:1, color:'#ffd166',
+                                fontFamily:"'Cinzel',serif", padding:'0 3px',
+                                borderLeft: i > 0 ? '1px solid rgba(255,209,102,.2)' : 'none',
+                                marginLeft: i > 0 ? 2 : 0, lineHeight:'18px' }}>H{item.hizb}</span>
                             );
                             const an = item.an;
                             const score = getAyatQScoreForSn(s.number, an);
@@ -754,8 +762,10 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                         const items = [];
                         if (pd?.length) {
                           let lastPage = null;
-                          pd.forEach(({ numberInSurah: an, page }) => {
+                          let lastHizb = null;
+                          pd.forEach(({ numberInSurah: an, page, hizb }) => {
                             if (page !== lastPage) { items.push({ type:'badge', page }); lastPage = page; }
+                            if (hizb != null && hizb !== lastHizb) { items.push({ type:'hizb', hizb }); lastHizb = hizb; }
                             items.push({ type:'cell', an });
                           });
                         } else { Array.from({ length: max }, (_, i) => i+1).forEach(an => items.push({ type:'cell', an })); }
@@ -765,6 +775,12 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                               fontFamily:"'Cinzel',serif", padding:'0 3px',
                               borderLeft: i > 0 ? '1px solid rgba(200,120,255,.2)' : 'none',
                               marginLeft: i > 0 ? 3 : 0, lineHeight:'16px' }}>P{item.page}</span>
+                          );
+                          if (item.type === 'hizb') return (
+                            <span key={`h${item.hizb}-${i}`} style={{ fontSize:6, letterSpacing:1, color:'#ffd166',
+                              fontFamily:"'Cinzel',serif", padding:'0 3px',
+                              borderLeft: i > 0 ? '1px solid rgba(255,209,102,.2)' : 'none',
+                              marginLeft: i > 0 ? 2 : 0, lineHeight:'16px' }}>H{item.hizb}</span>
                           );
                           const an = item.an;
                           const inRange  = an >= from && an <= to;
@@ -997,8 +1013,10 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                     const items = [];
                     if (pd?.length) {
                       let lastPage = null;
-                      pd.forEach(({ numberInSurah: an, page }) => {
+                      let lastHizb = null;
+                      pd.forEach(({ numberInSurah: an, page, hizb }) => {
                         if (page !== lastPage) { items.push({ type:'badge', page }); lastPage = page; }
+                        if (hizb != null && hizb !== lastHizb) { items.push({ type:'hizb', hizb }); lastHizb = hizb; }
                         items.push({ type:'cell', an });
                       });
                     } else { Array.from({ length: maxAyat }, (_, i) => i+1).forEach(an => items.push({ type:'cell', an })); }
@@ -1010,6 +1028,12 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                               fontFamily:"'Cinzel',serif", padding:'0 3px',
                               borderLeft: i > 0 ? '1px solid rgba(200,120,255,.2)' : 'none',
                               marginLeft: i > 0 ? 3 : 0, lineHeight:'22px' }}>P{item.page}</span>
+                          );
+                          if (item.type === 'hizb') return (
+                            <span key={`h${item.hizb}-${i}`} style={{ fontSize:6, letterSpacing:1, color:'#ffd166',
+                              fontFamily:"'Cinzel',serif", padding:'0 3px',
+                              borderLeft: i > 0 ? '1px solid rgba(255,209,102,.2)' : 'none',
+                              marginLeft: i > 0 ? 2 : 0, lineHeight:'22px' }}>H{item.hizb}</span>
                           );
                           const an = item.an;
                           const inRange = an >= rfN && an <= rtN;

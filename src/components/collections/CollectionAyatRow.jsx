@@ -1,5 +1,5 @@
 import { Submenu } from "../modes/Submenu.jsx";
-import { SURAH_INFO } from "../../utils/arabicUtils.js";
+import { SURAH_INFO, stripBasmalaFromAyah } from "../../utils/arabicUtils.js";
 import React, { useState, useRef, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { sel } from "../../store.js";
@@ -40,7 +40,8 @@ export function CollectionAyatRow({ entry, collId, learnData, setLData, onToggle
   (ld.parts || []).forEach((p, pi) => p.wordIndices?.forEach(wi => { wordPartMap[wi] = pi; }));
   const wordsInParts = new Set(Object.keys(wordPartMap).map(Number));
   const nextAvail    = wordsInParts.size > 0 ? Math.max(...wordsInParts) + 1 : 0;
-  const ayatWords    = entry.text ? entry.text.split(" ").filter(Boolean) : [];
+  const cleanEntryText = stripBasmalaFromAyah(entry.text, entry.surahNum, entry.ayatNum);
+  const ayatWords    = cleanEntryText ? cleanEntryText.split(" ").filter(Boolean) : [];
 
   const playPartInline = (part) => {
     const url = audioUrl;
@@ -149,7 +150,7 @@ export function CollectionAyatRow({ entry, collId, learnData, setLData, onToggle
     return (
       <div className="ayat-arabic">
         {(showQalqala || showMadd)
-          ? (() => { const arr = [...entry.text]; return arr.map((ch, i) => {
+          ? (() => { const arr = [...cleanEntryText]; return arr.map((ch, i) => {
               const q = showQalqala && isQalqala(arr, i);
               const mt = showMadd ? getMaddType(arr, i) : null;
               const iz = showIzhar && isIzhar(arr, i);
@@ -161,7 +162,7 @@ export function CollectionAyatRow({ entry, collId, learnData, setLData, onToggle
                    : id              ? <span key={i} style={{color:'#ffd166',textShadow:'0 0 6px rgba(255,209,102,.5)'}}>{ch}</span>
                    : <span key={i}>{ch}</span>;
             }); })()
-          : entry.text}
+          : cleanEntryText}
       </div>
     );
   };

@@ -11,6 +11,7 @@ import {
   fetchSurahTranslation,
   TRANS_LABELS,
   TRANS_EDITIONS,
+  stripBasmalaFromAyah,
 } from "../../utils/reciterAudio.js";
 import {
   isTafkhim,
@@ -31,16 +32,7 @@ function toArabicDigits(num) {
 
 // Helper to strip redundant Bismillah from Ayah 1 of Surahs (except Al-Fatihah 1 and At-Tawbah 9)
 function stripBismillahIfPresent(text, surahNum, ayahNum) {
-  let cleaned = (text || "").replace(/^\ufeff/, "").trim();
-  if (ayahNum === 1 && surahNum !== 1 && surahNum !== 9) {
-    const parts = cleaned.split(/\s+/);
-    if (parts.length >= 5 && parts[0].includes("بِسْمِ")) {
-      cleaned = parts.slice(4).join(" ");
-    } else {
-      cleaned = cleaned.replace(/^ب[\u0600-\u06FF\s]*ٱلل[\u0600-\u06FF\s]*ٱلرَّحْم[\u0600-\u06FF\s]*ٱلرَّحِيمِ?\s*/, "").trim();
-    }
-  }
-  return cleaned;
+  return stripBasmalaFromAyah(text, surahNum, ayahNum);
 }
 
 // ─── 2D Canvas Mushaf Page Texture Generator ─────────────────────────────────
@@ -113,12 +105,13 @@ function renderPageToCanvas(ayahs, pageNum, tajweedOpts, activeAyahKey, isSingle
   const rawSurahName = topAyah?.surah?.name || "";
   const cleanSurahHeader = rawSurahName.replace(/^سُورَةُ\s*/, "");
   const juzNum = topAyah?.juz || Math.ceil(pageNum / 20);
+  const hizbNum = topAyah?.hizb ?? (topAyah?.hizbQuarter != null ? Math.ceil(topAyah.hizbQuarter / 4) : Math.ceil(pageNum / 10));
 
   // Top Header text
   ctx.fillStyle = "#8a6d25";
   ctx.font = `bold ${14 * scale}px 'Cinzel', serif`;
   ctx.textAlign = "left";
-  ctx.fillText(`JUZ ${juzNum}`, margin + 18 * scale, margin - 12 * scale);
+  ctx.fillText(`JUZ ${juzNum} · HIZB ${hizbNum}`, margin + 18 * scale, margin - 12 * scale);
 
   if (cleanSurahHeader) {
     ctx.textAlign = "right";

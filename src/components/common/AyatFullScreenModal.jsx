@@ -2002,20 +2002,28 @@ export function AyatFullScreenModal({
               >
                 VERSET {currentAyatNum} <span style={{ color: "var(--text3)", fontWeight: 400 }}>/ {totalAyats}</span>
               </span>
-              {(ayat.page || ayat.juz) && (
-                <span
-                  style={{
-                    fontSize: 9,
-                    fontFamily: "'Cinzel', serif",
-                    letterSpacing: 0.8,
-                    color: "var(--teal2)",
-                    borderLeft: "1px solid rgba(255,255,255,0.15)",
-                    paddingLeft: 8,
-                  }}
-                >
-                  {ayat.page ? `P.${ayat.page}` : ""} {ayat.juz ? `· J.${ayat.juz}` : ""}
-                </span>
-              )}
+              {(() => {
+                const ayatHizb = ayat.hizb ?? (ayat.hizbQuarter != null ? Math.ceil(ayat.hizbQuarter / 4) : null);
+                if (!ayat.page && !ayatHizb && !ayat.juz) return null;
+                return (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontFamily: "'Cinzel', serif",
+                      letterSpacing: 0.8,
+                      color: "var(--teal2)",
+                      borderLeft: "1px solid rgba(255,255,255,0.15)",
+                      paddingLeft: 8,
+                    }}
+                  >
+                    {[
+                      ayat.page ? `P.${ayat.page}` : null,
+                      ayatHizb ? `H.${ayatHizb}` : null,
+                      ayat.juz ? `J.${ayat.juz}` : null,
+                    ].filter(Boolean).join(" · ")}
+                  </span>
+                );
+              })()}
             </div>
 
             {/* Mobile swipe hint */}

@@ -11,6 +11,7 @@ import {
   fixChars,
   _stripBasmalaWords,
   parseTimestampsFile,
+  stripBasmalaFromAyah,
 } from "../src/utils/reciterAudio.js";
 
 describe("Reciter & Audio Utilities", () => {
@@ -63,5 +64,27 @@ describe("Reciter & Audio Utilities", () => {
     expect(retrieved).not.toBeNull();
     expect(retrieved.number).toBe(1);
     expect(retrieved.ayahs[0].text).toBe("بِسْمِ اللَّهِ");
+  });
+
+  it("strips Bismillah from verse 1 across all editions and Mushaf pages", () => {
+    expect(
+      stripBasmalaFromAyah("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ الٓمٓ", 2, 1)
+    ).toBe("الٓمٓ");
+    expect(
+      stripBasmalaFromAyah("بِسۡمِ ٱللَّهِ ٱلرَّحۡمَـٰنِ ٱلرَّحِیمِ قُلۡ هُوَ ٱللَّهُ أَحَدٌ", 112, 1)
+    ).toBe("قُلۡ هُوَ ٱللَّهُ أَحَدٌ");
+    // Keeps Surah 1 (Al-Fatiha) verse 1 intact
+    expect(
+      stripBasmalaFromAyah("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ", 1, 1)
+    ).toBe("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ");
+    // Strips 4 Basmala words from timestamps for Surah 2
+    const tsWords = [
+      { chars: [{ char: "بِ" }, { char: "سْ" }, { char: "مِ" }] },
+      { chars: [{ char: "ٱ" }, { char: "ل" }, { char: "لَّ" }, { char: "هِ" }] },
+      { chars: [{ char: "ٱ" }, { char: "ل" }, { char: "رَّ" }, { char: "حْ" }] },
+      { chars: [{ char: "ٱ" }, { char: "ل" }, { char: "رَّ" }, { char: "حِ" }] },
+      { chars: [{ char: "ا" }, { char: "لٓ" }, { char: "مٓ" }] },
+    ];
+    expect(_stripBasmalaWords(tsWords, 2)).toHaveLength(1);
   });
 });

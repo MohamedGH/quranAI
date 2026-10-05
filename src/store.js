@@ -28,7 +28,8 @@ const uiSlice = createSlice({
     enableLetterByLetter:load("quran_enableLetterByLetter", true),
     enableAnimations:    load("quran_enableAnimations", true),
     enableHeavyCompute:  load("quran_enableHeavyCompute", true),
-    fullScreenSelectedAyat: load("quran_fullScreenSelectedAyat", false)
+    fullScreenSelectedAyat: load("quran_fullScreenSelectedAyat", false),
+    ayatFontSize:        load("quran_ayatFontSize", 26)
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -65,7 +66,26 @@ const uiSlice = createSlice({
     toggleEnableAnimations:     (s) => { s.enableAnimations     = !s.enableAnimations;     save("quran_enableAnimations",     s.enableAnimations); },
     toggleEnableHeavyCompute:   (s) => { s.enableHeavyCompute   = !s.enableHeavyCompute;   save("quran_enableHeavyCompute",   s.enableHeavyCompute); },
     toggleFullScreenSelectedAyat: (s) => { s.fullScreenSelectedAyat = !s.fullScreenSelectedAyat; save("quran_fullScreenSelectedAyat", s.fullScreenSelectedAyat); },
-    setFullScreenSelectedAyat:    (s, a) => { s.fullScreenSelectedAyat = !!a.payload; save("quran_fullScreenSelectedAyat", s.fullScreenSelectedAyat); }
+    setFullScreenSelectedAyat:    (s, a) => { s.fullScreenSelectedAyat = !!a.payload; save("quran_fullScreenSelectedAyat", s.fullScreenSelectedAyat); },
+    setAyatFontSize: (s, a) => {
+      const v = Math.max(16, Math.min(48, Number(a.payload) || 26));
+      s.ayatFontSize = v;
+      save("quran_ayatFontSize", v);
+    },
+    increaseAyatFontSize: (s) => {
+      const v = Math.min(48, (s.ayatFontSize || 26) + 2);
+      s.ayatFontSize = v;
+      save("quran_ayatFontSize", v);
+    },
+    decreaseAyatFontSize: (s) => {
+      const v = Math.max(16, (s.ayatFontSize || 26) - 2);
+      s.ayatFontSize = v;
+      save("quran_ayatFontSize", v);
+    },
+    resetAyatFontSize: (s) => {
+      s.ayatFontSize = 26;
+      save("quran_ayatFontSize", 26);
+    }
   },
 });
 
@@ -371,6 +391,7 @@ export const sel = {
   spellCheck:      (s) => s.ui.spellCheck,
   showParts:       (s) => s.ui.showParts,
   fullScreenSelectedAyat: (s) => s.ui.fullScreenSelectedAyat,
+  ayatFontSize:    (s) => s.ui.ayatFontSize || 26,
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

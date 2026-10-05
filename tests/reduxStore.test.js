@@ -58,6 +58,26 @@ describe("Redux Store & Production Slice Integration", () => {
       store.dispatch(uiActions.toggleEnableLetterByLetter());
       expect(sel.enableLetterByLetter(store.getState())).toBe(!lblInit);
     });
+
+    it("adjusts and clamps Quranic verse font size (ayatFontSize)", () => {
+      store.dispatch(uiActions.resetAyatFontSize());
+      expect(sel.ayatFontSize(store.getState())).toBe(26);
+
+      store.dispatch(uiActions.increaseAyatFontSize());
+      expect(sel.ayatFontSize(store.getState())).toBe(28);
+
+      store.dispatch(uiActions.decreaseAyatFontSize());
+      expect(sel.ayatFontSize(store.getState())).toBe(26);
+
+      store.dispatch(uiActions.setAyatFontSize(100));
+      expect(sel.ayatFontSize(store.getState())).toBe(48);
+
+      store.dispatch(uiActions.setAyatFontSize(8));
+      expect(sel.ayatFontSize(store.getState())).toBe(16);
+
+      store.dispatch(uiActions.resetAyatFontSize());
+      expect(sel.ayatFontSize(store.getState())).toBe(26);
+    });
   });
 
   describe("Quran Slice & Navigation", () => {

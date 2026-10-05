@@ -20,6 +20,7 @@ export function HeaderToolsModal({
   const [activeTab, setActiveTab] = useState(initialTab);
   const dispatch = useDispatch();
   const fullScreenSelectedAyat = useSelector(sel.fullScreenSelectedAyat);
+  const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -167,6 +168,123 @@ export function HeaderToolsModal({
           {/* TAB 1: OUTILS D'ÉTUDE */}
           {activeTab === 'tools' && (
             <>
+              {/* Taille du Texte des Versets */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'var(--surface2)',
+                  border: '1px solid rgba(201, 168, 76, 0.35)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 8,
+                        background: 'rgba(201, 168, 76, 0.14)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 15,
+                        fontWeight: 700,
+                        fontFamily: "'Cinzel', serif",
+                        color: 'var(--gold2)'
+                      }}
+                    >
+                      A±
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>
+                        Taille du Texte Coranique
+                      </div>
+                      <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+                        Ajuster la taille des versets pour une meilleure lisibilité ({ayatFontSize} px)
+                      </div>
+                    </div>
+                  </div>
+                  {ayatFontSize !== 26 && (
+                    <button
+                      type="button"
+                      onClick={() => dispatch(uiActions.resetAyatFontSize())}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        border: '1px solid rgba(201, 168, 76, 0.4)',
+                        background: 'rgba(201, 168, 76, 0.1)',
+                        color: 'var(--gold2)',
+                        fontSize: 8,
+                        fontFamily: "'Cinzel', serif",
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      26PX ↺
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button
+                    type="button"
+                    id="tools-modal-fontsize-dec"
+                    onClick={() => dispatch(uiActions.decreaseAyatFontSize())}
+                    disabled={ayatFontSize <= 16}
+                    aria-label="Réduire la taille du texte"
+                    style={{
+                      width: 38,
+                      height: 32,
+                      borderRadius: 8,
+                      border: '1px solid rgba(201, 168, 76, 0.35)',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      color: ayatFontSize <= 16 ? 'var(--text3)' : 'var(--gold2)',
+                      fontFamily: "'Cinzel', serif",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: ayatFontSize <= 16 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    A−
+                  </button>
+                  <input
+                    type="range"
+                    min={16}
+                    max={48}
+                    step={2}
+                    value={ayatFontSize}
+                    onChange={(e) => dispatch(uiActions.setAyatFontSize(Number(e.target.value)))}
+                    aria-label="Curseur de taille du texte des versets"
+                    style={{ flex: 1, accentColor: 'var(--gold)', cursor: 'pointer' }}
+                  />
+                  <button
+                    type="button"
+                    id="tools-modal-fontsize-inc"
+                    onClick={() => dispatch(uiActions.increaseAyatFontSize())}
+                    disabled={ayatFontSize >= 48}
+                    aria-label="Augmenter la taille du texte"
+                    style={{
+                      width: 38,
+                      height: 32,
+                      borderRadius: 8,
+                      border: '1px solid rgba(201, 168, 76, 0.35)',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      color: ayatFontSize >= 48 ? 'var(--text3)' : 'var(--gold2)',
+                      fontFamily: "'Cinzel', serif",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: ayatFontSize >= 48 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    A+
+                  </button>
+                </div>
+              </div>
+
               {/* Clavier Arabe Virtuel */}
               <div
                 style={{

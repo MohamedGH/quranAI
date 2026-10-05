@@ -1,6 +1,8 @@
 import { IS_ANDROID } from './audioRecorder.js';
-import { splitArabicWords } from './arabicUtils.js';
+import { splitArabicWords, stripBasmalaFromAyah } from './arabicUtils.js';
 import { safeGetItem, safeSetItem } from './safeStorage.js';
+
+export { stripBasmalaFromAyah };
 
 export const API = "https://api.alquran.cloud/v1";
 export const AUDIO_CDN_ROOT = 'https://cdn.islamic.network/quran/audio'; // bitrate is appended dynamically, see getAudioBase()
@@ -193,18 +195,50 @@ export async function fetchSurahWbw(sn, lang = 'fr') {
   return fallback && typeof fallback === 'object' ? fallback : {};
 }
 
+function _cleanAyahsArray(ayahs, fallbackSurahNum = null) {
+  if (!Array.isArray(ayahs)) return [];
+  return ayahs.map(a => {
+    if (!a) return a;
+    const hizbVal = a.hizb ?? (a.hizbQuarter != null ? Math.ceil(a.hizbQuarter / 4) : undefined);
+    const sn = a.surah?.number ?? fallbackSurahNum;
+    const cleaned = (a.numberInSurah === 1 && a.text)
+      ? stripBasmalaFromAyah(a.text, sn, a.numberInSurah)
+      : a.text;
+    if (cleaned !== a.text || (hizbVal !== undefined && a.hizb !== hizbVal)) {
+      return {
+        ...a,
+        ...(cleaned !== a.text ? { text: cleaned } : {}),
+        ...(hizbVal !== undefined ? { hizb: hizbVal } : {}),
+      };
+    }
+    return a;
+  });
+}
+
+function _cleanSimpleAyatsArray(ayats, surahNum = null) {
+  if (!Array.isArray(ayats)) return [];
+  return ayats.map(a => {
+    if (!a || a.num !== 1 || !a.text) return a;
+    const cleaned = stripBasmalaFromAyah(a.text, surahNum, a.num);
+    return cleaned !== a.text ? { ...a, text: cleaned } : a;
+  });
+}
+
 export async function fetchAyats(n) {
   const idbKey = `alafasy:${n}`;
   try {
     const c = await idbGetQuran(idbKey);
-    if (c && Array.isArray(c.ayahs) && c.ayahs.length > 0) return c;
+    if (c && Array.isArray(c.ayahs) && c.ayahs.length > 0) {
+      return { ...c, ayahs: _cleanAyahsArray(c.ayahs, n) };
+    }
   } catch {}
 
   try {
     const r = await fetch(`${API}/surah/${n}/ar.alafasy`);
     if (r.ok) {
-      const data = (await r.json())?.data || { ayahs: [] };
-      if (Array.isArray(data.ayahs) && data.ayahs.length > 0) {
+      const rawData = (await r.json())?.data || { ayahs: [] };
+      if (Array.isArray(rawData.ayahs) && rawData.ayahs.length > 0) {
+        const data = { ...rawData, ayahs: _cleanAyahsArray(rawData.ayahs, n) };
         idbSetQuran(idbKey, data).catch(() => {});
         return data;
       }
@@ -217,14 +251,16 @@ export async function fetchAyats(n) {
   try {
     const defAyahs = await fetchSurahDefault(n);
     if (Array.isArray(defAyahs) && defAyahs.length > 0) {
-      const constructed = { number: n, ayahs: defAyahs };
+      const constructed = { number: n, ayahs: _cleanAyahsArray(defAyahs, n) };
       idbSetQuran(idbKey, constructed).catch(() => {});
       return constructed;
     }
   } catch {}
 
   const fallback = safeGetItem(`quran_fallback_alafasy_${n}`, null);
-  if (fallback && Array.isArray(fallback.ayahs) && fallback.ayahs.length > 0) return fallback;
+  if (fallback && Array.isArray(fallback.ayahs) && fallback.ayahs.length > 0) {
+    return { ...fallback, ayahs: _cleanAyahsArray(fallback.ayahs, n) };
+  }
 
   return { ayahs: [] };
 }
@@ -234,14 +270,17 @@ export async function fetchSurahSimple(n) {
   const idbKey = `text:${n}`;
   try {
     const c = await idbGetQuran(idbKey);
-    if (Array.isArray(c) && c.length > 0) return c;
+    if (Array.isArray(c) && c.length > 0) return _cleanSimpleAyatsArray(c, n);
   } catch {}
 
   try {
     const r = await fetch(`${API}/surah/${n}/quran-simple`);
     if (r.ok) {
       const data = (await r.json())?.data?.ayahs || [];
-      const ayats = data.map(a => ({ num: a.numberInSurah, text: a.text }));
+      const ayats = _cleanSimpleAyatsArray(
+        data.map(a => ({ num: a.numberInSurah, text: a.text })),
+        n
+      );
       if (ayats.length > 0) {
         idbSetQuran(idbKey, ayats).catch(() => {});
         return ayats;
@@ -250,7 +289,7 @@ export async function fetchSurahSimple(n) {
   } catch {}
 
   const fallback = safeGetItem(`quran_fallback_text_${n}`, null);
-  return Array.isArray(fallback) ? fallback : [];
+  return Array.isArray(fallback) ? _cleanSimpleAyatsArray(fallback, n) : [];
 }
 
 // /surah/${n}  (default edition — used for ayat texts in MemoriseMode etc.)
@@ -258,13 +297,14 @@ export async function fetchSurahDefault(n) {
   const idbKey = `simple:${n}`;
   try {
     const c = await idbGetQuran(idbKey);
-    if (Array.isArray(c) && c.length > 0) return c;
+    if (Array.isArray(c) && c.length > 0) return _cleanAyahsArray(c, n);
   } catch {}
 
   try {
     const r = await fetch(`${API}/surah/${n}`);
     if (r.ok) {
-      const ayahs = (await r.json())?.data?.ayahs || [];
+      const rawAyahs = (await r.json())?.data?.ayahs || [];
+      const ayahs = _cleanAyahsArray(rawAyahs, n);
       if (ayahs.length > 0) {
         idbSetQuran(idbKey, ayahs).catch(() => {});
         return ayahs;
@@ -273,7 +313,7 @@ export async function fetchSurahDefault(n) {
   } catch {}
 
   const fallback = safeGetItem(`quran_fallback_simple_${n}`, null);
-  return Array.isArray(fallback) ? fallback : [];
+  return Array.isArray(fallback) ? _cleanAyahsArray(fallback, n) : [];
 }
 
 // Static surah metadata cache: hizb, juz, page (from ayat 1) + total word count
@@ -308,13 +348,14 @@ export async function fetchQuranPage(pageNum) {
   const key = `mushaf_page:${pageNum}`;
   try {
     const c = await idbGetQuran(key);
-    if (Array.isArray(c) && c.length > 0) return c;
+    if (Array.isArray(c) && c.length > 0) return _cleanAyahsArray(c);
   } catch {}
 
   try {
     const r = await fetch(`${API}/page/${pageNum}/quran-uthmani`);
     if (r.ok) {
-      const ayahs = (await r.json())?.data?.ayahs || [];
+      const rawAyahs = (await r.json())?.data?.ayahs || [];
+      const ayahs = _cleanAyahsArray(rawAyahs);
       if (ayahs.length > 0) {
         idbSetQuran(key, ayahs).catch(() => {});
         return ayahs;
@@ -323,7 +364,7 @@ export async function fetchQuranPage(pageNum) {
   } catch {}
 
   const fallback = safeGetItem(`quran_fallback_page_${pageNum}`, null);
-  return Array.isArray(fallback) ? fallback : [];
+  return Array.isArray(fallback) ? _cleanAyahsArray(fallback) : [];
 }
 
 // Static page-level metadata: hizb, juz, word count — cached in IDB as pmeta:N
@@ -350,7 +391,7 @@ export async function fetchPageMeta(pageNum) {
 export function _stripBasmalaWords(words, sn) {
   // Strip first 4 words (basmala) from ayat 1 timestamps for non-Fatiha/Tawba surahs
   if (!words || words.length <= 4 || sn === 1 || sn === 9) return words;
-  const stripD = s => s.replace(/[ؐ-ًؚ-ٰٟۖ-ۭ]/g, '');
+  const stripD = s => s.replace(/[\u0610-\u061A\u0640\u064B-\u065F\u0670\u06D6-\u06ED\ufeff\u200B-\u200F]/g, '');
   const firstWord = words[0]?.chars?.map(c => c.char).join('') || '';
   if (stripD(firstWord).startsWith('بسم')) return words.slice(4);
   return words;

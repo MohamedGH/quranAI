@@ -153,7 +153,30 @@ export function splitArabicWords(text) {
 }
 
 export function stripDiacritics(s) {
-  return s.replace(/[ؐ-ًؚ-ٰٟۖ-ۜ۟-۪ۤۧۨ-ۭ]/g, '');
+  if (!s) return '';
+  return s.replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '');
+}
+
+/**
+ * Strips the leading 4-word Bismillah ("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ")
+ * from the first verse of a surah across all Quran editions and Mushaf pages.
+ * Does not strip Surah 1 (Al-Fatiha, where verse 1 is the 4-word Bismillah itself)
+ * or Surah 9 (At-Tawba, which has no Bismillah).
+ */
+export function stripBasmalaFromAyah(text, surahNum = null, ayatNum = null) {
+  if (!text || typeof text !== 'string') return text || '';
+  if (ayatNum != null && Number(ayatNum) !== 1) return text;
+  if (surahNum != null && (Number(surahNum) === 1 || Number(surahNum) === 9)) return text;
+
+  const cleaned = text.replace(/^[\ufeff\u200B-\u200F\u061C\s]+/, '').trim();
+  const words = cleaned.split(/\s+/);
+  if (words.length <= 4) return text;
+
+  const bareFirst = words[0].replace(/[\u0610-\u061A\u0640\u064B-\u065F\u0670\u06D6-\u06ED\ufeff\u200B-\u200F]/g, '');
+  if (bareFirst === 'بسم' || bareFirst.startsWith('بسم')) {
+    return words.slice(4).join(' ').trim();
+  }
+  return text;
 }
 export function wordTranslit(w) {
   const clean = stripDiacritics(w);

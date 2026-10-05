@@ -78,9 +78,9 @@ export function QuestionsMode({ selectedSn, ayatList, surahs, learnData, setLDat
             const rawText = ayatTexts[`${effectiveSn}:${ayatNum}`] || "";
             const text = (() => {
               if (ayatNum === 1 && effectiveSn !== 1 && effectiveSn !== 9 && rawText) {
-                const ws = rawText.trim().split(' ');
-                const stripD = s => s.replace(/[ؐ-ًؚ-ٰٟۖ-ۭ]/g, '');
-                if (ws.length > 4 && stripD(ws[0]) === 'بسم') return ws.slice(4).join(' ');
+                const ws = rawText.replace(/^[\ufeff\u200B-\u200F\u061C\s]+/, '').trim().split(/\s+/);
+                const stripD = s => s.replace(/[\u0610-\u061A\u0640\u064B-\u065F\u0670\u06D6-\u06ED\ufeff\u200B-\u200F]/g, '');
+                if (ws.length > 4 && stripD(ws[0]).startsWith('بسم')) return ws.slice(4).join(' ');
               }
               return rawText;
             })();

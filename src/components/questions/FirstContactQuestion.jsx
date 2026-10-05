@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { getAudioBase } from '../../utils/reciterAudio.js';
-import { splitArabicWords } from '../../utils/arabicUtils.js';
+import { splitArabicWords, stripBasmalaFromAyah } from '../../utils/arabicUtils.js';
 
 export function FirstContactQuestion({
   q,
@@ -19,12 +19,7 @@ export function FirstContactQuestion({
   const rawText = q.text || ayatTexts[`${sn}:${ayatNum}`] || '';
   // Strip Bismillah if verse 1 of non-Fatihah/Tawbah
   const cleanText = useMemo(() => {
-    if (ayatNum === 1 && sn !== 1 && sn !== 9 && rawText) {
-      const ws = rawText.trim().split(' ');
-      const stripD = s => s.replace(/[ؐ-ًؚ-ٰٟۖ-ۭ]/g, '');
-      if (ws.length > 4 && stripD(ws[0]) === 'بسم') return ws.slice(4).join(' ');
-    }
-    return rawText;
+    return stripBasmalaFromAyah(rawText, sn, ayatNum);
   }, [ayatNum, sn, rawText]);
 
   const words = useMemo(() => {

@@ -17,6 +17,7 @@ export function OptionsModal({ onClose, onOpenReminders }) {
   const spellCheck            = useSelector(sel.spellCheck);
   const announceNum           = useSelector(sel.announceNum);
   const fullScreenSelectedAyat= useSelector(sel.fullScreenSelectedAyat);
+  const ayatFontSize          = useSelector(sel.ayatFontSize) || 26;
 
   const Row = ({ label, desc, on, onToggle, color = "var(--teal2)" }) => (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -73,6 +74,86 @@ export function OptionsModal({ onClose, onOpenReminders }) {
           <Row label="IZHAR إظهار" on={showIzhar} onToggle={() => dispatch(uiActions.toggleIzhar())} color="#4caf81" />
           <Row label="IDGHAM إدغام" on={showIdgham} onToggle={() => dispatch(uiActions.toggleIdgham())} color="#ffd166" />
           <Section title="AFFICHAGE" />
+          <div style={{
+            display: "flex", flexDirection: "column", gap: 8,
+            padding: "10px 0", borderBottom: "1px solid var(--border)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--text)", fontFamily: "'Cinzel',serif" }}>
+                  TAILLE DU TEXTE DES VERSETS
+                </div>
+                <div style={{ fontSize: 8, color: "var(--text3)", marginTop: 2, letterSpacing: 0.5 }}>
+                  Ajuster la taille de police arabe ({ayatFontSize}px)
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => dispatch(uiActions.decreaseAyatFontSize())}
+                  disabled={ayatFontSize <= 16}
+                  aria-label="Réduire la taille du texte"
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border2)",
+                    background: "var(--surface2)",
+                    color: ayatFontSize <= 16 ? "var(--text3)" : "var(--gold2)",
+                    fontFamily: "'Cinzel',serif",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    cursor: ayatFontSize <= 16 ? "not-allowed" : "pointer"
+                  }}
+                >
+                  A−
+                </button>
+                <span
+                  onClick={() => dispatch(uiActions.resetAyatFontSize())}
+                  title="Cliquer pour réinitialiser à 26px"
+                  style={{
+                    minWidth: 36,
+                    textAlign: "center",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: "var(--gold2)",
+                    fontFamily: "'Cinzel',serif",
+                    cursor: "pointer"
+                  }}
+                >
+                  {ayatFontSize}px
+                </span>
+                <button
+                  type="button"
+                  onClick={() => dispatch(uiActions.increaseAyatFontSize())}
+                  disabled={ayatFontSize >= 48}
+                  aria-label="Augmenter la taille du texte"
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border2)",
+                    background: "var(--surface2)",
+                    color: ayatFontSize >= 48 ? "var(--text3)" : "var(--gold2)",
+                    fontFamily: "'Cinzel',serif",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    cursor: ayatFontSize >= 48 ? "not-allowed" : "pointer"
+                  }}
+                >
+                  A+
+                </button>
+              </div>
+            </div>
+            <input
+              type="range"
+              min={16}
+              max={48}
+              step={2}
+              value={ayatFontSize}
+              onChange={e => dispatch(uiActions.setAyatFontSize(Number(e.target.value)))}
+              aria-label="Taille du texte des versets"
+              style={{ width: "100%", accentColor: "var(--gold)", cursor: "pointer" }}
+            />
+          </div>
           <Row label="PLEIN ÉCRAN VERSET" desc="Afficher le verset sélectionné en plein écran immersif" on={fullScreenSelectedAyat} onToggle={() => dispatch(uiActions.toggleFullScreenSelectedAyat())} color="var(--gold2)" />
           <Row label="PARTIES" desc="Afficher les découpes de mémorisation" on={showParts} onToggle={() => dispatch(uiActions.toggleShowParts())} color="var(--gold2)" />
           <Row label="ORTHOGRAPHE" desc="Vérification en révision écrite" on={spellCheck} onToggle={() => dispatch(uiActions.toggleSpellCheck())} color="var(--gold2)" />

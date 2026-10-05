@@ -16,8 +16,8 @@ export function CollectionsPage({ collections, learnData, setLData, onCreateColl
     if (searchQuerySnapshot) onConsumeSearchQuery?.();
   }, []); // eslint-disable-line
   const [searchQ, setSearchQ]   = useState("");
-  const [searchMode, setSearchMode] = useState("ayat"); // "ayat" | "page" | "hizb"
-  const [metaCache, setMetaCache]   = useState({});     // key "s:a" → {page, hizbQuarter}
+  const [searchMode, setSearchMode] = useState("ayat"); // "ayat" | "page" | "hizb" | "juz"
+  const [metaCache, setMetaCache]   = useState({});     // key "s:a" → {page, hizbQuarter, juz}
   const [metaLoading, setMetaLoading] = useState(false);
   const [partGroupSurah, setPartGroupSurah] = useState("all"); // "all" | surahNum
 
@@ -47,7 +47,7 @@ export function CollectionsPage({ collections, learnData, setLData, onCreateColl
       fetchSurahDefault(Number(sn)).then(ayahs => {
           const newMeta = {};
           ayahs.forEach(ay => {
-            newMeta[`${sn}:${ay.numberInSurah}`] = { page: ay.page, hizbQuarter: ay.hizbQuarter };
+            newMeta[`${sn}:${ay.numberInSurah}`] = { page: ay.page, hizbQuarter: ay.hizbQuarter, juz: ay.juz };
           });
           return newMeta;
         }).catch(() => ({}))
@@ -69,6 +69,7 @@ export function CollectionsPage({ collections, learnData, setLData, onCreateColl
       if (searchMode === "ayat")  return a.ayatNum === n;
       if (searchMode === "page")  return meta?.page === n;
       if (searchMode === "hizb")  return meta?.hizbQuarter != null && Math.ceil(meta.hizbQuarter / 4) === n;
+      if (searchMode === "juz")   return meta?.juz === n;
       return false;
     });
   }, [searchQ, searchMode, allEntries, metaCache]);
@@ -250,9 +251,9 @@ export function CollectionsPage({ collections, learnData, setLData, onCreateColl
       {tab === "nav" && (
         <div style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0 }}>
           <div className="coll-search-bar">
-            <input className="coll-search-input" placeholder={searchMode==="ayat"?"N° AYAT":searchMode==="page"?"N° PAGE":"N° HIZB"}
+            <input className="coll-search-input" placeholder={searchMode==="ayat"?"N° AYAT":searchMode==="page"?"N° PAGE":searchMode==="hizb"?"N° HIZB":"N° JUZ"}
               value={searchQ} onChange={e => setSearchQ(e.target.value)} type="number" min="1" />
-            {[["ayat","AYAT"],["page","PAGE"],["hizb","HIZB"]].map(([m,l]) => (
+            {[["ayat","AYAT"],["page","PAGE"],["hizb","HIZB"],["juz","JUZ"]].map(([m,l]) => (
               <button key={m} className={`coll-search-chip${searchMode===m?" active":""}`} onClick={() => { setSearchMode(m); setSearchQ(""); }}>{l}</button>
             ))}
           </div>
@@ -274,7 +275,7 @@ export function CollectionsPage({ collections, learnData, setLData, onCreateColl
                   onClick={() => onNavigate(a.surahNum, a.ayatNum)}>
                   <div style={{ flexShrink:0, display:"flex", flexDirection:"column", gap:3, alignItems:"center", minWidth:40 }}>
                     <div style={{ width:32, height:32, border:"1px solid #c878ff", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#c878ff", fontFamily:"Cinzel,serif" }}>{a.ayatNum}</div>
-                    {meta && <div style={{ fontSize:8, letterSpacing:1, color:"var(--text3)", textAlign:"center" }}>P.{meta.page}{hizb?` H${hizb}`:""}</div>}
+                    {meta && <div style={{ fontSize:8, letterSpacing:1, color:"var(--text3)", textAlign:"center" }}>P.{meta.page}{hizb?` H${hizb}`:""}{meta.juz?` J${meta.juz}`:""}</div>}
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div className="coll-search-meta">{surahInfo?.en || `S.${a.surahNum}`} · AYAT {a.ayatNum}</div>

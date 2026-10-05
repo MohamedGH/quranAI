@@ -22,6 +22,10 @@ export function SurahHeader({
   setHizbMode = () => {},
   activeHizbCoran = null,
   setActiveHizbCoran = () => {},
+  juzMode = false,
+  setJuzMode = () => {},
+  activeJuzCoran = null,
+  setActiveJuzCoran = () => {},
   mainAyatIdx,
   learnData,
   lkey,
@@ -94,12 +98,16 @@ export function SurahHeader({
   const activeAyat = ayats[mainAyatIdx] || ayats[0];
   const curPage = pageMode ? (activePageCoran ?? activeAyat?.page ?? null) : null;
   const curHizb = hizbMode ? (activeHizbCoran ?? getAyatHizb(activeAyat)) : null;
+  const curJuz  = juzMode  ? (activeJuzCoran  ?? activeAyat?.juz ?? null) : null;
   const displayPage = curPage ?? activeAyat?.page ?? surahMeta?.page ?? null;
   const displayHizb = curHizb ?? getAyatHizb(activeAyat) ?? pageMeta?.hizb ?? surahMeta?.hizb ?? null;
+  const displayJuz  = curJuz  ?? activeAyat?.juz  ?? pageMeta?.juz  ?? surahMeta?.juz  ?? null;
   const pageAyats = curPage
     ? ayats.filter(a => a.page === curPage)
     : curHizb
     ? ayats.filter(a => getAyatHizb(a) === curHizb)
+    : curJuz
+    ? ayats.filter(a => a.juz === curJuz)
     : ayats;
   const totalParts = pageAyats.reduce((s, a) => s + (learnData[lkey(sn, a.numberInSurah)]?.parts?.length || 0), 0);
   const totalUnk = pageAyats.reduce((s, a) => s + (learnData[lkey(sn, a.numberInSurah)]?.unknownWords?.length || 0), 0);
@@ -107,8 +115,8 @@ export function SurahHeader({
 
   const anyTj = showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone;
   const activeTjCount = [showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone].filter(Boolean).length;
-  const anyOpt = announceNum || spellCheck || showParts || pageMode || hizbMode || fullScreenSelectedAyat;
-  const activeOptCount = [announceNum, spellCheck, showParts, pageMode, hizbMode, fullScreenSelectedAyat].filter(Boolean).length;
+  const anyOpt = announceNum || spellCheck || showParts || pageMode || hizbMode || juzMode || fullScreenSelectedAyat;
+  const activeOptCount = [announceNum, spellCheck, showParts, pageMode, hizbMode, juzMode, fullScreenSelectedAyat].filter(Boolean).length;
   const langLabel = translationLang ? (TRANS_LABELS[translationLang] || translationLang.toUpperCase()) : "OFF";
 
   // Prev / Next Surah
@@ -173,6 +181,7 @@ export function SurahHeader({
               {selectedSurah.numberOfAyahs}v · {isMeccan ? 'Mecq' : 'Méd'}
               {displayPage ? ` · P.${displayPage}` : ''}
               {displayHizb ? ` · H.${displayHizb}` : ''}
+              {displayJuz ? ` · J.${displayJuz}` : ''}
             </span>
             <span className="m-compact-chevron">▾</span>
           </div>
@@ -243,8 +252,8 @@ export function SurahHeader({
               <div className="m-stat-num" style={{ color: '#ffd166' }}>{displayHizb ?? '—'}</div>
               <div className="m-stat-tag">HIZB</div>
             </div>
-            <div className="m-info-stat-card">
-              <div className="m-stat-num" style={{ color: '#a8edea' }}>{meta?.juz ?? '—'}</div>
+            <div className="m-info-stat-card juz">
+              <div className="m-stat-num" style={{ color: '#a8edea' }}>{displayJuz ?? '—'}</div>
               <div className="m-stat-tag">JUZ</div>
             </div>
             <div className="m-info-stat-card">
@@ -696,6 +705,7 @@ export function SurahHeader({
                 setPageMode(next);
                 setactivePageCoran(null);
                 if (next && hizbMode) { setHizbMode(false); setActiveHizbCoran(null); }
+                if (next && juzMode) { setJuzMode(false); setActiveJuzCoran(null); }
               }}
               className={`m-option-card ${pageMode ? 'active' : ''}`}
             >
@@ -713,26 +723,45 @@ export function SurahHeader({
                 setHizbMode(next);
                 setActiveHizbCoran(null);
                 if (next && pageMode) { setPageMode(false); setactivePageCoran(null); }
+                if (next && juzMode) { setJuzMode(false); setActiveJuzCoran(null); }
               }}
               className={`m-option-card ${hizbMode ? 'active' : ''}`}
             >
               <span className="m-opt-card-icon">۞</span>
               <div className="m-opt-card-text">
                 <span className="m-opt-card-title">MODE HIZB</span>
-                <span className="m-opt-card-desc">Afficher et naviguer par Hizb</span>
+                <span className="m-opt-card-desc">Afficher et naviguer par Hizb (1 à 60)</span>
               </div>
               <span className="m-opt-indicator">{hizbMode ? 'ON' : 'OFF'}</span>
             </button>
 
-            {(pageMode || hizbMode) && (
+            <button
+              onClick={() => {
+                const next = !juzMode;
+                setJuzMode(next);
+                setActiveJuzCoran(null);
+                if (next && pageMode) { setPageMode(false); setactivePageCoran(null); }
+                if (next && hizbMode) { setHizbMode(false); setActiveHizbCoran(null); }
+              }}
+              className={`m-option-card ${juzMode ? 'active' : ''}`}
+            >
+              <span className="m-opt-card-icon">🧭</span>
+              <div className="m-opt-card-text">
+                <span className="m-opt-card-title">MODE JUZ</span>
+                <span className="m-opt-card-desc">Afficher et naviguer par Juz (1 à 30)</span>
+              </div>
+              <span className="m-opt-indicator">{juzMode ? 'ON' : 'OFF'}</span>
+            </button>
+
+            {(pageMode || hizbMode || juzMode) && (
               <button
                 onClick={() => setAutoPageFollow(v => !v)}
                 className={`m-option-card ${autoPageFollow ? 'active' : ''}`}
               >
                 <span className="m-opt-card-icon">⇄</span>
                 <div className="m-opt-card-text">
-                  <span className="m-opt-card-title">{hizbMode ? 'SUIVI AUTO DE HIZB' : 'SUIVI AUTO DE PAGE'}</span>
-                  <span className="m-opt-card-desc">{hizbMode ? 'Changer de Hizb automatiquement' : 'Tourner la page automatiquement'}</span>
+                  <span className="m-opt-card-title">{juzMode ? 'SUIVI AUTO DE JUZ' : hizbMode ? 'SUIVI AUTO DE HIZB' : 'SUIVI AUTO DE PAGE'}</span>
+                  <span className="m-opt-card-desc">{juzMode ? 'Changer de Juz automatiquement' : hizbMode ? 'Changer de Hizb automatiquement' : 'Tourner la page automatiquement'}</span>
                 </div>
                 <span className="m-opt-indicator">{autoPageFollow ? 'ON' : 'OFF'}</span>
               </button>

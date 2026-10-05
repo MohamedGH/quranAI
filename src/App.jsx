@@ -451,9 +451,11 @@ function AppInner({ currentUser, onSignOut }) {
   const [renderLimit, setRenderLimit] = useState(30);
   const [pageMode,    setPageMode]    = useState(() => safeGetItem('quran_page_mode', false) ?? false);
   const [hizbMode,    setHizbMode]    = useState(() => safeGetItem('quran_hizb_mode', false) ?? false);
+  const [juzMode,     setJuzMode]     = useState(() => safeGetItem('quran_juz_mode', false) ?? false);
   const [surahMeta,   setSurahMeta]   = useState(null); // { hizb, juz, page, wordCount }
   const [pageMeta,    setPageMeta]    = useState(null); // { hizb, juz, ayatCount, wordCount } for current page
   const getAyatHizb = useCallback((a) => a?.hizb != null ? a.hizb : (a?.hizbQuarter != null ? Math.ceil(a.hizbQuarter / 4) : null), []);
+  const getAyatJuz  = useCallback((a) => a?.juz ?? null, []);
   const [showSurahInfo, setShowSurahInfo] = useState(false);
   const [showAyatJump, setShowAyatJump] = useState(false);
   const [surahTextCache, setSurahTextCache] = useState({}); // surahNum → { numberInSurah: text } — feeds mastery calc
@@ -483,8 +485,10 @@ function AppInner({ currentUser, onSignOut }) {
   const [wbwTranslations, setWbwTranslations] = useState({}); // { 'fr:2': { [ayahNum]: [word1, word2] } }
   const [activePageCoran,  setactivePageCoran]  = useState(null);
   const [activeHizbCoran,  setActiveHizbCoran]  = useState(null);
+  const [activeJuzCoran,   setActiveJuzCoran]   = useState(null);
   React.useEffect(() => { safeSetItem('quran_page_mode', pageMode); }, [pageMode]);
   React.useEffect(() => { safeSetItem('quran_hizb_mode', hizbMode); }, [hizbMode]);
+  React.useEffect(() => { safeSetItem('quran_juz_mode', juzMode); }, [juzMode]);
   const wakeLockRef  = useRef(null);
 
   const [showRappel, setShowRappel] = useState(false);
@@ -601,12 +605,41 @@ function AppInner({ currentUser, onSignOut }) {
     });
   }, [activeHizbCoran, hizbMode, ayats, getAyatHizb]);
 
+  // juzMode: auto-change juz when mainAyatIdx moves to a different juz, then scroll to ayat
+  useEffect(() => {
+    if (!juzMode || !autoPageFollow || !ayats || ayats.length === 0) return;
+    const curAyat = ayats[mainAyatIdx];
+    const targetJuz = getAyatJuz(curAyat);
+    if (!targetJuz) return;
+    const curJuz = activeJuzCoran ?? getAyatJuz(ayats[0]);
+    if (targetJuz !== curJuz) {
+      setActiveJuzCoran(targetJuz);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          ayatRefs.current[curAyat.numberInSurah]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      });
+    }
+  }, [mainAyatIdx, juzMode, autoPageFollow, ayats, activeJuzCoran, getAyatJuz]);
+
+  // juzMode: when juz changes manually, scroll to first ayat of that juz
+  useEffect(() => {
+    if (!juzMode || !activeJuzCoran || !ayats || !ayats.length === 0) return;
+    const firstOfJuz = ayats.find(a => getAyatJuz(a) === activeJuzCoran);
+    if (!firstOfJuz) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        ayatRefs.current[firstOfJuz.numberInSurah]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  }, [activeJuzCoran, juzMode, ayats, getAyatJuz]);
+
   useEffect(() => { ayats_ref.current = ayats; }, [ayats]);
   useEffect(() => { selSurah_ref.current = selectedSurah; }, [selectedSurah]);
 
   // Infinite scroll pagination — progressively load ayats on demand instead of loading 286 verses at once
   const handleAyatScroll = useCallback((e) => {
-    if (pageMode || hizbMode || !ayats || ayats.length === 0) return;
+    if (pageMode || hizbMode || juzMode || !ayats || ayats.length === 0) return;
     const el = e.currentTarget;
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 650) {
       setRenderLimit(prev => {
@@ -614,15 +647,15 @@ function AppInner({ currentUser, onSignOut }) {
         return Math.min(prev + 35, ayats.length);
       });
     }
-  }, [pageMode, hizbMode, ayats]);
+  }, [pageMode, hizbMode, juzMode, ayats]);
 
   // Keep renderLimit ahead of current active ayat during playback
   useEffect(() => {
-    if (pageMode || hizbMode || !ayats || ayats.length === 0) return;
+    if (pageMode || hizbMode || juzMode || !ayats || ayats.length === 0) return;
     if (mainAyatIdx >= 0 && mainAyatIdx + 10 >= renderLimit) {
       setRenderLimit(prev => Math.min(Math.max(prev, mainAyatIdx + 30), ayats.length));
     }
-  }, [mainAyatIdx, pageMode, hizbMode, ayats, renderLimit]);
+  }, [mainAyatIdx, pageMode, hizbMode, juzMode, ayats, renderLimit]);
 
   // ── AUDIO PERSISTANCE APK / VEILLE MOBILE ────────────────────────
   // Stratégie multi-couches pour WebView Android :
@@ -711,8 +744,21 @@ function AppInner({ currentUser, onSignOut }) {
         return;
       }
     }
+    if (juzMode && getAyatJuz(targetAyat) != null) {
+      const targetJuz = getAyatJuz(targetAyat);
+      const curJuz = activeJuzCoran ?? getAyatJuz(ayats[0]);
+      if (targetJuz !== curJuz) {
+        setActiveJuzCoran(targetJuz);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            ayatRefs.current[targetAyat.numberInSurah]?.scrollIntoView({ behavior: "smooth", block: "center" });
+          });
+        });
+        return;
+      }
+    }
     if (changed) ayatRefs.current[ayats[i]?.numberInSurah]?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [ayats, mainAyatIdx, pageMode, activePageCoran, hizbMode, activeHizbCoran, getAyatHizb]);
+  }, [ayats, mainAyatIdx, pageMode, activePageCoran, hizbMode, activeHizbCoran, getAyatHizb, juzMode, activeJuzCoran, getAyatJuz]);
 
   const handleMainEnded = useCallback(() => {
     const next = mainAyatIdx + 1;
@@ -946,6 +992,7 @@ function AppInner({ currentUser, onSignOut }) {
     setOpenAyatNum(null); setPlayingAyatNum(null);
     setactivePageCoran(null);
     setActiveHizbCoran(null);
+    setActiveJuzCoran(null);
     setIsMainPlaying(false); setMainCurrentMs(0);
     setLoopActive(false); setLoopCount(0);
     // Only show spinner if data isn't already in memory cache
@@ -969,6 +1016,7 @@ function AppInner({ currentUser, onSignOut }) {
       setMainAyatIdx(restoredIdx);
       setactivePageCoran(null); // reset; will be derived from mainAyatIdx
       setActiveHizbCoran(null);
+      setActiveJuzCoran(null);
       if (savedAyatNum != null) setOpenAyatNum(savedAyatNum);
       // Restore loop
       const savedLoop = loopBySurah[selectedSurah.number];
@@ -1141,7 +1189,8 @@ function AppInner({ currentUser, onSignOut }) {
     setOpenAyatNum(n);
     if (pageMode && target.page != null) setactivePageCoran(target.page);
     if (hizbMode && getAyatHizb(target) != null) setActiveHizbCoran(getAyatHizb(target));
-    setTimeout(() => { ayatRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, (pageMode || hizbMode) ? 250 : 50);
+    if (juzMode && getAyatJuz(target) != null) setActiveJuzCoran(getAyatJuz(target));
+    setTimeout(() => { ayatRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, (pageMode || hizbMode || juzMode) ? 250 : 50);
   };
 
   // ── Voice command execution ──
@@ -2049,6 +2098,10 @@ function AppInner({ currentUser, onSignOut }) {
                   setHizbMode={setHizbMode}
                   activeHizbCoran={activeHizbCoran}
                   setActiveHizbCoran={setActiveHizbCoran}
+                  juzMode={juzMode}
+                  setJuzMode={setJuzMode}
+                  activeJuzCoran={activeJuzCoran}
+                  setActiveJuzCoran={setActiveJuzCoran}
                   mainAyatIdx={mainAyatIdx}
                   learnData={learnData}
                   lkey={lkey}
@@ -2183,6 +2236,7 @@ function AppInner({ currentUser, onSignOut }) {
                   const idx = hizbs.indexOf(curHizb);
                   const hizbAyats = ayats.filter(a => getAyatHizb(a) === curHizb);
                   const curHizbPage = hizbAyats[0]?.page;
+                  const curHizbJuz  = hizbAyats[0]?.juz;
                   return (
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
                       padding:'6px 14px', background:'var(--surface2)', borderBottom:'1px solid var(--border)',
@@ -2213,6 +2267,13 @@ function AppInner({ currentUser, onSignOut }) {
                             background:'rgba(200,120,255,.12)', border:'1px solid rgba(200,120,255,.4)',
                             color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
                             PAGE {curHizbPage}
+                          </span>
+                        )}
+                        {curHizbJuz != null && (
+                          <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                            background:'rgba(86,212,188,.12)', border:'1px solid rgba(86,212,188,.4)',
+                            color:'#56d4bc', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                            JUZ {curHizbJuz}
                           </span>
                         )}
                         {/* Hizb loop button */}
@@ -2262,6 +2323,100 @@ function AppInner({ currentUser, onSignOut }) {
                   );
                 })()}
 
+                {/* ── Juz mode navigator bar ── */}
+                {juzMode && ayats && ayats.length > 0 && (() => {
+                  const juzs = [...new Set(ayats.map(a => getAyatJuz(a)).filter(Boolean))].sort((a,b)=>a-b);
+                  const curJuz = activeJuzCoran ?? getAyatJuz(ayats[mainAyatIdx]) ?? juzs[0];
+                  const idx = juzs.indexOf(curJuz);
+                  const juzAyats = ayats.filter(a => getAyatJuz(a) === curJuz);
+                  const curJuzPage = juzAyats[0]?.page;
+                  const curJuzHizb = getAyatHizb(juzAyats[0]);
+                  return (
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                      padding:'6px 14px', background:'var(--surface2)', borderBottom:'1px solid var(--border)',
+                      position:'sticky', top:0, zIndex:10, gap:8 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                        <button onClick={() => setActiveJuzCoran(juzs[0])} disabled={idx<=0}
+                          title="Premier Juz de la sourate"
+                          style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                            background:'transparent', border:'1px solid var(--border2)',
+                            color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                            cursor: idx>0 ? 'pointer' : 'default', lineHeight:1 }}>⏮</button>
+                        <button onClick={() => setActiveJuzCoran(juzs[idx-1])} disabled={idx<=0}
+                          style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                            background:'transparent', border:'1px solid var(--border2)',
+                            color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                            cursor: idx>0 ? 'pointer' : 'default' }}>← {idx>0 ? juzs[idx-1] : ''}</button>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ fontSize:7, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>JUZ</span>
+                        <input type="number" value={curJuz ?? ''}
+                          onChange={e => { const v=parseInt(e.target.value); if(juzs.includes(v)) setActiveJuzCoran(v); }}
+                          style={{ width:48, textAlign:'center', background:'var(--surface3)',
+                            border:'1px solid #56d4bc', borderRadius:6, padding:'3px 6px',
+                            color:'#56d4bc', fontSize:13, fontFamily:"'Cinzel',serif", outline:'none' }} />
+                        <span style={{ fontSize:7, color:'var(--text3)' }}>/ {juzs[juzs.length-1]}</span>
+                        {curJuzHizb != null && (
+                          <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                            background:'rgba(255,209,102,.12)', border:'1px solid rgba(255,209,102,.4)',
+                            color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                            HIZB {curJuzHizb}
+                          </span>
+                        )}
+                        {curJuzPage != null && (
+                          <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                            background:'rgba(200,120,255,.12)', border:'1px solid rgba(200,120,255,.4)',
+                            color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                            PAGE {curJuzPage}
+                          </span>
+                        )}
+                        {/* Juz loop button */}
+                        {(() => {
+                          const firstIdx  = juzAyats.length ? ayats.indexOf(juzAyats[0]) : -1;
+                          const lastIdx   = juzAyats.length ? ayats.indexOf(juzAyats[juzAyats.length-1]) : -1;
+                          const isJuzLoop = loopActive && loopStart === firstIdx && loopEnd === lastIdx;
+                          const toggleJuzLoop = () => {
+                            if (isJuzLoop) {
+                              setLoopActive(false);
+                            } else {
+                              if (firstIdx < 0) return;
+                              setLoopStart(firstIdx); setLoopEnd(lastIdx);
+                              setLoopStartInput(juzAyats[0].numberInSurah);
+                              setLoopEndInput(juzAyats[juzAyats.length-1].numberInSurah);
+                              setLoopActive(true); setLoopCount(0);
+                              playMainAyat(firstIdx);
+                              setTimeout(() => mainAudioRef.current?.play(), 80);
+                            }
+                          };
+                          return (
+                            <button onClick={toggleJuzLoop} title={isJuzLoop ? 'Arrêter boucle juz' : 'Lire juz en boucle'}
+                              style={{ fontSize:12, padding:'2px 7px', borderRadius:6, cursor:'pointer', lineHeight:1,
+                                background: isJuzLoop ? 'rgba(86,212,188,.2)' : 'transparent',
+                                border: `1px solid ${isJuzLoop ? '#56d4bc' : 'rgba(255,255,255,.15)'}`,
+                                color: isJuzLoop ? '#56d4bc' : 'var(--text3)', transition:'all .2s' }}>
+                              {isJuzLoop ? '⏹' : '🔁'}
+                            </button>
+                          );
+                        })()}
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                        <button onClick={() => setActiveJuzCoran(juzs[idx+1])} disabled={idx>=juzs.length-1}
+                          style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                            background:'transparent', border:'1px solid var(--border2)',
+                            color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                            cursor: idx<juzs.length-1 ? 'pointer' : 'default' }}>
+                          {idx<juzs.length-1 ? juzs[idx+1] : ''} →</button>
+                        <button onClick={() => setActiveJuzCoran(juzs[juzs.length-1])} disabled={idx>=juzs.length-1}
+                          title="Dernier Juz de la sourate"
+                          style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                            background:'transparent', border:'1px solid var(--border2)',
+                            color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                            cursor: idx<juzs.length-1 ? 'pointer' : 'default', lineHeight:1 }}>⏭</button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="ayat-scroll" onContextMenu={handleAyatContextMenu} onScroll={handleAyatScroll}>
                   <audio
                     ref={el => {
@@ -2276,10 +2431,13 @@ function AppInner({ currentUser, onSignOut }) {
                     : <>{tsVersion > -1 && (playStateVer >= 0) && (loopStateVer >= 0) && (() => {
                       const curPage = pageMode ? (activePageCoran ?? ayats[mainAyatIdx]?.page) : null;
                       const curHizb = hizbMode ? (activeHizbCoran ?? getAyatHizb(ayats[mainAyatIdx]) ?? getAyatHizb(ayats[0])) : null;
+                      const curJuz  = juzMode  ? (activeJuzCoran  ?? getAyatJuz(ayats[mainAyatIdx])  ?? getAyatJuz(ayats[0]))  : null;
                       const visible = curPage
                         ? ayats.filter(a => a.page === curPage)
                         : curHizb
                         ? ayats.filter(a => getAyatHizb(a) === curHizb)
+                        : curJuz
+                        ? ayats.filter(a => getAyatJuz(a) === curJuz)
                         : ayats.slice(0, renderLimit);
                       return visible.map(ayat => {
                       const ld        = getLData(selectedSurah.number, ayat.numberInSurah);
@@ -2295,14 +2453,21 @@ function AppInner({ currentUser, onSignOut }) {
                       const ayatHizb  = getAyatHizb(ayat);
                       const prevHizb  = getAyatHizb(prevAyat);
                       const nextHizb  = getAyatHizb(nextAyat);
+                      const ayatJuz   = getAyatJuz(ayat);
+                      const prevJuz   = getAyatJuz(prevAyat);
+                      const nextJuz   = getAyatJuz(nextAyat);
                       const rawPageStart = ayat.page != null && (!prevAyat || prevAyat.page !== ayat.page);
                       const rawPageEnd   = ayat.page != null && (!nextAyat || nextAyat.page !== ayat.page);
                       const rawHizbStart = ayatHizb != null && (!prevAyat || prevHizb !== ayatHizb);
                       const rawHizbEnd   = ayatHizb != null && (!nextAyat || nextHizb !== ayatHizb);
-                      const isPageStart = rawPageStart || (hizbMode && rawHizbStart && ayat.page != null);
-                      const isPageEnd   = rawPageEnd   || (hizbMode && rawHizbEnd   && ayat.page != null);
-                      const isHizbStart = rawHizbStart || (pageMode && rawPageStart && ayatHizb != null);
-                      const isHizbEnd   = rawHizbEnd   || (pageMode && rawPageEnd   && ayatHizb != null);
+                      const rawJuzStart  = ayatJuz  != null && (!prevAyat || prevJuz  !== ayatJuz);
+                      const rawJuzEnd    = ayatJuz  != null && (!nextAyat || nextJuz  !== ayatJuz);
+                      const isPageStart = rawPageStart || ((hizbMode && rawHizbStart || juzMode && rawJuzStart) && ayat.page != null);
+                      const isPageEnd   = rawPageEnd   || ((hizbMode && rawHizbEnd   || juzMode && rawJuzEnd)   && ayat.page != null);
+                      const isHizbStart = rawHizbStart || ((pageMode && rawPageStart || juzMode && rawJuzStart) && ayatHizb != null);
+                      const isHizbEnd   = rawHizbEnd   || ((pageMode && rawPageEnd   || juzMode && rawJuzEnd)   && ayatHizb != null);
+                      const isJuzStart  = rawJuzStart  || ((pageMode && rawPageStart || hizbMode && rawHizbStart) && ayatJuz != null);
+                      const isJuzEnd    = rawJuzEnd    || ((pageMode && rawPageEnd   || hizbMode && rawHizbEnd)   && ayatJuz != null);
 
                       const playPartInline = (part, loop = false) => playPartInlineCommon(ayat, ts, part, loop);
 
@@ -2648,12 +2813,17 @@ function AppInner({ currentUser, onSignOut }) {
 
                       return (
                         <div key={ayat.number}
-                          className={`ayat-row${isPlaying ? " playing" : ""}${isCurrent ? " current" : ""}${ld.learned ? " learned" : ""}${isSelecting ? " selecting" : ""}${isPageStart ? " page-start" : ""}${isPageEnd ? " page-end" : ""}${isHizbStart ? " hizb-start" : ""}${isHizbEnd ? " hizb-end" : ""}`}
+                          className={`ayat-row${isPlaying ? " playing" : ""}${isCurrent ? " current" : ""}${ld.learned ? " learned" : ""}${isSelecting ? " selecting" : ""}${isPageStart ? " page-start" : ""}${isPageEnd ? " page-end" : ""}${isHizbStart ? " hizb-start" : ""}${isHizbEnd ? " hizb-end" : ""}${isJuzStart ? " juz-start" : ""}${isJuzEnd ? " juz-end" : ""}`}
                           style={inLoop && !isPlaying && !isSelecting ? { borderLeft: "2px solid var(--teal)", background: "rgba(62,184,160,0.04)" } : isSelecting ? { borderLeft: "2px solid var(--gold)", background: "rgba(201,168,76,0.04)" } : {}}
                           ref={el => ayatRefs.current[ayat.numberInSurah] = el}>
 
-                          {isPageStart && <div className="page-edge-pill start">◆ PAGE {ayat.page}</div>}
-                          {isHizbStart && <div className="hizb-edge-pill start">◆ HIZB {ayatHizb}</div>}
+                          {(isPageStart || isHizbStart || isJuzStart) && (
+                            <div className="edge-pills-bar start">
+                              {isPageStart && <div className="page-edge-pill start">◆ PAGE {ayat.page}</div>}
+                              {isHizbStart && <div className="hizb-edge-pill start">◆ HIZB {ayatHizb}</div>}
+                              {isJuzStart  && <div className="juz-edge-pill start">◆ JUZ {ayatJuz}</div>}
+                            </div>
+                          )}
 
                           {/* Selection hint bar shown above the ayat when selecting */}
                           {isSelecting && (
@@ -2792,8 +2962,13 @@ function AppInner({ currentUser, onSignOut }) {
                               onFullScreen={() => setExplicitFullScreen(true)}
                             />
                           </AnimatedSubmenu>
-                          {isPageEnd && <div className="page-edge-pill end">FIN · PAGE {ayat.page} ◆</div>}
-                          {isHizbEnd && <div className="hizb-edge-pill end">FIN · HIZB {ayatHizb} ◆</div>}
+                          {(isPageEnd || isHizbEnd || isJuzEnd) && (
+                            <div className="edge-pills-bar end">
+                              {isPageEnd && <div className="page-edge-pill end">FIN · PAGE {ayat.page} ◆</div>}
+                              {isHizbEnd && <div className="hizb-edge-pill end">FIN · HIZB {ayatHizb} ◆</div>}
+                              {isJuzEnd  && <div className="juz-edge-pill end">FIN · JUZ {ayatJuz} ◆</div>}
+                            </div>
+                          )}
                         </div>
                       );
                     }); })()}</>}

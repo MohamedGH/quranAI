@@ -1139,6 +1139,29 @@ export const CSS = `
   .juz-edge-pill.end{bottom:-11px;transform:translate(-50%,50%);}
   .juz-edge-pill svg{width:8px;height:8px;}
   .edge-pills-bar .page-edge-pill,.edge-pills-bar .hizb-edge-pill,.edge-pills-bar .juz-edge-pill{position:static;transform:none;top:auto;bottom:auto;left:auto;}
+  .ayat-row.cross-surah-ayat{background:linear-gradient(90deg,rgba(255,209,102,.035),transparent 45%);border-left:2px solid rgba(255,209,102,.38);}
+  .cross-surah-verse-tag{font-family:'Cinzel',serif;font-size:7px;font-weight:700;letter-spacing:.8px;padding:1px 5px;border-radius:6px;background:rgba(255,209,102,.14);border:1px solid rgba(255,209,102,.45);color:#ffd166;white-space:nowrap;line-height:1.3;}
+  .hizb-cross-surah-banner{margin:14px 10px 8px;padding:10px 12px;border-radius:10px;background:linear-gradient(135deg,rgba(255,209,102,.09),rgba(201,168,76,.03));border:1px solid rgba(255,209,102,.32);display:flex;flex-direction:column;gap:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);}
+  .hizb-cross-surah-banner.is-other{background:linear-gradient(135deg,rgba(255,209,102,.13),rgba(62,184,160,.05));border-color:rgba(255,209,102,.5);}
+  .hizb-cross-surah-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+  .hizb-cross-surah-identity{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
+  .hizb-cross-surah-num{font-family:'Cinzel',serif;font-size:8.5px;font-weight:700;letter-spacing:1.2px;padding:2px 7px;border-radius:6px;background:rgba(255,209,102,.18);border:1px solid rgba(255,209,102,.45);color:#ffd166;}
+  .hizb-cross-surah-en{font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:1px;color:var(--gold2);}
+  .hizb-cross-surah-ar{font-family:'Amiri Quran',serif;font-size:17px;color:var(--gold);direction:rtl;line-height:1.2;}
+  .hizb-cross-surah-range{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;color:var(--text2);padding:2px 7px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--border2);}
+  .hizb-cross-other-badge{font-family:'Cinzel',serif;font-size:7px;font-weight:700;letter-spacing:1.2px;padding:2px 7px;border-radius:10px;background:rgba(62,184,160,.16);border:1px solid rgba(62,184,160,.45);color:var(--teal2);}
+  .hizb-cross-open-btn{font-family:'Cinzel',serif;font-size:7.5px;font-weight:700;letter-spacing:1px;padding:4px 9px;border-radius:6px;background:rgba(255,209,102,.14);border:1px solid rgba(255,209,102,.45);color:#ffd166;cursor:pointer;transition:all .15s;white-space:nowrap;}
+  .hizb-cross-open-btn:hover{background:rgba(255,209,102,.25);}
+  .hizb-cross-bismillah{text-align:center;font-family:'Amiri Quran',serif;font-size:15px;color:var(--gold2);direction:rtl;padding-top:4px;border-top:1px solid rgba(255,209,102,.14);}
+  .hizb-cross-nav-strip{display:flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(255,209,102,.05);border-bottom:1px solid rgba(255,209,102,.2);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;}
+  .hizb-cross-nav-strip::-webkit-scrollbar{display:none;}
+  .hizb-cross-nav-chip{font-family:'Cinzel',serif;font-size:7.5px;letter-spacing:.9px;padding:3px 9px;border-radius:12px;border:1px solid rgba(255,209,102,.32);background:rgba(255,255,255,.03);color:var(--text2);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;flex-shrink:0;transition:all .15s;}
+  .hizb-cross-nav-chip.active{background:rgba(255,209,102,.2);border-color:#ffd166;color:#ffd166;font-weight:700;}
+  .hizb-cross-notice-bar{margin:8px 10px;padding:8px 12px;border-radius:8px;background:rgba(255,209,102,.07);border:1px dashed rgba(255,209,102,.38);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+  @media(min-width:769px){
+    .hizb-cross-surah-banner{margin:16px 22px 10px;padding:12px 18px;}
+    .hizb-cross-notice-bar{margin:10px 22px;}
+  }
   .ayat-main{display:flex;align-items:flex-start;gap:14px;padding:14px 22px;cursor:pointer;}
   .ayat-main:hover{background:rgba(255,255,255,.02);}
   .ayat-number-badge{width:32px;height:32px;border:1px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text3);flex-shrink:0;margin-top:4px;transition:all var(--transition);font-weight:600;}

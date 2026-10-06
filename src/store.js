@@ -29,7 +29,13 @@ const uiSlice = createSlice({
     enableAnimations:    load("quran_enableAnimations", true),
     enableHeavyCompute:  load("quran_enableHeavyCompute", true),
     fullScreenSelectedAyat: load("quran_fullScreenSelectedAyat", false),
-    ayatFontSize:        load("quran_ayatFontSize", 26)
+    ayatFontSize:        load("quran_ayatFontSize", 26),
+    pageMode:            load("quran_page_mode", false) ?? false,
+    hizbMode:            load("quran_hizb_mode", false) ?? false,
+    juzMode:             load("quran_juz_mode", false) ?? false,
+    activePageCoran:     null,
+    activeHizbCoran:     null,
+    activeJuzCoran:      null,
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -85,7 +91,49 @@ const uiSlice = createSlice({
     resetAyatFontSize: (s) => {
       s.ayatFontSize = 26;
       save("quran_ayatFontSize", 26);
-    }
+    },
+    setPageMode: (s, a) => {
+      const next = !!a.payload;
+      s.pageMode = next;
+      save("quran_page_mode", next);
+      if (next) {
+        s.hizbMode = false;
+        s.juzMode = false;
+        s.activeHizbCoran = null;
+        s.activeJuzCoran = null;
+        save("quran_hizb_mode", false);
+        save("quran_juz_mode", false);
+      }
+    },
+    setHizbMode: (s, a) => {
+      const next = !!a.payload;
+      s.hizbMode = next;
+      save("quran_hizb_mode", next);
+      if (next) {
+        s.pageMode = false;
+        s.juzMode = false;
+        s.activePageCoran = null;
+        s.activeJuzCoran = null;
+        save("quran_page_mode", false);
+        save("quran_juz_mode", false);
+      }
+    },
+    setJuzMode: (s, a) => {
+      const next = !!a.payload;
+      s.juzMode = next;
+      save("quran_juz_mode", next);
+      if (next) {
+        s.pageMode = false;
+        s.hizbMode = false;
+        s.activePageCoran = null;
+        s.activeHizbCoran = null;
+        save("quran_page_mode", false);
+        save("quran_hizb_mode", false);
+      }
+    },
+    setActivePageCoran: (s, a) => { s.activePageCoran = a.payload ?? null; },
+    setActiveHizbCoran: (s, a) => { s.activeHizbCoran = a.payload ?? null; },
+    setActiveJuzCoran:  (s, a) => { s.activeJuzCoran  = a.payload ?? null; },
   },
 });
 
@@ -100,22 +148,38 @@ const quranSlice = createSlice({
     loadingAyats:  false,
     search:        "",
     openAyatNum:   null,
+    openCrossAyatKey: null,
     submenuMode:   "lecture",  // "lecture" | "apprentissage" | "collections"
     lastAyatBySurah: load("quran_lastAyatBySurah", {}), // surahNum → ayatIdx
+    crossSurahAyatsBySurah: {}, // { [surahNum]: ayahs[] } for cross-surah Hizb rendering
+    loadingCrossHizb: false,
   },
   reducers: {
     setSurahs:        (s, a) => { s.surahs        = a.payload; s.loadingSurahs = false; },
-    setSelectedSurah: (s, a) => { s.selectedSurah = a.payload; s.openAyatNum  = null; s.submenuMode = "lecture"; },
+    setSelectedSurah: (s, a) => { s.selectedSurah = a.payload; s.openAyatNum  = null; s.openCrossAyatKey = null; s.submenuMode = "lecture"; },
     setAyats:         (s, a) => { s.ayats         = a.payload; },
     setLoadingAyats:  (s, a) => { s.loadingAyats  = a.payload; },
     setSearch:        (s, a) => { s.search        = a.payload; },
-    setOpenAyatNum:   (s, a) => { s.openAyatNum   = a.payload; },
+    setOpenAyatNum:   (s, a) => { s.openAyatNum   = a.payload; if (a.payload != null) s.openCrossAyatKey = null; },
+    setOpenCrossAyatKey: (s, a) => { s.openCrossAyatKey = a.payload; if (a.payload != null) s.openAyatNum = null; },
     setSubmenuMode:   (s, a) => { s.submenuMode   = a.payload; },
     setLastAyatForSurah: (s, a) => {
       s.lastAyatBySurah = { ...s.lastAyatBySurah, [a.payload.surahNum]: a.payload.ayatNum };
       save("quran_lastAyatBySurah", s.lastAyatBySurah);
     },
     restoreLastAyatFromCloud: (s, a) => { s.lastAyatBySurah = a.payload; },
+    setCrossSurahAyats: (s, a) => {
+      const { surahNum, ayahs } = a.payload || {};
+      if (surahNum && Array.isArray(ayahs)) {
+        s.crossSurahAyatsBySurah = { ...s.crossSurahAyatsBySurah, [surahNum]: ayahs };
+      }
+    },
+    setCrossSurahAyatsBatch: (s, a) => {
+      if (a.payload && typeof a.payload === "object") {
+        s.crossSurahAyatsBySurah = { ...s.crossSurahAyatsBySurah, ...a.payload };
+      }
+    },
+    setLoadingCrossHizb: (s, a) => { s.loadingCrossHizb = !!a.payload; },
   },
 });
 
@@ -337,9 +401,34 @@ const revisionSlice = createSlice({
 });
 export const revisionActions = revisionSlice.actions;
 
+// ─── Slice : Error Manager ───────────────────────────────────────────────────
+const errorsSlice = createSlice({
+  name: "errors",
+  initialState: {
+    lastError: null,
+    history: [],
+  },
+  reducers: {
+    reportError: (state, action) => {
+      const err = action.payload;
+      if (!err) return;
+      state.lastError = err;
+      state.history = [err, ...state.history].slice(0, 25);
+    },
+    clearError: (state) => {
+      state.lastError = null;
+    },
+    clearErrorHistory: (state) => {
+      state.lastError = null;
+      state.history = [];
+    },
+  },
+});
+export const errorActions = errorsSlice.actions;
+
 export const store = configureStore({
   reducer: {
-    revision: revisionSlice.reducer,
+    revision:    revisionSlice.reducer,
     ui:          uiSlice.reducer,
     quran:       quranSlice.reducer,
     player:      playerSlice.reducer,
@@ -347,12 +436,13 @@ export const store = configureStore({
     collections: collectionsSlice.reducer,
     voice:       voiceSlice.reducer,
     goals:       goalsSlice.reducer,
+    errors:      errorsSlice.reducer,
   },
   // Les timestamps et learnData peuvent être grands — désactiver le check de sérialisation sur ces champs
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
-        ignoredPaths: ["player.timestampsMap", "learn.data"],
+        ignoredPaths: ["player.timestampsMap", "learn.data", "quran.crossSurahAyatsBySurah"],
         ignoredActionPaths: ["payload.value", "payload"],
       },
     }),
@@ -392,6 +482,12 @@ export const sel = {
   showParts:       (s) => s.ui.showParts,
   fullScreenSelectedAyat: (s) => s.ui.fullScreenSelectedAyat,
   ayatFontSize:    (s) => s.ui.ayatFontSize || 26,
+  pageMode:        (s) => !!s.ui.pageMode,
+  hizbMode:        (s) => !!s.ui.hizbMode,
+  juzMode:         (s) => !!s.ui.juzMode,
+  activePageCoran: (s) => s.ui.activePageCoran,
+  activeHizbCoran: (s) => s.ui.activeHizbCoran,
+  activeJuzCoran:  (s) => s.ui.activeJuzCoran,
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,
@@ -400,8 +496,14 @@ export const sel = {
   loadingAyats:    (s) => s.quran.loadingAyats,
   search:          (s) => s.quran.search,
   openAyatNum:     (s) => s.quran.openAyatNum,
+  openCrossAyatKey:(s) => s.quran.openCrossAyatKey,
   submenuMode:     (s) => s.quran.submenuMode,
   lastAyatBySurah: (s) => s.quran.lastAyatBySurah,
+  crossSurahAyatsBySurah: (s) => s.quran.crossSurahAyatsBySurah || {},
+  loadingCrossHizb:(s) => !!s.quran.loadingCrossHizb,
+  // errors
+  lastError:       (s) => s.errors?.lastError || null,
+  errorHistory:    (s) => s.errors?.history || [],
   // player
   isMainPlaying:   (s) => s.player.isMainPlaying,
   mainAyatIdx:     (s) => s.player.mainAyatIdx,
@@ -486,5 +588,6 @@ export const act = {
   ...voiceActions,
   ...goalsActions,
   ...revisionActions,
+  ...errorActions,
   setLDataThunk,
 };

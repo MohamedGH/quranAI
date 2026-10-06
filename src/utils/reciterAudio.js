@@ -1,6 +1,7 @@
 import { IS_ANDROID } from './audioRecorder.js';
 import { splitArabicWords, stripBasmalaFromAyah } from './arabicUtils.js';
 import { safeGetItem, safeSetItem } from './safeStorage.js';
+import { getHizbForSurahAyah } from './hizbUtils.js';
 
 export { stripBasmalaFromAyah };
 
@@ -199,16 +200,17 @@ function _cleanAyahsArray(ayahs, fallbackSurahNum = null) {
   if (!Array.isArray(ayahs)) return [];
   return ayahs.map(a => {
     if (!a) return a;
-    const hizbVal = a.hizb ?? (a.hizbQuarter != null ? Math.ceil(a.hizbQuarter / 4) : undefined);
-    const sn = a.surah?.number ?? fallbackSurahNum;
+    const sn = a.surahNumber ?? a.surah?.number ?? fallbackSurahNum;
+    const hizbVal = a.hizb ?? (a.hizbQuarter != null ? Math.ceil(a.hizbQuarter / 4) : (sn != null ? getHizbForSurahAyah(sn, a.numberInSurah) : undefined));
     const cleaned = (a.numberInSurah === 1 && a.text)
       ? stripBasmalaFromAyah(a.text, sn, a.numberInSurah)
       : a.text;
-    if (cleaned !== a.text || (hizbVal !== undefined && a.hizb !== hizbVal)) {
+    if (cleaned !== a.text || (hizbVal !== undefined && a.hizb !== hizbVal) || (sn != null && a.surahNumber !== sn)) {
       return {
         ...a,
         ...(cleaned !== a.text ? { text: cleaned } : {}),
         ...(hizbVal !== undefined ? { hizb: hizbVal } : {}),
+        ...(sn != null ? { surahNumber: sn } : {}),
       };
     }
     return a;

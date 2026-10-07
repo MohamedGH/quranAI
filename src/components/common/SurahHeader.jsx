@@ -188,36 +188,19 @@ export function SurahHeader({
 
           {/* Quick status & Next Surah */}
           <div className="m-surah-compact-actions">
-            {/* Mastery Pill */}
-            <span
-              className="m-compact-mastery"
+            {/* Mastery Pill — click to toggle Surah Stats & Quick Mark All */}
+            <button
+              type="button"
+              onClick={() => setShowSurahInfo(v => !v)}
+              className={`m-compact-mastery ${showSurahInfo ? 'active' : ''}`}
               style={{
                 borderColor: masteryColor(totalMasteryPct),
                 color: masteryColor(totalMasteryPct),
+                cursor: 'pointer',
               }}
-              title={`Maîtrise : ${totalMasteryPct}%`}
+              title="Voir les statistiques et options de la sourate"
             >
-              {totalMasteryPct}%
-            </span>
-
-            {/* Mark Learned Toggle */}
-            {ayats.length > 0 && (
-              <button
-                onClick={isSurahFullyLearned ? unmarkAllLearned : markAllLearned}
-                className={`m-compact-icon-btn learned ${isSurahFullyLearned ? 'active' : ''}`}
-                title={isSurahFullyLearned ? "Sourate apprise (cliquer pour démarquer)" : "Marquer toute la sourate comme apprise"}
-              >
-                ✓
-              </button>
-            )}
-
-            {/* Expand Stats Toggle */}
-            <button
-              onClick={() => setShowSurahInfo(v => !v)}
-              className={`m-compact-icon-btn info ${showSurahInfo ? 'active' : ''}`}
-              title="Statistiques et détails de la sourate"
-            >
-              ℹ
+              {totalMasteryPct}% {isSurahFullyLearned ? '✓' : '▾'}
             </button>
 
             {/* Next Surah */}
@@ -241,7 +224,7 @@ export function SurahHeader({
           </div>
         )}
 
-        {/* Expandable Detailed Stats Grid */}
+        {/* Expandable Detailed Stats Grid + Mark All Learned */}
         {showSurahInfo && (
           <div className="m-surah-info-grid">
             <div className="m-info-stat-card page">
@@ -272,23 +255,39 @@ export function SurahHeader({
               <div className="m-stat-num" style={{ color: totalUnk > 0 ? '#ff9f43' : 'var(--text3)' }}>{totalUnk}</div>
               <div className="m-stat-tag">MOTS À REVOIR</div>
             </div>
+            {ayats.length > 0 && (
+              <button
+                type="button"
+                onClick={isSurahFullyLearned ? unmarkAllLearned : markAllLearned}
+                className="m-info-stat-card"
+                style={{
+                  cursor: 'pointer',
+                  borderColor: isSurahFullyLearned ? 'var(--green)' : 'rgba(255,255,255,0.12)',
+                  background: isSurahFullyLearned ? 'rgba(76,175,129,0.14)' : 'rgba(255,255,255,0.03)',
+                }}
+              >
+                <div className="m-stat-num" style={{ color: isSurahFullyLearned ? 'var(--green)' : 'var(--text2)', fontSize: 13 }}>
+                  {isSurahFullyLearned ? '✓ APPRISE' : '✓ MARQUER'}
+                </div>
+                <div className="m-stat-tag">{isSurahFullyLearned ? 'DÉMARQUER TOUT' : 'TOUTE LA SOURATE'}</div>
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* ── Modern Unified Action Bar (Slim) ── */}
+      {/* ── Clean 4-Action Reading Bar ── */}
       <div className="m-surah-actions-bar">
-        {/* Jump Button */}
+        {/* 1. Jump to Verse */}
         <button
           onClick={() => setShowAyatJump(v => !v)}
           className={`m-action-btn jump ${showAyatJump ? 'active' : ''}`}
         >
           <span className="m-act-icon">🔎</span>
           <span className="m-act-label">VERSET</span>
-          <span className="m-act-chevron">{showAyatJump ? '▲' : '▼'}</span>
         </button>
 
-        {/* Tajweed Button */}
+        {/* 2. Tajweed */}
         <button
           onClick={() => {
             setShowTajweedDrawer(v => !v);
@@ -302,7 +301,7 @@ export function SurahHeader({
           {activeTjCount > 0 && <span className="m-act-badge">{activeTjCount}</span>}
         </button>
 
-        {/* Translation Language Button */}
+        {/* 3. Translation */}
         <button
           onClick={() => {
             setShowLangDrawer(v => !v);
@@ -312,65 +311,23 @@ export function SurahHeader({
           className={`m-action-btn lang ${translationLang ? 'active' : ''}`}
         >
           <span className="m-act-icon">🌐</span>
-          <span className="m-act-label">{langLabel}</span>
+          <span className="m-act-label">{translationLang ? langLabel : "TRAD."}</span>
         </button>
 
-        {/* Reading Options Button */}
+        {/* 4. Reading Modes & Display Options */}
         <button
           onClick={() => {
             setShowOptionsDrawer(v => !v);
             setShowTajweedDrawer(false);
             setShowLangDrawer(false);
           }}
-          className={`m-action-btn options ${activeOptCount > 0 ? 'active' : ''}`}
+          className={`m-action-btn options ${anyOpt || showTsBar ? 'active' : ''}`}
         >
           <span className="m-act-icon">⚙</span>
-          <span className="m-act-label">OPTIONS</span>
-          {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
-        </button>
-
-        {/* Text Size Quick Controls (A- / A+) */}
-        <div className="m-fontsize-bar-ctrl" role="group" aria-label="Taille du texte des versets">
-          <button
-            type="button"
-            id="header-fontsize-dec"
-            onClick={() => dispatch(uiActions.decreaseAyatFontSize())}
-            disabled={ayatFontSize <= 16}
-            className="m-fontsize-btn"
-            title="Réduire la taille du texte des versets (A−)"
-            aria-label="Réduire la taille du texte"
-          >
-            A−
-          </button>
-          <span
-            id="header-fontsize-val"
-            className="m-fontsize-badge"
-            onClick={() => dispatch(uiActions.resetAyatFontSize())}
-            title={`Taille actuelle : ${ayatFontSize}px (cliquer pour réinitialiser à 26px)`}
-          >
-            {ayatFontSize}
+          <span className="m-act-label">
+            {pageMode ? "MODE PAGE" : hizbMode ? "MODE HIZB" : juzMode ? "MODE JUZ" : "AFFICHAGE"}
           </span>
-          <button
-            type="button"
-            id="header-fontsize-inc"
-            onClick={() => dispatch(uiActions.increaseAyatFontSize())}
-            disabled={ayatFontSize >= 48}
-            className="m-fontsize-btn"
-            title="Augmenter la taille du texte des versets (A+)"
-            aria-label="Augmenter la taille du texte"
-          >
-            A+
-          </button>
-        </div>
-
-        {/* Timestamps Sync Button */}
-        <button
-          onClick={() => setShowTsBar(v => !v)}
-          className={`m-action-btn ts ${showTsBar ? 'active' : ''}`}
-        >
-          <span className="m-act-icon">⚡</span>
-          <span className="m-act-label">TS</span>
-          <span className="m-act-counter">{loadedCount}/{ayats.length}</span>
+          {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
         </button>
       </div>
 

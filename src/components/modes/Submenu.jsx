@@ -1,7 +1,7 @@
 import { ToRevisePanel } from "../revision/ToRevisePanel.jsx";
 import { AyatCollectionsTab } from "../collections/AyatCollectionsTab.jsx";
 import { fixChars } from "../../utils/reciterAudio.js";
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { AnimatedSubmenu } from "../common/AnimatedWrappers.jsx";
 import { DecouverteMode } from "./DecouverteMode.jsx";
 import { LectureMode } from "./LectureMode.jsx";
@@ -15,6 +15,85 @@ import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 
 export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive, translationLang, ayatTranslation, wbwWords, onFullScreen }) {
   const [copied, setCopied] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const scrollRef = useRef(null);
+  const moreMenuRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const PRIMARY_MODES = [
+    { id: "lecture",       label: "LECTURE" },
+    { id: "decouverte",    label: "👁 DÉCOUVERTE" },
+    { id: "progression",   label: "🎯 MÉMORISATION", highlight: !!ld?.memorisationState?.stepProgress },
+    { id: "apprentissage", label: "✂ APPRENTISSAGE" },
+    { id: "tajweed",       label: "☪ TAJWEED" },
+  ];
+
+  const SECONDARY_MODES = [
+    { id: "memoire",     label: "📖 Aide Mémoire", desc: "Indices visuels & mots clés" },
+    { id: "reviser",     label: `🔖 À Réviser${ld?.toRevise ? " •" : ""}`, desc: "Cibler des mots ou lettres", highlight: !!ld?.toRevise },
+    { id: "collections", label: `🗂 Collections${ayatInCollections?.length > 0 ? ` (${ayatInCollections.length})` : ""}`, desc: "Classer ce verset par thème", highlight: ayatInCollections?.length > 0 },
+    { id: "infos",       label: "ℹ Infos & Notes", desc: "Détails et notes personnelles" },
+  ];
+
+  const activeSecondaryMode = SECONDARY_MODES.find(m => m.id === submenuMode);
+
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 6);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 6);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener("scroll", checkScroll, { passive: true });
+    window.addEventListener("resize", checkScroll);
+
+    const activeBtn = el.querySelector(".mode-btn.active");
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    }
+
+    return () => {
+      el.removeEventListener("scroll", checkScroll);
+      window.removeEventListener("resize", checkScroll);
+    };
+  }, [submenuMode, checkScroll]);
+
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const handleOutside = (e) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+        setShowMoreMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+    };
+  }, [showMoreMenu]);
+
+  const slideModes = (direction) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction === "left" ? -160 : 160, behavior: "smooth" });
+  };
+
+  const handleWheel = (e) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollWidth > el.clientWidth) {
+      el.scrollLeft += e.deltaY;
+    }
+  };
+
+  const hasSecondaryBadge = !!ld?.toRevise || (ayatInCollections?.length > 0) || ayatLoopActive;
+
   return (
     <div
       className="submenu"
@@ -23,83 +102,132 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
       onTouchStart={e => e.stopPropagation()}
       onTouchEnd={e => e.stopPropagation()}
     >
-
-      <div
-        className="submenu-header"
-        data-no-swipe="true"
-        onTouchStart={e => e.stopPropagation()}
-        onTouchEnd={e => e.stopPropagation()}
-        style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}
-      >
-        <button className={`mode-btn${submenuMode === "lecture" ? " active" : ""}`} onClick={() => setSubmenuMode("lecture")}>LECTURE</button>
-        <button className={`mode-btn${submenuMode === "decouverte" ? " active" : ""}`} onClick={() => setSubmenuMode("decouverte")}>👁 DÉCOUVERTE</button>
-        <button className={`mode-btn${submenuMode === "apprentissage" ? " active" : ""}`} onClick={() => setSubmenuMode("apprentissage")}>APPRENTISSAGE</button>
-        <button
-          className={`mode-btn${submenuMode === "collections" ? " active" : ""}`}
-          onClick={() => setSubmenuMode("collections")}
-          style={submenuMode !== "collections" && ayatInCollections?.length > 0 ? { color: "#c878ff" } : {}}
-        >
-          🗂 COLLECTIONS{ayatInCollections?.length > 0 ? ` (${ayatInCollections.length})` : ""}
-        </button>
-        <button className={`mode-btn${submenuMode === "infos" ? " active" : ""}`} onClick={() => setSubmenuMode("infos")}>ℹ INFOS</button>
-        <button className={`mode-btn${submenuMode === "memoire" ? " active" : ""}`} onClick={() => setSubmenuMode("memoire")}>📖 AIDE MÉMOIRE</button>
-        <button
-          className={`mode-btn${submenuMode === "progression" ? " active" : ""}`}
-          onClick={() => setSubmenuMode("progression")}
-          style={submenuMode !== "progression" && ld?.memorisationState?.stepProgress ? { color: "var(--gold2)" } : {}}
-          title="Système de mémorisation étape par étape et apprentissage mot à mot"
-        >
-          🎯 MÉMORISATION
-        </button>
-        <button className={`mode-btn${submenuMode === "tajweed" ? " active" : ""}`} onClick={() => setSubmenuMode("tajweed")}>☪ TAJWEED</button>
-        <button
-          className={`mode-btn${submenuMode === "reviser" ? " active" : ""}`}
-          onClick={() => setSubmenuMode("reviser")}
-          style={submenuMode !== "reviser" && ld?.toRevise ? { color: "var(--gold2)" } : {}}
-          title={ld?.toRevise ? "Modifier marquage à réviser" : "Marquer et cibler des mots/lettres à réviser"}
-        >
-          🔖 À RÉVISER{ld?.toRevise ? " •" : ""}
-        </button>
-        <button onClick={() => onSetLoop?.()} style={{
-          flexShrink:0, padding:"6px 10px", fontSize:14, cursor:"pointer",
-          background: ayatLoopActive ? "rgba(62,184,160,.12)" : "transparent",
-          border: "none", borderBottom: ayatLoopActive ? "2px solid var(--teal)" : "2px solid transparent",
-          color: ayatLoopActive ? "var(--teal2)" : "var(--text3)",
-          transition:"all .15s",
-        }} title="Lire en boucle">↺</button>
-        <button
-          onClick={() => {
-            const textToCopy = `${ayat.text || ''}\n[Sourate ${surahNum}:${ayat.numberInSurah}]`;
-            try { navigator.clipboard.writeText(textToCopy); } catch {}
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1600);
-          }}
-          title={copied ? "Copié !" : "Copier le texte et la référence"}
-          style={{
-            flexShrink:0, padding:"6px 10px", fontSize:12, cursor:"pointer",
-            background: copied ? "rgba(62,184,160,.18)" : "transparent",
-            border: "none", borderBottom: copied ? "2px solid var(--teal)" : "2px solid transparent",
-            color: copied ? "var(--teal2)" : "var(--text3)",
-            transition:"all .15s",
-          }}
-        >
-          {copied ? "✓" : "📋"}
-        </button>
-        {onFullScreen && (
+      <div className="submenu-header-wrapper">
+        {canScrollLeft && (
           <button
-            onClick={onFullScreen}
-            title="Afficher ce verset en plein écran (Focus)"
-            style={{
-              flexShrink:0, padding:"6px 10px", fontSize:12, cursor:"pointer",
-              background: "transparent",
-              border: "none", borderBottom: "2px solid transparent",
-              color: "var(--gold2)",
-              transition:"all .15s",
-            }}
+            type="button"
+            className="submenu-scroll-arrow left"
+            onClick={() => slideModes("left")}
+            aria-label="Faire défiler vers la gauche"
           >
-            ⛶
+            ‹
           </button>
         )}
+
+        <div
+          ref={scrollRef}
+          className={`submenu-header${canScrollLeft ? " fade-left" : ""}${canScrollRight ? " fade-right" : ""}`}
+          data-no-swipe="true"
+          onWheel={handleWheel}
+          onTouchStart={e => e.stopPropagation()}
+          onTouchEnd={e => { e.stopPropagation(); checkScroll(); }}
+          style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}
+        >
+          {PRIMARY_MODES.map(m => (
+            <button
+              key={m.id}
+              type="button"
+              className={`mode-btn${submenuMode === m.id ? " active" : ""}`}
+              onClick={() => { setSubmenuMode(m.id); setShowMoreMenu(false); }}
+              style={submenuMode !== m.id && m.highlight ? { color: "var(--gold2)" } : undefined}
+            >
+              {m.label}
+            </button>
+          ))}
+
+          {activeSecondaryMode && (
+            <button
+              type="button"
+              className="mode-btn active"
+              onClick={() => setShowMoreMenu(v => !v)}
+            >
+              {activeSecondaryMode.label.toUpperCase()}
+            </button>
+          )}
+        </div>
+
+        {canScrollRight && (
+          <button
+            type="button"
+            className="submenu-scroll-arrow right"
+            onClick={() => slideModes("right")}
+            aria-label="Faire défiler vers la droite"
+          >
+            ›
+          </button>
+        )}
+
+        {/* Compact "Plus d'outils & modes" trigger */}
+        <div className="submenu-more-wrap" ref={moreMenuRef}>
+          <button
+            type="button"
+            className={`submenu-more-btn${showMoreMenu || activeSecondaryMode ? " active" : ""}`}
+            onClick={() => setShowMoreMenu(v => !v)}
+            title="Plus de modes et d'actions pour ce verset"
+            aria-expanded={showMoreMenu}
+          >
+            <span>⋯ PLUS</span>
+            {hasSecondaryBadge && <span className="submenu-more-dot" />}
+          </button>
+
+          {showMoreMenu && (
+            <div className="submenu-more-popover">
+              <div className="submenu-more-section-label">AUTRES MODES D'ÉTUDE</div>
+              {SECONDARY_MODES.map(m => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`submenu-more-item${submenuMode === m.id ? " active" : ""}`}
+                  onClick={() => {
+                    setSubmenuMode(m.id);
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <span className="submenu-more-item-title">{m.label}</span>
+                  <span className="submenu-more-item-desc">{m.desc}</span>
+                </button>
+              ))}
+
+              <div className="submenu-more-divider" />
+              <div className="submenu-more-section-label">ACTIONS DU VERSET</div>
+              <div className="submenu-more-actions-row">
+                <button
+                  type="button"
+                  className={`submenu-quick-action${ayatLoopActive ? " active" : ""}`}
+                  onClick={() => { onSetLoop?.(); setShowMoreMenu(false); }}
+                >
+                  <span>↺</span>
+                  <span>{ayatLoopActive ? "Boucle active" : "Boucler"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`submenu-quick-action${copied ? " active" : ""}`}
+                  onClick={() => {
+                    const textToCopy = `${ayat.text || ''}\n[Sourate ${surahNum}:${ayat.numberInSurah}]`;
+                    try { navigator.clipboard.writeText(textToCopy); } catch {}
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1600);
+                  }}
+                >
+                  <span>{copied ? "✓" : "📋"}</span>
+                  <span>{copied ? "Copié" : "Copier"}</span>
+                </button>
+
+                {onFullScreen && (
+                  <button
+                    type="button"
+                    className="submenu-quick-action"
+                    onClick={() => { onFullScreen(); setShowMoreMenu(false); }}
+                  >
+                    <span>⛶</span>
+                    <span>Focus</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       <div className="submenu-content">
         <ErrorBoundary>

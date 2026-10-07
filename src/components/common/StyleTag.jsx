@@ -1180,8 +1180,211 @@ export const CSS = `
   .submenu{background:var(--surface2);border-top:1px solid var(--border);padding:14px 22px 18px;}
   .submenu-anim-wrap{animation:submenuIn .32s cubic-bezier(.4,0,.2,1) forwards;}
   .submenu-anim-wrap.closing{animation:submenuOut .24s cubic-bezier(.4,0,.2,1) forwards;}
-  .submenu-header{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:14px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;}
+  .submenu-header-wrapper{
+    position:relative;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    margin-bottom:14px;
+    width:100%;
+    border-bottom:1px solid var(--border);
+  }
+  .submenu-header{
+    display:flex;
+    gap:0;
+    flex:1;
+    min-width:0;
+    overflow-x:auto;
+    overflow-y:hidden;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+    flex-wrap:nowrap;
+    user-select:none;
+    scroll-behavior:smooth;
+  }
   .submenu-header::-webkit-scrollbar{display:none;}
+  .submenu-header.fade-left{
+    mask-image:linear-gradient(to right, transparent 0px, black 24px, black 100%);
+    -webkit-mask-image:linear-gradient(to right, transparent 0px, black 24px, black 100%);
+  }
+  .submenu-header.fade-right{
+    mask-image:linear-gradient(to left, transparent 0px, black 28px, black 100%);
+    -webkit-mask-image:linear-gradient(to left, transparent 0px, black 28px, black 100%);
+  }
+  .submenu-header.fade-left.fade-right{
+    mask-image:linear-gradient(to right, transparent 0px, black 24px, black calc(100% - 28px), transparent 100%);
+    -webkit-mask-image:linear-gradient(to right, transparent 0px, black 24px, black calc(100% - 28px), transparent 100%);
+  }
+  .submenu-scroll-arrow{
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    z-index:10;
+    width:24px;
+    height:24px;
+    border-radius:50%;
+    background:rgba(18,22,32,0.94);
+    border:1px solid var(--gold);
+    color:var(--gold2);
+    font-size:13px;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    box-shadow:0 2px 10px rgba(0,0,0,0.6), 0 0 8px rgba(201,168,76,0.3);
+    transition:all 0.15s ease;
+    line-height:1;
+    padding:0;
+  }
+  .submenu-scroll-arrow:hover{
+    background:var(--gold);
+    color:var(--bg);
+    transform:translateY(-50%) scale(1.08);
+  }
+  .submenu-scroll-arrow.left{
+    left:-6px;
+  }
+  .submenu-scroll-arrow.right{
+    right:68px;
+  }
+  .submenu-more-wrap{
+    position:relative;
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    padding-bottom:2px;
+  }
+  .submenu-more-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    font-family:'Cinzel',serif;
+    font-size:8.5px;
+    font-weight:700;
+    letter-spacing:1.2px;
+    padding:5px 10px;
+    border-radius:6px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--border2);
+    color:var(--text2);
+    cursor:pointer;
+    transition:all 0.15s ease;
+    white-space:nowrap;
+  }
+  .submenu-more-btn:hover{
+    border-color:var(--gold);
+    color:var(--gold2);
+    background:rgba(201,168,76,0.08);
+  }
+  .submenu-more-btn.active{
+    border-color:var(--gold);
+    color:var(--gold2);
+    background:rgba(201,168,76,0.14);
+  }
+  .submenu-more-dot{
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:var(--gold2);
+    box-shadow:0 0 6px rgba(232,201,110,0.7);
+  }
+  .submenu-more-popover{
+    position:absolute;
+    top:calc(100% + 6px);
+    right:0;
+    z-index:120;
+    width:240px;
+    background:linear-gradient(180deg,#181c28 0%,#11141e 100%);
+    border:1px solid rgba(201,168,76,0.35);
+    border-radius:12px;
+    padding:8px;
+    box-shadow:0 14px 36px rgba(0,0,0,0.72), 0 0 16px rgba(201,168,76,0.1);
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    animation:panelDropdownIn 0.15s ease-out forwards;
+  }
+  .submenu-more-section-label{
+    font-family:'Cinzel',serif;
+    font-size:7px;
+    letter-spacing:1.4px;
+    color:var(--text3);
+    padding:4px 8px 2px;
+  }
+  .submenu-more-item{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:2px;
+    width:100%;
+    padding:7px 10px;
+    border-radius:8px;
+    background:transparent;
+    border:1px solid transparent;
+    cursor:pointer;
+    text-align:left;
+    transition:all 0.15s ease;
+  }
+  .submenu-more-item:hover{
+    background:rgba(255,255,255,0.05);
+  }
+  .submenu-more-item.active{
+    background:rgba(201,168,76,0.12);
+    border-color:rgba(201,168,76,0.4);
+  }
+  .submenu-more-item-title{
+    font-family:'Cinzel',serif;
+    font-size:9px;
+    font-weight:600;
+    letter-spacing:0.8px;
+    color:var(--text);
+  }
+  .submenu-more-item.active .submenu-more-item-title{
+    color:var(--gold2);
+  }
+  .submenu-more-item-desc{
+    font-size:8px;
+    color:var(--text3);
+  }
+  .submenu-more-divider{
+    height:1px;
+    background:rgba(255,255,255,0.07);
+    margin:4px 2px;
+  }
+  .submenu-more-actions-row{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:4px;
+    padding:2px;
+  }
+  .submenu-quick-action{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:3px;
+    padding:6px 4px;
+    border-radius:7px;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.08);
+    color:var(--text2);
+    font-family:'Cinzel',serif;
+    font-size:7.5px;
+    letter-spacing:0.5px;
+    cursor:pointer;
+    transition:all 0.15s ease;
+  }
+  .submenu-quick-action:hover{
+    border-color:var(--gold);
+    color:var(--gold2);
+    background:rgba(201,168,76,0.08);
+  }
+  .submenu-quick-action.active{
+    border-color:var(--teal);
+    color:var(--teal2);
+    background:rgba(62,184,160,0.14);
+  }
   .mode-btn{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1.5px;padding:8px 14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text3);cursor:pointer;transition:all var(--transition);white-space:nowrap;flex-shrink:0;}
   .mode-btn:hover{color:var(--text2);}
   .mode-btn.active{color:var(--gold);border-bottom-color:var(--gold);}

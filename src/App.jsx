@@ -1825,40 +1825,6 @@ function AppInner({ currentUser, onSignOut }) {
 
           {/* Right Action buttons & Compact Modal Hub */}
           <div className="header-actions">
-            {/* Global Quranic Text Size Quick Controls (A− / A+) */}
-            <div className="m-fontsize-bar-ctrl" role="group" aria-label="Taille du texte des versets">
-              <button
-                type="button"
-                id="global-header-fontsize-dec"
-                onClick={() => dispatch(uiActions.decreaseAyatFontSize())}
-                disabled={ayatFontSize <= 16}
-                className="m-fontsize-btn"
-                title="Réduire la taille du texte des versets (A−)"
-                aria-label="Réduire la taille du texte"
-              >
-                A−
-              </button>
-              <span
-                id="global-header-fontsize-val"
-                className="m-fontsize-badge"
-                onClick={() => dispatch(uiActions.resetAyatFontSize())}
-                title={`Taille du texte : ${ayatFontSize}px (cliquer pour réinitialiser à 26px)`}
-              >
-                {ayatFontSize}
-              </span>
-              <button
-                type="button"
-                id="global-header-fontsize-inc"
-                onClick={() => dispatch(uiActions.increaseAyatFontSize())}
-                disabled={ayatFontSize >= 48}
-                className="m-fontsize-btn"
-                title="Augmenter la taille du texte des versets (A+)"
-                aria-label="Augmenter la taille du texte"
-              >
-                A+
-              </button>
-            </div>
-
             {/* Voice Command Mic */}
             <button
               id="header-voice-btn"
@@ -3185,36 +3151,55 @@ function AppInner({ currentUser, onSignOut }) {
                                   justifyContent:"center", flexShrink:0, transition:"all .15s",
                                   outline: isPlaying ? "2px solid var(--teal)" : "none",
                                   outlineOffset:2,
-                                }}>▶</button>
-                              <button
-                                title="Afficher en plein écran (Focus)"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  if (isOtherSurah) {
-                                    const targetSurah = surahs.find(s => s.number === ayatSurahNum);
-                                    if (targetSurah) {
-                                      setActiveHizbCoran(ayatHizb);
-                                      setSelectedSurah(targetSurah);
+                                }}>{isPlaying ? "⏸" : "▶"}</button>
+                              {isOpen && (
+                                <button
+                                  title="Afficher en plein écran (Focus)"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    if (isOtherSurah) {
+                                      const targetSurah = surahs.find(s => s.number === ayatSurahNum);
+                                      if (targetSurah) {
+                                        setActiveHizbCoran(ayatHizb);
+                                        setSelectedSurah(targetSurah);
+                                      }
                                     }
-                                  }
-                                  setOpenAyatNum(ayat.numberInSurah);
-                                  setExplicitFullScreen(true);
-                                }}
-                                style={{
-                                  width:22, height:22, borderRadius:"50%", border:"1px solid rgba(201,168,76,.25)",
-                                  background:"rgba(201,168,76,.06)",
-                                  color:"var(--gold2)",
-                                  fontSize:9, cursor:"pointer", display:"flex", alignItems:"center",
-                                  justifyContent:"center", flexShrink:0, transition:"all .15s",
-                                }}>⛶</button>
+                                    setOpenAyatNum(ayat.numberInSurah);
+                                    setExplicitFullScreen(true);
+                                  }}
+                                  style={{
+                                    width:22, height:22, borderRadius:"50%", border:"1px solid rgba(201,168,76,.25)",
+                                    background:"rgba(201,168,76,.06)",
+                                    color:"var(--gold2)",
+                                    fontSize:9, cursor:"pointer", display:"flex", alignItems:"center",
+                                    justifyContent:"center", flexShrink:0, transition:"all .15s",
+                                  }}>⛶</button>
+                              )}
                             </div>
                             {renderAyatText()}
-                            <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
-                              {ld.learned && <div className="ayat-learned-badge">✓ APPRIS</div>}
-                              {ld.toRevise && <div style={{ fontSize:7, letterSpacing:1, padding:'2px 6px', borderRadius:8, border:'1px solid var(--gold)', color:'var(--gold2)', fontFamily:"'Cinzel',serif" }}>🔖 RÉVISER</div>}
-                              {(() => { const m = masteryMap[lkey(ayatSurahNum, ayat.numberInSurah)] ?? 0; return m > 0 ? <div style={{ fontSize:8, letterSpacing:1, padding:'2px 7px', borderRadius:10, border:'1px solid '+masteryColor(m), color:masteryColor(m), fontFamily:"'Cinzel',serif" }}>{m}%</div> : null; })()}
-                              {ts && <div className="ts-status loaded">⚡ TS</div>}
-                            </div>
+                            {(() => {
+                              const m = masteryMap[lkey(ayatSurahNum, ayat.numberInSurah)] ?? 0;
+                              if (!ld.learned && !ld.toRevise && m <= 0) return null;
+                              return (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end", flexShrink: 0, paddingTop: 4 }}>
+                                  {ld.learned && (
+                                    <span style={{ fontSize: 8.5, letterSpacing: 1, color: "var(--green)", fontFamily: "'Cinzel',serif", fontWeight: 700 }} title="Verset appris">
+                                      ✓ APPRIS
+                                    </span>
+                                  )}
+                                  {ld.toRevise && (
+                                    <span style={{ fontSize: 8, letterSpacing: 0.8, color: "var(--gold2)", fontFamily: "'Cinzel',serif" }} title="À réviser">
+                                      🔖 RÉVISER
+                                    </span>
+                                  )}
+                                  {m > 0 && !ld.learned && (
+                                    <span style={{ fontSize: 8.5, letterSpacing: 0.8, color: masteryColor(m), fontFamily: "'Cinzel',serif", fontWeight: 600 }}>
+                                      {m}%
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Translation — full-width block below Arabic */}
@@ -3633,37 +3618,31 @@ function AppInner({ currentUser, onSignOut }) {
               </div>
 
               <div className="player-controls">
-                <button className="ctrl-btn" title="Premier verset" onClick={() => {
-                  playMainAyat(loopActive ? loopStart : 0); if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play(), 100);
-                }} style={{ fontSize: 11 }}>⏮</button>
-                <button className="ctrl-btn" onClick={() => {
+                <button className="ctrl-btn" title="Verset précédent" onClick={() => {
                   const i = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
                   playMainAyat(i); if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play(), 100);
                 }}>◀</button>
-                <button className="ctrl-btn play-btn" onClick={() => {
+                <button className="ctrl-btn play-btn" title={isMainPlaying ? "Pause" : "Lecture"} onClick={() => {
                   if (!isMainPlaying) { playMainAyat(loopActive ? loopStart : mainAyatIdx); setIsMainPlaying(true); }
                   else { setIsMainPlaying(false); setPlayingAyatNum(null); mainAudioRef.current?.pause(); }
                 }}>{isMainPlaying ? "⏸" : "▶"}</button>
-                <button className="ctrl-btn" onClick={() => {
+                <button className="ctrl-btn" title="Verset suivant" onClick={() => {
                   const i = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
                   playMainAyat(i); if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play(), 100);
                 }}>▶</button>
                 <button
-                  className={`ctrl-btn${loopActive ? " loop-on" : ""}`}
-                  title="Activer/désactiver la boucle"
-                  onClick={() => { setLoopActive(!loopActive); if (!loopActive) setLoopCount(0); }}
+                  className={`ctrl-btn${loopActive || showLoopBar ? " loop-on" : ""}`}
+                  title={showLoopBar ? "Fermer les réglages de boucle" : "Boucle de versets (configurer / activer)"}
+                  onClick={() => {
+                    if (!loopActive && !showLoopBar) {
+                      setLoopActive(true);
+                      setLoopCount(0);
+                      setShowLoopBar(true);
+                    } else {
+                      setShowLoopBar(!showLoopBar);
+                    }
+                  }}
                   style={{ fontSize: 12 }}>↺</button>
-                <button
-                  className={`ctrl-btn${showLoopBar ? " loop-on" : ""}`}
-                  title="Configurer le range de boucle"
-                  onClick={() => setShowLoopBar(!showLoopBar)}
-                  style={{ fontSize: 11 }}>⚙</button>
-                {/* Voice mic shortcut */}
-                <button
-                  className={`ctrl-btn${listening ? " loop-on" : ""}`}
-                  title="Commande vocale"
-                  onClick={toggleVoice}
-                  style={{ fontSize: 14 }}>🎤</button>
                 {/* Reciter picker */}
                 <button
                   className={`ctrl-btn reciter-trigger${showRecitPanel ? " loop-on" : ""}`}

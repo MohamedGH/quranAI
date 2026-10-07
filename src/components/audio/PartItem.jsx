@@ -196,23 +196,6 @@ export function PartItem({
                 {displayTranslation || <span style={{ opacity: 0.6 }}>(Traduction non disponible)</span>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                {onOpenDebug && (
-                  <button
-                    onClick={onOpenDebug}
-                    title="Inspecter le calcul de découpage de la traduction (Debug UI)"
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'rgba(91,200,245,.8)',
-                      cursor: 'pointer',
-                      fontSize: 11,
-                      padding: '1px 3px',
-                      borderRadius: 3,
-                    }}
-                  >
-                    🔬
-                  </button>
-                )}
                 <button
                   onClick={() => {
                     setEditTransText(displayTranslation || "");

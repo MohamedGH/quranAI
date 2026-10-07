@@ -455,8 +455,8 @@ export function PartAudioPlayer({
             </span>
           </div>
 
-          {/* Enchaînement toggles */}
-          {hasPreviousParts && (
+          {/* Enchaînement indicator or toggles (only show full buttons if not managed by parent global bar) */}
+          {hasPreviousParts && !onSetChainMode && (
             <div className="part-player-chain-group">
               <button
                 type="button"
@@ -483,6 +483,11 @@ export function PartAudioPlayer({
                 ⏮ {chainMode === "all" ? "✓ + TOUTES" : "+ TOUTES"}
               </button>
             </div>
+          )}
+          {hasPreviousParts && onSetChainMode && chainMode !== "none" && (
+            <span style={{ fontSize: 8, letterSpacing: 0.8, color: chainMode === "all" ? "var(--gold2)" : "var(--teal2)", fontFamily: "'Cinzel',serif" }}>
+              {chainMode === "prev" ? "⏮ + Partie préc." : "⏮ + Toutes les parties"}
+            </span>
           )}
         </div>
 

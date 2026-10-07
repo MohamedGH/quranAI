@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useCallback } from "react";
-import { useSelector, shallowEqual } from "react-redux";
-import { sel } from "../../store.js";
+import { useSelector, useDispatch, shallowEqual } from "react-redux";
+import { sel, learnActions, collectionsActions, goalsActions, revisionActions } from "../../store.js";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { firebaseDb, isFirebaseConfigured } from "../../firebase.js";
-import { DATA_KEYS, getDeviceId, mergeLearnData, mergeActivity, mergeCollections } from "../../utils/syncUtils.js";
-import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
+import { DATA_KEYS, getDeviceId } from "../../utils/syncUtils.js";
+import { safeGetItem } from "../../utils/safeStorage.js";
+import { PersistenceRepository } from "../../utils/persistenceRepository.js";
 
 export function CloudSyncManager({ uid }) {
+  const dispatch = useDispatch();
   const learnData       = useSelector(sel.learnData);
   const collections     = useSelector(sel.collections, shallowEqual);
   const activity        = useSelector(sel.activity);
@@ -16,29 +18,26 @@ export function CloudSyncManager({ uid }) {
 
   const isSyncingRef  = useRef(false);
   const saveTimerRef  = useRef(null);
-  const unsubRef      = useRef(null);
 
   // Apply data fetched from Firestore to local storage + Redux
   const applyCloudData = useCallback((cloudData) => {
     if (!cloudData) return;
-    const mergeKey = (k, mergeFn) => {
-      if (!cloudData[k]) return;
-      try {
-        const local = safeGetItem(k, null);
-        const merged = mergeFn ? mergeFn(local, cloudData[k]) : cloudData[k];
-        safeSetItem(k, merged);
-      } catch (e) {
-        console.warn(`[Sync] error merging ${k}:`, e);
-      }
-    };
-    mergeKey(DATA_KEYS.LEARN,       mergeLearnData);
-    mergeKey(DATA_KEYS.ACTIVITY,    mergeActivity);
-    mergeKey(DATA_KEYS.COLLECTIONS, mergeCollections);
-    mergeKey(DATA_KEYS.GOALS,       null);
-    mergeKey(DATA_KEYS.OPTIONS,     null);
-    mergeKey(DATA_KEYS.REVISION,    null);
-    window.dispatchEvent(new Event('storage'));
-  }, []);
+    const mergedState = PersistenceRepository.mergeCloudData(cloudData);
+    if (!mergedState) return;
+
+    if (mergedState.learnData) {
+      dispatch(learnActions.restoreFromCloud(mergedState.learnData));
+    }
+    if (mergedState.collections) {
+      dispatch(collectionsActions.restoreFromCloud(mergedState.collections));
+    }
+    if (mergedState.activity) {
+      dispatch(goalsActions.restoreActivityFromCloud(mergedState.activity));
+    }
+    if (mergedState.revision) {
+      dispatch(revisionActions.restoreFromCloud(mergedState.revision));
+    }
+  }, [dispatch]);
 
   // Save current local state to Firestore
   const pushToCloud = useCallback(async () => {

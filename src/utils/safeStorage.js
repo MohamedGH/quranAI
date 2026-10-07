@@ -282,8 +282,9 @@ export function safeJsonParse(raw, fallback = null) {
 
 export function safeGetItem(key, fallback = null) {
   try {
-    if (typeof window === "undefined" || !window.localStorage) return fallback;
-    const raw = localStorage.getItem(key);
+    const storage = (typeof window !== "undefined" && window.localStorage) || (typeof globalThis !== "undefined" && globalThis.localStorage);
+    if (!storage) return fallback;
+    const raw = storage.getItem(key);
     return safeJsonParse(raw, fallback);
   } catch {
     return fallback;
@@ -292,17 +293,18 @@ export function safeGetItem(key, fallback = null) {
 
 export function safeSetItem(key, value) {
   try {
-    if (typeof window === "undefined" || !window.localStorage) return;
+    const storage = (typeof window !== "undefined" && window.localStorage) || (typeof globalThis !== "undefined" && globalThis.localStorage);
+    if (!storage) return;
     if (value === undefined) {
-      localStorage.removeItem(key);
+      storage.removeItem(key);
       return;
     }
     const str = JSON.stringify(value);
     if (str === undefined || str === "undefined") {
-      localStorage.removeItem(key);
+      storage.removeItem(key);
       return;
     }
-    localStorage.setItem(key, str);
+    storage.setItem(key, str);
   } catch (e) {
     console.warn(`Could not set ${key} in localStorage:`, e);
   }
@@ -310,7 +312,8 @@ export function safeSetItem(key, value) {
 
 export function safeRemoveItem(key) {
   try {
-    if (typeof window === "undefined" || !window.localStorage) return;
-    localStorage.removeItem(key);
+    const storage = (typeof window !== "undefined" && window.localStorage) || (typeof globalThis !== "undefined" && globalThis.localStorage);
+    if (!storage) return;
+    storage.removeItem(key);
   } catch {}
 }

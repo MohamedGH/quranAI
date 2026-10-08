@@ -5,7 +5,7 @@ import reactPlugin from "eslint-plugin-react";
 
 export default [
   {
-    ignores: ["dist", "android", "node_modules", "public"],
+    ignores: ["dist", "dev-dist", "android", "node_modules", "public", "scripts"],
   },
   {
     files: ["**/*.{js,jsx}"],

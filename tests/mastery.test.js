@@ -56,4 +56,35 @@ describe("Mastery Engine", () => {
     expect(stats.totalCount).toBe(2);
     expect(stats.isFullyLearned).toBe(true);
   });
+
+  it("handles empty or invalid verse lists safely", () => {
+    const stats = computeDisplayedPartMastery([], {}, 1);
+    expect(stats.totalCount).toBe(0);
+    expect(stats.learnedCount).toBe(0);
+    expect(stats.masteryPct).toBe(0);
+    expect(stats.isFullyLearned).toBe(false);
+
+    const nullStats = computeDisplayedPartMastery(null, null, 1);
+    expect(nullStats.totalCount).toBe(0);
+    expect(nullStats.masteryPct).toBe(0);
+  });
+
+  it("computes displayed part mastery with revise count and nested surah object", () => {
+    const juzAyats = [
+      { surah: { number: 67 }, numberInSurah: 1, text: "تَبَٰرَكَ ٱلَّذِى" },
+      { surah: { number: 67 }, numberInSurah: 2, text: "ٱلَّذِى خَلَقَ" },
+      { surah: { number: 67 }, numberInSurah: 3, text: "ٱلَّذِى خَلَقَ سَبْعَ" },
+    ];
+    const learnData = {
+      "67:1": { learned: true },
+      "67:2": { toRevise: true },
+      "67:3": { learned: false },
+    };
+
+    const stats = computeDisplayedPartMastery(juzAyats, learnData, 67);
+    expect(stats.totalCount).toBe(3);
+    expect(stats.learnedCount).toBe(1);
+    expect(stats.reviseCount).toBe(1);
+    expect(stats.isFullyLearned).toBe(false);
+  });
 });

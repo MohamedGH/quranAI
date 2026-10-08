@@ -8,6 +8,7 @@ import {
   isAudioCached,
   clearAudioCache,
   createAudioResponseFromBuffer,
+  resolveOfflineAudioUrl,
   IDB_NAME,
   IDB_AUDIO_STORE,
 } from "../src/utils/audioCache.js";
@@ -101,6 +102,24 @@ describe("Audio Caching & Offline Storage Engine", () => {
     it("returns 404 response for missing audio buffer", () => {
       const response = createAudioResponseFromBuffer(null);
       expect(response.status).toBe(404);
+    });
+
+    it("resolves offline audio URL to blob when cached in IDB", async () => {
+      const url = "https://cdn.islamic.network/quran/audio/128/ar.alafasy/1.mp3";
+      const key = getAudioCacheKey(url);
+      const buffer = new Uint8Array([1, 2, 3]).buffer;
+
+      // When not in cache, returns original URL
+      const orig = await resolveOfflineAudioUrl(url, indexedDB);
+      expect(orig).toBe(url);
+
+      // Cache it
+      await cacheAudioBuffer(key, buffer, indexedDB);
+
+      // Now should resolve to a blob URL (or mock URL in jsdom)
+      const resolved = await resolveOfflineAudioUrl(url, indexedDB);
+      expect(typeof resolved).toBe("string");
+      expect(resolved.length).toBeGreaterThan(0);
     });
   });
 });

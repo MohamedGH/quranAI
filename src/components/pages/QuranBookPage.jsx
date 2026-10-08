@@ -5,9 +5,11 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useSelector } from "react-redux";
 import { sel } from "../../store.js";
 import { fetchSurahs, fetchPageMeta, getAudioBase, getGlobalRecitator, loadTimestampsForSurah } from "../../utils/reciterAudio.js";
+import { computeDisplayedPartMastery, masteryColor } from "../common/Mastery.jsx";
 
 export function QuranBookPage({ surahs }) {
   const navigate = useNavigate();
+  const learnData = useSelector(sel.learnData) || {};
   const [spread,    setSpread]    = React.useState(0);    // 0 = cover closed
   const [flipState, setFlipState] = React.useState('idle'); // 'idle'|'fwd'|'bwd'
   const [pageCache, setPageCache] = React.useState({});
@@ -139,6 +141,7 @@ export function QuranBookPage({ surahs }) {
     const fs = Math.max(Math.min(sz.h / 20, sz.w / 14, 16), 10);
 
     const pageHizb = ayahs?.[0]?.hizb ?? (ayahs?.[0]?.hizbQuarter != null ? Math.ceil(ayahs[0].hizbQuarter / 4) : null);
+    const pageMastery = ayahs?.length > 0 ? computeDisplayedPartMastery(ayahs, learnData, ayahs[0]?.surah?.number || 1) : null;
 
     return (
       <div className={`qbook-page-content${side === 'right' ? ' qbook-page-content-right' : ''}`}>
@@ -166,10 +169,17 @@ export function QuranBookPage({ surahs }) {
             </div>
           </React.Fragment>
         ))}
-        <div className="qbook-page-num">{pageNum}{pageHizb ? ` · Hizb ${pageHizb}` : ''}</div>
+        <div className="qbook-page-num">
+          {pageNum}{pageHizb ? ` · Hizb ${pageHizb}` : ''}
+          {pageMastery && (
+            <span style={{ marginLeft: 6, color: masteryColor(pageMastery.masteryPct), fontWeight: 700 }}>
+              · {pageMastery.masteryPct}% ({pageMastery.learnedCount}/{pageMastery.totalCount})
+            </span>
+          )}
+        </div>
       </div>
     );
-  }, [pageCache, sz]);
+  }, [pageCache, sz, learnData]);
 
   const spineW = Math.max(Math.round(sz.w * 0.052), 20);
   const totalW = sz.w * 2 + spineW;

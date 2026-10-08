@@ -20,6 +20,9 @@ import { HeaderToolsModal } from "./components/common/HeaderToolsModal.jsx";
 import { NotificationToast } from "./components/common/NotificationToast.jsx";
 import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
+import { PWAInstallButton } from "./components/common/PWAInstallButton.jsx";
+import { OfflineIndicator } from "./components/common/OfflineIndicator.jsx";
+import { getPlayableAudioUrl } from "./utils/offlineManager.js";
 import { AyatFullScreenModal } from "./components/common/AyatFullScreenModal.jsx";
 import { SurahHeader } from "./components/common/SurahHeader.jsx";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
@@ -1104,8 +1107,8 @@ function AppInner({ currentUser, onSignOut }) {
 
   useEffect(() => {
     fetchSurahs().then(d => { setSurahs(d); }); // setSurahs already sets loadingSurahs:false in reducer
-    // SW registered only in prod/Android (not localhost) so dev streams CDN directly
-    if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
+    // Register service worker for offline audio and resource caching
+    if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/audio-sw.js', { scope: '/' }).catch(() => {});
     }
   }, []);
@@ -1831,6 +1834,9 @@ function AppInner({ currentUser, onSignOut }) {
 
           {/* Right Action buttons & Compact Modal Hub */}
           <div className="header-actions">
+            {/* In-app PWA install button */}
+            <PWAInstallButton />
+
             {/* Voice Command Mic */}
             <button
               id="header-voice-btn"
@@ -3370,26 +3376,42 @@ function AppInner({ currentUser, onSignOut }) {
                               onFullScreen={() => setExplicitFullScreen(true)}
                             />
                           </AnimatedSubmenu>
-                          {(isPageEnd || isHizbEnd || isJuzEnd) && (
-                            <div className="edge-pills-bar end">
-                              {isPageEnd && <div className="page-edge-pill end">FIN · PAGE {ayat.page} ◆</div>}
-                              {isHizbEnd && (
-                                <div
-                                  className="hizb-edge-pill end"
-                                  style={{ cursor: 'pointer' }}
-                                  title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — cliquer pour afficher tout le Hizb` : `Fin Hizb ${ayatHizb}`}
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    setActiveHizbCoran(ayatHizb);
-                                    if (!hizbMode) setHizbMode(true);
-                                  }}
-                                >
-                                  FIN · HIZB {ayatHizb}{isHizbCrossSurah ? ` (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah})` : ''} ◆
-                                </div>
-                              )}
-                              {isJuzEnd  && <div className="juz-edge-pill end">FIN · JUZ {ayatJuz} ◆</div>}
-                            </div>
-                          )}
+                          {(isPageEnd || isHizbEnd || isJuzEnd) && (() => {
+                            const pageSlice = isPageEnd ? (hizbMode ? visible : ayats).filter(a => a.page === ayat.page) : [];
+                            const hizbSlice = isHizbEnd ? (hizbMode && currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === ayatHizb)) : [];
+                            const juzSlice  = isJuzEnd  ? (hizbMode ? visible : ayats).filter(a => getAyatJuz(a) === ayatJuz) : [];
+                            const pMast = isPageEnd ? computeDisplayedPartMastery(pageSlice, learnData, selectedSurah.number) : null;
+                            const hMast = isHizbEnd ? computeDisplayedPartMastery(hizbSlice, learnData, selectedSurah.number) : null;
+                            const jMast = isJuzEnd  ? computeDisplayedPartMastery(juzSlice, learnData, selectedSurah.number)  : null;
+                            return (
+                              <div className="edge-pills-bar end">
+                                {isPageEnd && (
+                                  <div className="page-edge-pill end">
+                                    FIN · PAGE {ayat.page} · {pMast.masteryPct}% ({pMast.learnedCount}/{pMast.totalCount}) ◆
+                                  </div>
+                                )}
+                                {isHizbEnd && (
+                                  <div
+                                    className="hizb-edge-pill end"
+                                    style={{ cursor: 'pointer' }}
+                                    title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — cliquer pour afficher tout le Hizb` : `Fin Hizb ${ayatHizb}`}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      setActiveHizbCoran(ayatHizb);
+                                      if (!hizbMode) setHizbMode(true);
+                                    }}
+                                  >
+                                    FIN · HIZB {ayatHizb}{isHizbCrossSurah ? ` (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah})` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount}) ◆
+                                  </div>
+                                )}
+                                {isJuzEnd  && (
+                                  <div className="juz-edge-pill end">
+                                    FIN · JUZ {ayatJuz} · {jMast.masteryPct}% ({jMast.learnedCount}/{jMast.totalCount}) ◆
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                           </div>
                           {/* In normal mode, if this is the last verse of the surah and its Hizb continues into another surah, show a prompt to display the rest of the Hizb */}
                           {!hizbMode && !pageMode && !juzMode && visIdx === visible.length - 1 && isHizbCrossSurah && hizbBoundsForPill && hizbBoundsForPill.endSurah > selectedSurah.number && (
@@ -3463,6 +3485,8 @@ function AppInner({ currentUser, onSignOut }) {
           onOpenOptionsModal={() => setShowOptionsModal(true)}
           toggleVoice={toggleVoice}
           listening={listening}
+          selectedSurah={selectedSurah}
+          activeHizb={resolvedActiveHizb || activeHizbCoran}
           initialTab={headerToolsInitialTab}
         />
 
@@ -3679,15 +3703,22 @@ function AppInner({ currentUser, onSignOut }) {
               }
             }
           }}
-          onError={() => {
-            // Current bitrate 404s for this reciter → fall back to the next candidate
+          onError={async () => {
+            // 1. If offline or network error, attempt to load audio buffer directly from IndexedDB
+            const url = audioUrl(currentMainAyat);
+            const offlineUrl = await getPlayableAudioUrl(url);
+            if (offlineUrl && offlineUrl !== url && mainAudioRef.current) {
+              mainAudioRef.current.src = offlineUrl;
+              mainAudioRef.current.load();
+              if (isPlayingRef.current) playWhenReady();
+              return;
+            }
+            // 2. Current bitrate 404s for this reciter → fall back to the next candidate
             // automatically (and remember it), then retry without interrupting playback.
             const next = markBitrateBad(recitatorId);
             if (next != null) {
               setBitrateVersion(v => v + 1);
               loadedAyatIdxRef.current = null;
-              // wait one frame so React commits the new `src` (now built from the updated
-              // bitrate) before forcing the element to actually load it
               requestAnimationFrame(() => {
                 const a = mainAudioRef.current;
                 if (!a) return;
@@ -3931,6 +3962,7 @@ function AppInner({ currentUser, onSignOut }) {
         show={showArabicKeyboard}
         onClose={() => { setShowArabicKeyboard(false); try { localStorage.setItem('quran_arabic_keyboard', '0'); } catch {} }}
       />
+      <OfflineIndicator />
     </>
     </ArabicKeyboardContext.Provider>
   );

@@ -1,5 +1,5 @@
 import { IS_ANDROID } from './audioRecorder.js';
-import { splitArabicWords, stripBasmalaFromAyah } from './arabicUtils.js';
+import { splitArabicWords, stripBasmalaFromAyah, SURAH_INFO } from './arabicUtils.js';
 import { safeGetItem, safeSetItem } from './safeStorage.js';
 import { getHizbForSurahAyah } from './hizbUtils.js';
 
@@ -119,7 +119,15 @@ export async function fetchSurahs() {
 
   const fallback = safeGetItem(`quran_fallback_surahs`, null);
   if (Array.isArray(fallback) && fallback.length > 0) return fallback;
-  return [];
+
+  // Complete offline fallback for all 114 surahs
+  return SURAH_INFO.map(s => ({
+    number: s.n,
+    name: s.ar,
+    englishName: s.en,
+    numberOfAyahs: s.count,
+    revelationType: s.rev === 'med' ? 'Medinan' : 'Meccan',
+  }));
 }
 
 // Translation editions keyed by lang code
@@ -263,6 +271,26 @@ export async function fetchAyats(n) {
   if (fallback && Array.isArray(fallback.ayahs) && fallback.ayahs.length > 0) {
     return { ...fallback, ayahs: _cleanAyahsArray(fallback.ayahs, n) };
   }
+
+  // Resilient fallback: Try simple concordance text if available in cache
+  try {
+    const simple = await fetchSurahSimple(n);
+    if (Array.isArray(simple) && simple.length > 0) {
+      const recovered = {
+        number: n,
+        ayahs: _cleanAyahsArray(
+          simple.map(a => ({
+            numberInSurah: a.num,
+            text: a.text,
+            surahNumber: n,
+            hizb: getHizbForSurahAyah(n, a.num),
+          })),
+          n
+        ),
+      };
+      return recovered;
+    }
+  } catch {}
 
   return { ayahs: [] };
 }

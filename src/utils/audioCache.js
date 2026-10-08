@@ -146,3 +146,23 @@ export function createAudioResponseFromBuffer(arrayBuffer, rangeHeader = null) {
     },
   });
 }
+
+/**
+ * Resolves a playable URL for an audio item.
+ * If offline or if the audio buffer is available in IndexedDB, creates an object URL (blob:...)
+ * so playback succeeds with zero network latency and 100% offline reliability.
+ */
+export async function resolveOfflineAudioUrl(url, customIndexedDB) {
+  if (!url) return "";
+  const key = getAudioCacheKey(url);
+  try {
+    const buf = await getCachedAudioBuffer(key, customIndexedDB);
+    if (buf && (buf.byteLength > 0 || buf.size > 0)) {
+      if (typeof URL !== "undefined" && typeof Blob !== "undefined") {
+        const blob = buf instanceof Blob ? buf : new Blob([buf], { type: "audio/mpeg" });
+        return URL.createObjectURL(blob);
+      }
+    }
+  } catch {}
+  return url;
+}

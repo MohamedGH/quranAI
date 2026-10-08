@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { sel, uiActions } from "../../store.js";
+import { OfflineLoader } from "./OfflineLoader.jsx";
+import { PWAInstallButton } from "./PWAInstallButton.jsx";
+import { useOnlineStatus } from "../../hooks/useOnlineStatus.js";
 
 export function HeaderToolsModal({
   isOpen,
@@ -15,9 +18,12 @@ export function HeaderToolsModal({
   onOpenOptionsModal,
   toggleVoice,
   listening,
+  selectedSurah,
+  activeHizb,
   initialTab = 'tools'
 }) {
   const [activeTab, setActiveTab] = useState(initialTab);
+  const isOnline = useOnlineStatus();
   const dispatch = useDispatch();
   const fullScreenSelectedAyat = useSelector(sel.fullScreenSelectedAyat);
   const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
@@ -134,6 +140,7 @@ export function HeaderToolsModal({
           {[
             { id: 'tools', label: '🎛️ OUTILS D\'ÉTUDE' },
             { id: 'voice', label: '🎤 VOCAL & AIDE' },
+            { id: 'offline', label: '📥 HORS-LIGNE & PWA' },
             { id: 'account', label: '👤 MON COMPTE' }
           ].map((tab) => {
             const isActive = activeTab === tab.id;
@@ -693,6 +700,61 @@ export function HeaderToolsModal({
                   ))}
                 </div>
               </div>
+            </>
+          )}
+
+          {/* TAB: HORS-LIGNE & PWA */}
+          {activeTab === 'offline' && (
+            <>
+              {/* Connectivity & PWA Status Card */}
+              <div
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  background: 'var(--surface2)',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: isOnline ? 'var(--green)' : '#ffd166',
+                        display: 'inline-block'
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontFamily: "'Cinzel', serif",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: isOnline ? 'var(--green)' : '#ffd166'
+                      }}
+                    >
+                      {isOnline ? 'CONNECTÉ À INTERNET' : 'MODE HORS-LIGNE ACTIF'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 4 }}>
+                    Application PWA installable avec cache IndexedDB persistant
+                  </div>
+                </div>
+
+                <PWAInstallButton />
+              </div>
+
+              {/* Offline Resource Downloader */}
+              <OfflineLoader
+                currentSurah={selectedSurah}
+                currentHizb={activeHizb}
+                onDownloadDone={() => {}}
+              />
             </>
           )}
 

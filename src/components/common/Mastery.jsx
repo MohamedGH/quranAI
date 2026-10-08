@@ -138,6 +138,55 @@ export function computeSurahMastery(surahNum, numberOfAyahs, learnData, surahTex
   return Math.min(100, Math.max(0, Math.round(sumAyatMastery / total)));
 }
 
+/**
+ * Computes mastery statistics for any displayed part / slice of verses (Page, Hizb, Juz, or Surah).
+ * Supports cross-surah verse lists where each verse may specify `surahNumber` or `surah.number`.
+ */
+export function computeDisplayedPartMastery(ayatsList = [], learnData = {}, defaultSurahNum = 1) {
+  if (!Array.isArray(ayatsList) || ayatsList.length === 0) {
+    return {
+      masteryPct: 0,
+      learnedCount: 0,
+      inProgressCount: 0,
+      reviseCount: 0,
+      totalCount: 0,
+      isFullyLearned: false,
+    };
+  }
+
+  let sumMastery = 0;
+  let learnedCount = 0;
+  let inProgressCount = 0;
+  let reviseCount = 0;
+  let validCount = 0;
+
+  for (const a of ayatsList) {
+    if (!a || a.numberInSurah == null) continue;
+    validCount++;
+    const sn = Number(a.surahNumber ?? a.surah?.number ?? defaultSurahNum);
+    const an = Number(a.numberInSurah);
+    const key = `${sn}:${an}`;
+    const ld = learnData?.[key];
+    const m = computeMastery(ld, a.text);
+    sumMastery += m;
+    if (ld?.learned) learnedCount++;
+    else if (m > 0) inProgressCount++;
+    if (ld?.toRevise) reviseCount++;
+  }
+
+  const totalCount = validCount;
+  const masteryPct = totalCount > 0 ? Math.min(100, Math.max(0, Math.round(sumMastery / totalCount))) : 0;
+
+  return {
+    masteryPct,
+    learnedCount,
+    inProgressCount,
+    reviseCount,
+    totalCount,
+    isFullyLearned: totalCount > 0 && learnedCount === totalCount,
+  };
+}
+
 export function masteryColor(pct) {
   if (pct >= 80) return 'var(--green)';
   if (pct >= 50) return 'var(--gold)';

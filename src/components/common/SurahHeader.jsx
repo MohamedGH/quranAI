@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { sel, uiActions } from "../../store.js";
-import { masteryColor } from "./Mastery.jsx";
+import { masteryColor, computeDisplayedPartMastery } from "./Mastery.jsx";
 import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
 
@@ -26,6 +26,8 @@ export function SurahHeader({
   setJuzMode = () => {},
   activeJuzCoran = null,
   setActiveJuzCoran = () => {},
+  currentHizbCrossAyats = [],
+  resolvedActiveHizb = null,
   mainAyatIdx,
   learnData,
   lkey,
@@ -85,32 +87,76 @@ export function SurahHeader({
 
   if (!selectedSurah) return null;
 
-  const isSurahFullyLearned = ayats.length > 0 && ayats.every(a => getLData(selectedSurah.number, a.numberInSurah)?.learned);
-  const markAllLearned = () => ayats.forEach(a => setLData(selectedSurah.number, a.numberInSurah, d => ({ ...d, learned: true })));
-  const unmarkAllLearned = () => ayats.forEach(a => setLData(selectedSurah.number, a.numberInSurah, d => ({ ...d, learned: false })));
-
-  const st = surahStats[selectedSurah.number];
-  const totalAyahs = selectedSurah.numberOfAyahs || 0;
-  const totalMasteryPct = totalAyahs > 0 ? Math.round((st?.mastery || 0) / totalAyahs) : 0;
-
   const sn = selectedSurah.number;
   const getAyatHizb = (a) => a?.hizb != null ? a.hizb : (a?.hizbQuarter != null ? Math.ceil(a.hizbQuarter / 4) : null);
   const activeAyat = ayats[mainAyatIdx] || ayats[0];
   const curPage = pageMode ? (activePageCoran ?? activeAyat?.page ?? null) : null;
-  const curHizb = hizbMode ? (activeHizbCoran ?? getAyatHizb(activeAyat)) : null;
+  const curHizb = hizbMode ? (resolvedActiveHizb ?? activeHizbCoran ?? getAyatHizb(activeAyat)) : null;
   const curJuz  = juzMode  ? (activeJuzCoran  ?? activeAyat?.juz ?? null) : null;
   const displayPage = curPage ?? activeAyat?.page ?? surahMeta?.page ?? null;
   const displayHizb = curHizb ?? getAyatHizb(activeAyat) ?? pageMeta?.hizb ?? surahMeta?.hizb ?? null;
   const displayJuz  = curJuz  ?? activeAyat?.juz  ?? pageMeta?.juz  ?? surahMeta?.juz  ?? null;
+
+  const displayPageAyats = displayPage != null ? ayats.filter(a => a.page === displayPage) : [];
+  const displayHizbAyats = displayHizb != null
+    ? (hizbMode && currentHizbCrossAyats?.length > 0
+        ? currentHizbCrossAyats
+        : ayats.filter(a => getAyatHizb(a) === displayHizb))
+    : [];
+  const displayJuzAyats = displayJuz != null ? ayats.filter(a => a.juz === displayJuz) : [];
+
+  const displayPageMastery = computeDisplayedPartMastery(displayPageAyats, learnData, sn);
+  const displayHizbMastery = computeDisplayedPartMastery(displayHizbAyats, learnData, sn);
+  const displayJuzMastery  = computeDisplayedPartMastery(displayJuzAyats, learnData, sn);
+
   const pageAyats = curPage
-    ? ayats.filter(a => a.page === curPage)
+    ? displayPageAyats
     : curHizb
-    ? ayats.filter(a => getAyatHizb(a) === curHizb)
+    ? displayHizbAyats
     : curJuz
-    ? ayats.filter(a => a.juz === curJuz)
+    ? displayJuzAyats
     : ayats;
-  const totalParts = pageAyats.reduce((s, a) => s + (learnData[lkey(sn, a.numberInSurah)]?.parts?.length || 0), 0);
-  const totalUnk = pageAyats.reduce((s, a) => s + (learnData[lkey(sn, a.numberInSurah)]?.unknownWords?.length || 0), 0);
+
+  const displayedPartMastery = computeDisplayedPartMastery(pageAyats, learnData, sn);
+  const activePartModeLabel = curPage
+    ? `P.${curPage}`
+    : curHizb
+    ? `H.${curHizb}`
+    : curJuz
+    ? `J.${curJuz}`
+    : null;
+  const activePartFullTitle = curPage
+    ? `LA PAGE ${curPage}`
+    : curHizb
+    ? `LE HIZB ${curHizb}`
+    : curJuz
+    ? `LE JUZ ${curJuz}`
+    : `TOUTE LA SOURATE`;
+
+  const isSurahFullyLearned = ayats.length > 0 && ayats.every(a => getLData(selectedSurah.number, a.numberInSurah)?.learned);
+  const isDisplayedPartFullyLearned = activePartModeLabel ? displayedPartMastery.isFullyLearned : isSurahFullyLearned;
+  const markDisplayedPartLearned = () => pageAyats.forEach(a => {
+    const aSn = a.surahNumber ?? a.surah?.number ?? selectedSurah.number;
+    setLData(aSn, a.numberInSurah, d => ({ ...d, learned: true }));
+  });
+  const unmarkDisplayedPartLearned = () => pageAyats.forEach(a => {
+    const aSn = a.surahNumber ?? a.surah?.number ?? selectedSurah.number;
+    setLData(aSn, a.numberInSurah, d => ({ ...d, learned: false }));
+  });
+
+  const st = surahStats[selectedSurah.number];
+  const totalAyahs = selectedSurah.numberOfAyahs || 0;
+  const totalMasteryPct = totalAyahs > 0 ? Math.round((st?.mastery || 0) / totalAyahs) : 0;
+  const headerMasteryPct = activePartModeLabel ? displayedPartMastery.masteryPct : totalMasteryPct;
+
+  const totalParts = pageAyats.reduce((s, a) => {
+    const aSn = a.surahNumber ?? a.surah?.number ?? sn;
+    return s + (learnData[lkey(aSn, a.numberInSurah)]?.parts?.length || 0);
+  }, 0);
+  const totalUnk = pageAyats.reduce((s, a) => {
+    const aSn = a.surahNumber ?? a.surah?.number ?? sn;
+    return s + (learnData[lkey(aSn, a.numberInSurah)]?.unknownWords?.length || 0);
+  }, 0);
   const meta = pageMode && pageMeta ? pageMeta : surahMeta;
 
   const anyTj = showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone;
@@ -179,28 +225,32 @@ export function SurahHeader({
             <span className="m-compact-en">{selectedSurah.englishName}</span>
             <span className="m-compact-meta">
               {selectedSurah.numberOfAyahs}v · {isMeccan ? 'Mecq' : 'Méd'}
-              {displayPage ? ` · P.${displayPage}` : ''}
-              {displayHizb ? ` · H.${displayHizb}` : ''}
-              {displayJuz ? ` · J.${displayJuz}` : ''}
+              {displayPage ? ` · P.${displayPage}${pageMode || displayPageMastery.masteryPct > 0 ? ` (${displayPageMastery.masteryPct}%)` : ''}` : ''}
+              {displayHizb ? ` · H.${displayHizb}${hizbMode || displayHizbMastery.masteryPct > 0 ? ` (${displayHizbMastery.masteryPct}%)` : ''}` : ''}
+              {displayJuz ? ` · J.${displayJuz}${juzMode || displayJuzMastery.masteryPct > 0 ? ` (${displayJuzMastery.masteryPct}%)` : ''}` : ''}
             </span>
             <span className="m-compact-chevron">▾</span>
           </div>
 
           {/* Quick status & Next Surah */}
           <div className="m-surah-compact-actions">
-            {/* Mastery Pill — click to toggle Surah Stats & Quick Mark All */}
+            {/* Mastery Pill — shows current displayed part mastery (Page/Hizb/Juz) when active, or Surah mastery */}
             <button
               type="button"
               onClick={() => setShowSurahInfo(v => !v)}
               className={`m-compact-mastery ${showSurahInfo ? 'active' : ''}`}
               style={{
-                borderColor: masteryColor(totalMasteryPct),
-                color: masteryColor(totalMasteryPct),
+                borderColor: masteryColor(headerMasteryPct),
+                color: masteryColor(headerMasteryPct),
                 cursor: 'pointer',
               }}
-              title="Voir les statistiques et options de la sourate"
+              title={
+                activePartModeLabel
+                  ? `Maîtrise ${activePartModeLabel} : ${displayedPartMastery.masteryPct}% (${displayedPartMastery.learnedCount}/${displayedPartMastery.totalCount} v.) · Sourate : ${totalMasteryPct}%`
+                  : "Voir les statistiques et options de la sourate"
+              }
             >
-              {totalMasteryPct}% {isSurahFullyLearned ? '✓' : '▾'}
+              {activePartModeLabel ? `${activePartModeLabel} · ${headerMasteryPct}%` : `${headerMasteryPct}%`} {isDisplayedPartFullyLearned ? '✓' : '▾'}
             </button>
 
             {/* Next Surah */}
@@ -227,21 +277,61 @@ export function SurahHeader({
         {/* Expandable Detailed Stats Grid + Mark All Learned */}
         {showSurahInfo && (
           <div className="m-surah-info-grid">
-            <div className="m-info-stat-card page">
-              <div className="m-stat-num" style={{ color: '#c878ff' }}>{displayPage ?? '—'}</div>
-              <div className="m-stat-tag">PAGE DU MUSHAF</div>
+            <div
+              className="m-info-stat-card page"
+              style={pageMode ? { borderColor: '#c878ff', background: 'rgba(200,120,255,0.12)' } : undefined}
+            >
+              <div className="m-stat-num" style={{ color: '#c878ff' }}>
+                {displayPage ?? '—'}
+                {displayPage != null && (
+                  <span style={{ fontSize: 10, marginLeft: 5, color: masteryColor(displayPageMastery.masteryPct) }}>
+                    · {displayPageMastery.masteryPct}%
+                  </span>
+                )}
+              </div>
+              <div className="m-stat-tag">
+                PAGE {displayPage != null ? `(${displayPageMastery.learnedCount}/${displayPageMastery.totalCount} v.)` : 'DU MUSHAF'}
+              </div>
             </div>
-            <div className="m-info-stat-card hizb">
-              <div className="m-stat-num" style={{ color: '#ffd166' }}>{displayHizb ?? '—'}</div>
-              <div className="m-stat-tag">HIZB</div>
+            <div
+              className="m-info-stat-card hizb"
+              style={hizbMode ? { borderColor: '#ffd166', background: 'rgba(255,209,102,0.12)' } : undefined}
+            >
+              <div className="m-stat-num" style={{ color: '#ffd166' }}>
+                {displayHizb ?? '—'}
+                {displayHizb != null && (
+                  <span style={{ fontSize: 10, marginLeft: 5, color: masteryColor(displayHizbMastery.masteryPct) }}>
+                    · {displayHizbMastery.masteryPct}%
+                  </span>
+                )}
+              </div>
+              <div className="m-stat-tag">
+                HIZB {displayHizb != null ? `(${displayHizbMastery.learnedCount}/${displayHizbMastery.totalCount} v.)` : ''}
+              </div>
             </div>
-            <div className="m-info-stat-card juz">
-              <div className="m-stat-num" style={{ color: '#a8edea' }}>{displayJuz ?? '—'}</div>
-              <div className="m-stat-tag">JUZ</div>
+            <div
+              className="m-info-stat-card juz"
+              style={juzMode ? { borderColor: '#56d4bc', background: 'rgba(86,212,188,0.12)' } : undefined}
+            >
+              <div className="m-stat-num" style={{ color: '#a8edea' }}>
+                {displayJuz ?? '—'}
+                {displayJuz != null && (
+                  <span style={{ fontSize: 10, marginLeft: 5, color: masteryColor(displayJuzMastery.masteryPct) }}>
+                    · {displayJuzMastery.masteryPct}%
+                  </span>
+                )}
+              </div>
+              <div className="m-stat-tag">
+                JUZ {displayJuz != null ? `(${displayJuzMastery.learnedCount}/${displayJuzMastery.totalCount} v.)` : ''}
+              </div>
             </div>
             <div className="m-info-stat-card">
-              <div className="m-stat-num" style={{ color: 'var(--gold2)' }}>{selectedSurah.numberOfAyahs}</div>
-              <div className="m-stat-tag">VERSETS</div>
+              <div className="m-stat-num" style={{ color: 'var(--gold2)' }}>
+                {activePartModeLabel ? `${displayedPartMastery.learnedCount}/${displayedPartMastery.totalCount}` : selectedSurah.numberOfAyahs}
+              </div>
+              <div className="m-stat-tag">
+                {activePartModeLabel ? `APPRIS (${activePartModeLabel})` : `VERSETS (${totalMasteryPct}%)`}
+              </div>
             </div>
             <div className="m-info-stat-card">
               <div className="m-stat-num" style={{ color: '#5bc8f5' }}>{meta?.wordCount ?? '—'}</div>
@@ -255,21 +345,21 @@ export function SurahHeader({
               <div className="m-stat-num" style={{ color: totalUnk > 0 ? '#ff9f43' : 'var(--text3)' }}>{totalUnk}</div>
               <div className="m-stat-tag">MOTS À REVOIR</div>
             </div>
-            {ayats.length > 0 && (
+            {pageAyats.length > 0 && (
               <button
                 type="button"
-                onClick={isSurahFullyLearned ? unmarkAllLearned : markAllLearned}
+                onClick={isDisplayedPartFullyLearned ? unmarkDisplayedPartLearned : markDisplayedPartLearned}
                 className="m-info-stat-card"
                 style={{
                   cursor: 'pointer',
-                  borderColor: isSurahFullyLearned ? 'var(--green)' : 'rgba(255,255,255,0.12)',
-                  background: isSurahFullyLearned ? 'rgba(76,175,129,0.14)' : 'rgba(255,255,255,0.03)',
+                  borderColor: isDisplayedPartFullyLearned ? 'var(--green)' : 'rgba(255,255,255,0.12)',
+                  background: isDisplayedPartFullyLearned ? 'rgba(76,175,129,0.14)' : 'rgba(255,255,255,0.03)',
                 }}
               >
-                <div className="m-stat-num" style={{ color: isSurahFullyLearned ? 'var(--green)' : 'var(--text2)', fontSize: 13 }}>
-                  {isSurahFullyLearned ? '✓ APPRISE' : '✓ MARQUER'}
+                <div className="m-stat-num" style={{ color: isDisplayedPartFullyLearned ? 'var(--green)' : 'var(--text2)', fontSize: 13 }}>
+                  {isDisplayedPartFullyLearned ? '✓ APPRISE' : '✓ MARQUER'}
                 </div>
-                <div className="m-stat-tag">{isSurahFullyLearned ? 'DÉMARQUER TOUT' : 'TOUTE LA SOURATE'}</div>
+                <div className="m-stat-tag">{isDisplayedPartFullyLearned ? 'DÉMARQUER TOUT' : activePartFullTitle}</div>
               </button>
             )}
           </div>
@@ -325,7 +415,13 @@ export function SurahHeader({
         >
           <span className="m-act-icon">⚙</span>
           <span className="m-act-label">
-            {pageMode ? "MODE PAGE" : hizbMode ? "MODE HIZB" : juzMode ? "MODE JUZ" : "AFFICHAGE"}
+            {pageMode
+              ? `PAGE · ${displayPageMastery.masteryPct}%`
+              : hizbMode
+              ? `HIZB · ${displayHizbMastery.masteryPct}%`
+              : juzMode
+              ? `JUZ · ${displayJuzMastery.masteryPct}%`
+              : "AFFICHAGE"}
           </span>
           {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
         </button>

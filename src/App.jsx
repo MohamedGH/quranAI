@@ -13,7 +13,7 @@ import { StyleTag } from "./components/common/StyleTag.jsx";
 import { ArabicKeyboard, ArabicKeyboardContext, useArabicKeyboard } from "./components/common/ArabicKeyboard.jsx";
 import { AnimatedPage, AnimatedSubmenu } from "./components/common/AnimatedWrappers.jsx";
 import { ArabicHighlighted, PlayingArabicHighlighted } from "./components/common/ArabicHighlighted.jsx";
-import { MasteryBar, MasteryBadge, MasteryDebug, computeMastery } from "./components/common/Mastery.jsx";
+import { MasteryBar, MasteryBadge, MasteryDebug, computeMastery, computeDisplayedPartMastery } from "./components/common/Mastery.jsx";
 import { RappelWidget } from "./components/common/RappelWidget.jsx";
 import { ScheduledRemindersModal } from "./components/common/ScheduledRemindersModal.jsx";
 import { HeaderToolsModal } from "./components/common/HeaderToolsModal.jsx";
@@ -1759,14 +1759,20 @@ function AppInner({ currentUser, onSignOut }) {
   const masteryMap = useMemo(() => {
     if (!enableHeavyCompute) return {};
     const m = {};
-    // Build ayat text lookup from loaded ayats
+    // Build ayat text lookup from loaded ayats & cross-surah ayats
     const textLookup = {};
     if (selectedSurah && ayats) {
       ayats.forEach(a => { textLookup[`${selectedSurah.number}:${a.numberInSurah}`] = a.text; });
     }
+    if (currentHizbCrossAyats && currentHizbCrossAyats.length > 0) {
+      currentHizbCrossAyats.forEach(a => {
+        const sn = a.surahNumber ?? a.surah?.number ?? selectedSurah?.number;
+        if (sn) textLookup[`${sn}:${a.numberInSurah}`] = a.text;
+      });
+    }
     for (const [k, v] of Object.entries(learnData)) m[k] = computeMastery(v, textLookup[k]);
     return m;
-  }, [learnData, enableHeavyCompute, ayats, selectedSurah]);
+  }, [learnData, enableHeavyCompute, ayats, selectedSurah, currentHizbCrossAyats]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const loadedCount = useMemo(() => selectedSurah
     ? ayats.filter(a => timestampsMapRef.current[tskey(selectedSurah.number, a.numberInSurah)]).length : 0,
@@ -2201,6 +2207,8 @@ function AppInner({ currentUser, onSignOut }) {
                   setJuzMode={setJuzMode}
                   activeJuzCoran={activeJuzCoran}
                   setActiveJuzCoran={setActiveJuzCoran}
+                  currentHizbCrossAyats={currentHizbCrossAyats}
+                  resolvedActiveHizb={resolvedActiveHizb}
                   mainAyatIdx={mainAyatIdx}
                   learnData={learnData}
                   lkey={lkey}
@@ -2248,81 +2256,102 @@ function AppInner({ currentUser, onSignOut }) {
                   const idx = pages.indexOf(curPage);
                   const pageAyatsForCur = ayats.filter(a => a.page === curPage);
                   const curPageHizb = getAyatHizb(pageAyatsForCur[0]);
+                  const pageMastery = computeDisplayedPartMastery(pageAyatsForCur, learnData, selectedSurah.number);
                   return (
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-                      padding:'6px 14px', background:'var(--surface2)', borderBottom:'1px solid var(--border)',
-                      position:'sticky', top:0, zIndex:10, gap:8 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                        <button onClick={() => setactivePageCoran(pages[0])} disabled={idx<=0}
-                          title="Première page de la sourate"
-                          style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
-                            background:'transparent', border:'1px solid var(--border2)',
-                            color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                            cursor: idx>0 ? 'pointer' : 'default', lineHeight:1 }}>⏮</button>
-                        <button onClick={() => setactivePageCoran(pages[idx-1])} disabled={idx<=0}
-                          style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
-                            background:'transparent', border:'1px solid var(--border2)',
-                            color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                            cursor: idx>0 ? 'pointer' : 'default' }}>← {idx>0 ? pages[idx-1] : ''}</button>
-                      </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <span style={{ fontSize:7, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>PAGE</span>
-                        <input type="number" value={curPage}
-                          onChange={e => { const v=parseInt(e.target.value); if(pages.includes(v)) setactivePageCoran(v); }}
-                          style={{ width:48, textAlign:'center', background:'var(--surface3)',
-                            border:'1px solid #c878ff', borderRadius:6, padding:'3px 6px',
-                            color:'#c878ff', fontSize:13, fontFamily:"'Cinzel',serif", outline:'none' }} />
-                        <span style={{ fontSize:7, color:'var(--text3)' }}>/ {pages[pages.length-1]}</span>
-                        {curPageHizb != null && (
-                          <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
-                            background:'rgba(255,209,102,.12)', border:'1px solid rgba(255,209,102,.4)',
-                            color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                            HIZB {curPageHizb}
+                    <div style={{ position:'sticky', top:0, zIndex:10, background:'var(--surface2)', borderBottom:'1px solid var(--border)' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                        padding:'6px 14px', gap:8, flexWrap:'wrap' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                          <button onClick={() => setactivePageCoran(pages[0])} disabled={idx<=0}
+                            title="Première page de la sourate"
+                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              cursor: idx>0 ? 'pointer' : 'default', lineHeight:1 }}>⏮</button>
+                          <button onClick={() => setactivePageCoran(pages[idx-1])} disabled={idx<=0}
+                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              cursor: idx>0 ? 'pointer' : 'default' }}>← {idx>0 ? pages[idx-1] : ''}</button>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'center' }}>
+                          <span style={{ fontSize:7, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>PAGE</span>
+                          <input type="number" value={curPage}
+                            onChange={e => { const v=parseInt(e.target.value); if(pages.includes(v)) setactivePageCoran(v); }}
+                            style={{ width:48, textAlign:'center', background:'var(--surface3)',
+                              border:'1px solid #c878ff', borderRadius:6, padding:'3px 6px',
+                              color:'#c878ff', fontSize:13, fontFamily:"'Cinzel',serif", outline:'none' }} />
+                          <span style={{ fontSize:7, color:'var(--text3)' }}>/ {pages[pages.length-1]}</span>
+                          {/* Page Mastery Badge */}
+                          <span
+                            title={`Maîtrise de la Page ${curPage} : ${pageMastery.masteryPct}% (${pageMastery.learnedCount}/${pageMastery.totalCount} versets appris)`}
+                            style={{
+                              fontSize:7.5, letterSpacing:1, padding:'2px 8px', borderRadius:10,
+                              background:'rgba(255,255,255,.04)',
+                              border:`1px solid ${masteryColor(pageMastery.masteryPct)}`,
+                              color:masteryColor(pageMastery.masteryPct),
+                              fontFamily:"'Cinzel',serif", fontWeight:700,
+                              display:'inline-flex', alignItems:'center', gap:4,
+                            }}
+                          >
+                            <span>MAÎTRISE {pageMastery.masteryPct}%</span>
+                            <span style={{ opacity:0.75, fontSize:7 }}>({pageMastery.learnedCount}/{pageMastery.totalCount})</span>
+                            {pageMastery.isFullyLearned && <span>✓</span>}
                           </span>
-                        )}
-                        {/* Page loop button */}
-                        {(() => {
-                          const pageAyats = pageAyatsForCur;
-                          const firstIdx  = pageAyats.length ? ayats.indexOf(pageAyats[0]) : -1;
-                          const lastIdx   = pageAyats.length ? ayats.indexOf(pageAyats[pageAyats.length-1]) : -1;
-                          const isPageLoop = loopActive && loopStart === firstIdx && loopEnd === lastIdx;
-                          const togglePageLoop = () => {
-                            if (isPageLoop) {
-                              setLoopActive(false);
-                            } else {
-                              if (firstIdx < 0) return;
-                              setLoopStart(firstIdx); setLoopEnd(lastIdx);
-                              setLoopStartInput(pageAyats[0].numberInSurah);
-                              setLoopEndInput(pageAyats[pageAyats.length-1].numberInSurah);
-                              setLoopActive(true); setLoopCount(0);
-                              playMainAyat(firstIdx);
-                              setTimeout(() => mainAudioRef.current?.play(), 80);
-                            }
-                          };
-                          return (
-                            <button onClick={togglePageLoop} title={isPageLoop ? 'Arrêter boucle page' : 'Lire page en boucle'}
-                              style={{ fontSize:12, padding:'2px 7px', borderRadius:6, cursor:'pointer', lineHeight:1,
-                                background: isPageLoop ? 'rgba(200,120,255,.2)' : 'transparent',
-                                border: `1px solid ${isPageLoop ? '#c878ff' : 'rgba(255,255,255,.15)'}`,
-                                color: isPageLoop ? '#c878ff' : 'var(--text3)', transition:'all .2s' }}>
-                              {isPageLoop ? '⏹' : '🔁'}
-                            </button>
-                          );
-                        })()}
+                          {curPageHizb != null && (
+                            <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                              background:'rgba(255,209,102,.12)', border:'1px solid rgba(255,209,102,.4)',
+                              color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                              HIZB {curPageHizb}
+                            </span>
+                          )}
+                          {/* Page loop button */}
+                          {(() => {
+                            const pageAyats = pageAyatsForCur;
+                            const firstIdx  = pageAyats.length ? ayats.indexOf(pageAyats[0]) : -1;
+                            const lastIdx   = pageAyats.length ? ayats.indexOf(pageAyats[pageAyats.length-1]) : -1;
+                            const isPageLoop = loopActive && loopStart === firstIdx && loopEnd === lastIdx;
+                            const togglePageLoop = () => {
+                              if (isPageLoop) {
+                                setLoopActive(false);
+                              } else {
+                                if (firstIdx < 0) return;
+                                setLoopStart(firstIdx); setLoopEnd(lastIdx);
+                                setLoopStartInput(pageAyats[0].numberInSurah);
+                                setLoopEndInput(pageAyats[pageAyats.length-1].numberInSurah);
+                                setLoopActive(true); setLoopCount(0);
+                                playMainAyat(firstIdx);
+                                setTimeout(() => mainAudioRef.current?.play(), 80);
+                              }
+                            };
+                            return (
+                              <button onClick={togglePageLoop} title={isPageLoop ? 'Arrêter boucle page' : 'Lire page en boucle'}
+                                style={{ fontSize:12, padding:'2px 7px', borderRadius:6, cursor:'pointer', lineHeight:1,
+                                  background: isPageLoop ? 'rgba(200,120,255,.2)' : 'transparent',
+                                  border: `1px solid ${isPageLoop ? '#c878ff' : 'rgba(255,255,255,.15)'}`,
+                                  color: isPageLoop ? '#c878ff' : 'var(--text3)', transition:'all .2s' }}>
+                                {isPageLoop ? '⏹' : '🔁'}
+                              </button>
+                            );
+                          })()}
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                          <button onClick={() => setactivePageCoran(pages[idx+1])} disabled={idx>=pages.length-1}
+                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: idx<pages.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              cursor: idx<pages.length-1 ? 'pointer' : 'default' }}>
+                            {idx<pages.length-1 ? pages[idx+1] : ''} →</button>
+                          <button onClick={() => setactivePageCoran(pages[pages.length-1])} disabled={idx>=pages.length-1}
+                            title="Dernière page de la sourate"
+                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: idx<pages.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              cursor: idx<pages.length-1 ? 'pointer' : 'default', lineHeight:1 }}>⏭</button>
+                        </div>
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                        <button onClick={() => setactivePageCoran(pages[idx+1])} disabled={idx>=pages.length-1}
-                          style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
-                            background:'transparent', border:'1px solid var(--border2)',
-                            color: idx<pages.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                            cursor: idx<pages.length-1 ? 'pointer' : 'default' }}>
-                          {idx<pages.length-1 ? pages[idx+1] : ''} →</button>
-                        <button onClick={() => setactivePageCoran(pages[pages.length-1])} disabled={idx>=pages.length-1}
-                          title="Dernière page de la sourate"
-                          style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
-                            background:'transparent', border:'1px solid var(--border2)',
-                            color: idx<pages.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                            cursor: idx<pages.length-1 ? 'pointer' : 'default', lineHeight:1 }}>⏭</button>
+                      <div style={{ width:'100%', height:2, background:'rgba(255,255,255,.04)' }}>
+                        <div style={{ height:'100%', width:`${pageMastery.masteryPct}%`, background:masteryColor(pageMastery.masteryPct), transition:'width .35s ease' }} />
                       </div>
                     </div>
                   );
@@ -2339,6 +2368,7 @@ function AppInner({ currentUser, onSignOut }) {
                     : ayats.filter(a => getAyatHizb(a) === curHizb);
                   const curHizbPage = hizbAyats[0]?.page;
                   const curHizbJuz  = hizbAyats[0]?.juz ?? Math.ceil(curHizb / 2);
+                  const hizbMastery = computeDisplayedPartMastery(hizbAyats, learnData, selectedSurah.number);
                   const goToHizb = (targetHizb) => {
                     const clamped = clampHizbNumber(targetHizb);
                     if (!clamped) return;
@@ -2401,6 +2431,22 @@ function AppInner({ currentUser, onSignOut }) {
                               border:'1px solid #ffd166', borderRadius:6, padding:'3px 6px',
                               color:'#ffd166', fontSize:13, fontFamily:"'Cinzel',serif", outline:'none' }} />
                           <span style={{ fontSize:7, color:'var(--text3)' }}>/ 60</span>
+                          {/* Hizb Mastery Badge */}
+                          <span
+                            title={`Maîtrise du Hizb ${curHizb} : ${hizbMastery.masteryPct}% (${hizbMastery.learnedCount}/${hizbMastery.totalCount} versets appris)`}
+                            style={{
+                              fontSize:7.5, letterSpacing:1, padding:'2px 8px', borderRadius:10,
+                              background:'rgba(255,255,255,.04)',
+                              border:`1px solid ${masteryColor(hizbMastery.masteryPct)}`,
+                              color:masteryColor(hizbMastery.masteryPct),
+                              fontFamily:"'Cinzel',serif", fontWeight:700,
+                              display:'inline-flex', alignItems:'center', gap:4,
+                            }}
+                          >
+                            <span>MAÎTRISE {hizbMastery.masteryPct}%</span>
+                            <span style={{ opacity:0.75, fontSize:7 }}>({hizbMastery.learnedCount}/{hizbMastery.totalCount})</span>
+                            {hizbMastery.isFullyLearned && <span>✓</span>}
+                          </span>
                           {isMultiSurah && (
                             <span style={{ fontSize:7.5, letterSpacing:1, padding:'2px 7px', borderRadius:10,
                               background:'rgba(255,209,102,.16)', border:'1px solid rgba(255,209,102,.5)',
@@ -2475,6 +2521,8 @@ function AppInner({ currentUser, onSignOut }) {
                           </span>
                           {hizbSegments.map(seg => {
                             const isCurrentSurah = seg.surahNum === selectedSurah.number;
+                            const segAyats = hizbAyats.filter(a => (a.surahNumber ?? a.surah?.number ?? selectedSurah.number) === seg.surahNum);
+                            const segMastery = computeDisplayedPartMastery(segAyats, learnData, seg.surahNum);
                             return (
                               <button
                                 key={seg.surahNum}
@@ -2485,10 +2533,11 @@ function AppInner({ currentUser, onSignOut }) {
                                   const el = ayatRefs.current[refKey] || (isCurrentSurah ? ayatRefs.current[seg.fromAyah] : null);
                                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                 }}
-                                title={`Défiler vers S.${seg.surahNum} ${seg.surahEn} (v.${seg.fromAyah}–${seg.toAyah})`}
+                                title={`Défiler vers S.${seg.surahNum} ${seg.surahEn} (v.${seg.fromAyah}–${seg.toAyah}) · Maîtrise : ${segMastery.masteryPct}%`}
                               >
                                 <span>S.{seg.surahNum} {seg.surahEn}</span>
                                 <span style={{ opacity: 0.75 }}>v.{seg.fromAyah}–{seg.toAyah}</span>
+                                <span style={{ color: masteryColor(segMastery.masteryPct), fontWeight: 700 }}>{segMastery.masteryPct}%</span>
                                 <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:11, color:'var(--gold)' }}>{seg.surahAr}</span>
                               </button>
                             );
@@ -2500,6 +2549,9 @@ function AppInner({ currentUser, onSignOut }) {
                           )}
                         </div>
                       )}
+                      <div style={{ width:'100%', height:2, background:'rgba(255,255,255,.04)' }}>
+                        <div style={{ height:'100%', width:`${hizbMastery.masteryPct}%`, background:masteryColor(hizbMastery.masteryPct), transition:'width .35s ease' }} />
+                      </div>
                     </div>
                   );
                 })()}
@@ -2512,87 +2564,108 @@ function AppInner({ currentUser, onSignOut }) {
                   const juzAyats = ayats.filter(a => getAyatJuz(a) === curJuz);
                   const curJuzPage = juzAyats[0]?.page;
                   const curJuzHizb = getAyatHizb(juzAyats[0]);
+                  const juzMastery = computeDisplayedPartMastery(juzAyats, learnData, selectedSurah.number);
                   return (
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-                      padding:'6px 14px', background:'var(--surface2)', borderBottom:'1px solid var(--border)',
-                      position:'sticky', top:0, zIndex:10, gap:8 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                        <button onClick={() => setActiveJuzCoran(juzs[0])} disabled={idx<=0}
-                          title="Premier Juz de la sourate"
-                          style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
-                            background:'transparent', border:'1px solid var(--border2)',
-                            color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                            cursor: idx>0 ? 'pointer' : 'default', lineHeight:1 }}>⏮</button>
-                        <button onClick={() => setActiveJuzCoran(juzs[idx-1])} disabled={idx<=0}
-                          style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
-                            background:'transparent', border:'1px solid var(--border2)',
-                            color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                            cursor: idx>0 ? 'pointer' : 'default' }}>← {idx>0 ? juzs[idx-1] : ''}</button>
-                      </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <span style={{ fontSize:7, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>JUZ</span>
-                        <input type="number" value={curJuz ?? ''}
-                          onChange={e => { const v=parseInt(e.target.value); if(juzs.includes(v)) setActiveJuzCoran(v); }}
-                          style={{ width:48, textAlign:'center', background:'var(--surface3)',
-                            border:'1px solid #56d4bc', borderRadius:6, padding:'3px 6px',
-                            color:'#56d4bc', fontSize:13, fontFamily:"'Cinzel',serif", outline:'none' }} />
-                        <span style={{ fontSize:7, color:'var(--text3)' }}>/ {juzs[juzs.length-1]}</span>
-                        {curJuzHizb != null && (
-                          <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
-                            background:'rgba(255,209,102,.12)', border:'1px solid rgba(255,209,102,.4)',
-                            color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                            HIZB {curJuzHizb}
+                    <div style={{ position:'sticky', top:0, zIndex:10, background:'var(--surface2)', borderBottom:'1px solid var(--border)' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                        padding:'6px 14px', gap:8, flexWrap:'wrap' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                          <button onClick={() => setActiveJuzCoran(juzs[0])} disabled={idx<=0}
+                            title="Premier Juz de la sourate"
+                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              cursor: idx>0 ? 'pointer' : 'default', lineHeight:1 }}>⏮</button>
+                          <button onClick={() => setActiveJuzCoran(juzs[idx-1])} disabled={idx<=0}
+                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              cursor: idx>0 ? 'pointer' : 'default' }}>← {idx>0 ? juzs[idx-1] : ''}</button>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'center' }}>
+                          <span style={{ fontSize:7, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>JUZ</span>
+                          <input type="number" value={curJuz ?? ''}
+                            onChange={e => { const v=parseInt(e.target.value); if(juzs.includes(v)) setActiveJuzCoran(v); }}
+                            style={{ width:48, textAlign:'center', background:'var(--surface3)',
+                              border:'1px solid #56d4bc', borderRadius:6, padding:'3px 6px',
+                              color:'#56d4bc', fontSize:13, fontFamily:"'Cinzel',serif", outline:'none' }} />
+                          <span style={{ fontSize:7, color:'var(--text3)' }}>/ {juzs[juzs.length-1]}</span>
+                          {/* Juz Mastery Badge */}
+                          <span
+                            title={`Maîtrise du Juz ${curJuz} : ${juzMastery.masteryPct}% (${juzMastery.learnedCount}/${juzMastery.totalCount} versets appris)`}
+                            style={{
+                              fontSize:7.5, letterSpacing:1, padding:'2px 8px', borderRadius:10,
+                              background:'rgba(255,255,255,.04)',
+                              border:`1px solid ${masteryColor(juzMastery.masteryPct)}`,
+                              color:masteryColor(juzMastery.masteryPct),
+                              fontFamily:"'Cinzel',serif", fontWeight:700,
+                              display:'inline-flex', alignItems:'center', gap:4,
+                            }}
+                          >
+                            <span>MAÎTRISE {juzMastery.masteryPct}%</span>
+                            <span style={{ opacity:0.75, fontSize:7 }}>({juzMastery.learnedCount}/{juzMastery.totalCount})</span>
+                            {juzMastery.isFullyLearned && <span>✓</span>}
                           </span>
-                        )}
-                        {curJuzPage != null && (
-                          <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
-                            background:'rgba(200,120,255,.12)', border:'1px solid rgba(200,120,255,.4)',
-                            color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                            PAGE {curJuzPage}
-                          </span>
-                        )}
-                        {/* Juz loop button */}
-                        {(() => {
-                          const firstIdx  = juzAyats.length ? ayats.indexOf(juzAyats[0]) : -1;
-                          const lastIdx   = juzAyats.length ? ayats.indexOf(juzAyats[juzAyats.length-1]) : -1;
-                          const isJuzLoop = loopActive && loopStart === firstIdx && loopEnd === lastIdx;
-                          const toggleJuzLoop = () => {
-                            if (isJuzLoop) {
-                              setLoopActive(false);
-                            } else {
-                              if (firstIdx < 0) return;
-                              setLoopStart(firstIdx); setLoopEnd(lastIdx);
-                              setLoopStartInput(juzAyats[0].numberInSurah);
-                              setLoopEndInput(juzAyats[juzAyats.length-1].numberInSurah);
-                              setLoopActive(true); setLoopCount(0);
-                              playMainAyat(firstIdx);
-                              setTimeout(() => mainAudioRef.current?.play(), 80);
-                            }
-                          };
-                          return (
-                            <button onClick={toggleJuzLoop} title={isJuzLoop ? 'Arrêter boucle juz' : 'Lire juz en boucle'}
-                              style={{ fontSize:12, padding:'2px 7px', borderRadius:6, cursor:'pointer', lineHeight:1,
-                                background: isJuzLoop ? 'rgba(86,212,188,.2)' : 'transparent',
-                                border: `1px solid ${isJuzLoop ? '#56d4bc' : 'rgba(255,255,255,.15)'}`,
-                                color: isJuzLoop ? '#56d4bc' : 'var(--text3)', transition:'all .2s' }}>
-                              {isJuzLoop ? '⏹' : '🔁'}
-                            </button>
-                          );
-                        })()}
+                          {curJuzHizb != null && (
+                            <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                              background:'rgba(255,209,102,.12)', border:'1px solid rgba(255,209,102,.4)',
+                              color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                              HIZB {curJuzHizb}
+                            </span>
+                          )}
+                          {curJuzPage != null && (
+                            <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                              background:'rgba(200,120,255,.12)', border:'1px solid rgba(200,120,255,.4)',
+                              color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
+                              PAGE {curJuzPage}
+                            </span>
+                          )}
+                          {/* Juz loop button */}
+                          {(() => {
+                            const firstIdx  = juzAyats.length ? ayats.indexOf(juzAyats[0]) : -1;
+                            const lastIdx   = juzAyats.length ? ayats.indexOf(juzAyats[juzAyats.length-1]) : -1;
+                            const isJuzLoop = loopActive && loopStart === firstIdx && loopEnd === lastIdx;
+                            const toggleJuzLoop = () => {
+                              if (isJuzLoop) {
+                                setLoopActive(false);
+                              } else {
+                                if (firstIdx < 0) return;
+                                setLoopStart(firstIdx); setLoopEnd(lastIdx);
+                                setLoopStartInput(juzAyats[0].numberInSurah);
+                                setLoopEndInput(juzAyats[juzAyats.length-1].numberInSurah);
+                                setLoopActive(true); setLoopCount(0);
+                                playMainAyat(firstIdx);
+                                setTimeout(() => mainAudioRef.current?.play(), 80);
+                              }
+                            };
+                            return (
+                              <button onClick={toggleJuzLoop} title={isJuzLoop ? 'Arrêter boucle juz' : 'Lire juz en boucle'}
+                                style={{ fontSize:12, padding:'2px 7px', borderRadius:6, cursor:'pointer', lineHeight:1,
+                                  background: isJuzLoop ? 'rgba(86,212,188,.2)' : 'transparent',
+                                  border: `1px solid ${isJuzLoop ? '#56d4bc' : 'rgba(255,255,255,.15)'}`,
+                                  color: isJuzLoop ? '#56d4bc' : 'var(--text3)', transition:'all .2s' }}>
+                                {isJuzLoop ? '⏹' : '🔁'}
+                              </button>
+                            );
+                          })()}
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                          <button onClick={() => setActiveJuzCoran(juzs[idx+1])} disabled={idx>=juzs.length-1}
+                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              cursor: idx<juzs.length-1 ? 'pointer' : 'default' }}>
+                            {idx<juzs.length-1 ? juzs[idx+1] : ''} →</button>
+                          <button onClick={() => setActiveJuzCoran(juzs[juzs.length-1])} disabled={idx>=juzs.length-1}
+                            title="Dernier Juz de la sourate"
+                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              cursor: idx<juzs.length-1 ? 'pointer' : 'default', lineHeight:1 }}>⏭</button>
+                        </div>
                       </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                        <button onClick={() => setActiveJuzCoran(juzs[idx+1])} disabled={idx>=juzs.length-1}
-                          style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
-                            background:'transparent', border:'1px solid var(--border2)',
-                            color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                            cursor: idx<juzs.length-1 ? 'pointer' : 'default' }}>
-                          {idx<juzs.length-1 ? juzs[idx+1] : ''} →</button>
-                        <button onClick={() => setActiveJuzCoran(juzs[juzs.length-1])} disabled={idx>=juzs.length-1}
-                          title="Dernier Juz de la sourate"
-                          style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
-                            background:'transparent', border:'1px solid var(--border2)',
-                            color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                            cursor: idx<juzs.length-1 ? 'pointer' : 'default', lineHeight:1 }}>⏭</button>
+                      <div style={{ width:'100%', height:2, background:'rgba(255,255,255,.04)' }}>
+                        <div style={{ height:'100%', width:`${juzMastery.masteryPct}%`, background:masteryColor(juzMastery.masteryPct), transition:'width .35s ease' }} />
                       </div>
                     </div>
                   );
@@ -3015,6 +3088,8 @@ function AppInner({ currentUser, onSignOut }) {
                             const fromA = ayat.segmentFromAyah ?? ayat.numberInSurah;
                             const toA = ayat.segmentToAyah ?? sInfo.count ?? ayat.numberInSurah;
                             const totalA = ayat.segmentTotalInSurah ?? sInfo.count ?? toA;
+                            const segAyats = visible.filter(v => (v.surahNumber ?? v.surah?.number ?? selectedSurah.number) === ayatSurahNum);
+                            const segMastery = computeDisplayedPartMastery(segAyats, learnData, ayatSurahNum);
                             return (
                               <div className={`hizb-cross-surah-banner${isOtherSurah ? ' is-other' : ''}`}>
                                 <div className="hizb-cross-surah-top">
@@ -3024,6 +3099,14 @@ function AppInner({ currentUser, onSignOut }) {
                                     <span className="hizb-cross-surah-ar">{sAr}</span>
                                     <span className="hizb-cross-surah-range">
                                       Versets {fromA}–{toA} / {totalA}
+                                    </span>
+                                    <span style={{
+                                      fontSize: 7.5, letterSpacing: 1, padding: '2px 7px', borderRadius: 10,
+                                      border: `1px solid ${masteryColor(segMastery.masteryPct)}`,
+                                      color: masteryColor(segMastery.masteryPct),
+                                      fontFamily: "'Cinzel',serif", fontWeight: 700,
+                                    }}>
+                                      MAÎTRISE {segMastery.masteryPct}% ({segMastery.learnedCount}/{segMastery.totalCount})
                                     </span>
                                     {isOtherSurah && (
                                       <span className="hizb-cross-other-badge">⇄ AUTRE SOURATE DU HIZB {ayatHizb}</span>
@@ -3065,26 +3148,42 @@ function AppInner({ currentUser, onSignOut }) {
                               if (!isOtherSurah) ayatRefs.current[ayat.numberInSurah] = el;
                             }}>
 
-                          {(isPageStart || isHizbStart || isJuzStart) && (
-                            <div className="edge-pills-bar start">
-                              {isPageStart && <div className="page-edge-pill start">◆ PAGE {ayat.page}</div>}
-                              {isHizbStart && (
-                                <div
-                                  className="hizb-edge-pill start"
-                                  style={{ cursor: 'pointer' }}
-                                  title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — cliquer pour afficher tout le Hizb` : `Hizb ${ayatHizb}`}
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    setActiveHizbCoran(ayatHizb);
-                                    if (!hizbMode) setHizbMode(true);
-                                  }}
-                                >
-                                  ◆ HIZB {ayatHizb}{isHizbCrossSurah ? ` · S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}` : ''}
-                                </div>
-                              )}
-                              {isJuzStart  && <div className="juz-edge-pill start">◆ JUZ {ayatJuz}</div>}
-                            </div>
-                          )}
+                          {(isPageStart || isHizbStart || isJuzStart) && (() => {
+                            const pageSlice = isPageStart ? (hizbMode ? visible : ayats).filter(a => a.page === ayat.page) : [];
+                            const hizbSlice = isHizbStart ? (hizbMode && currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === ayatHizb)) : [];
+                            const juzSlice  = isJuzStart  ? (hizbMode ? visible : ayats).filter(a => getAyatJuz(a) === ayatJuz) : [];
+                            const pMast = isPageStart ? computeDisplayedPartMastery(pageSlice, learnData, selectedSurah.number) : null;
+                            const hMast = isHizbStart ? computeDisplayedPartMastery(hizbSlice, learnData, selectedSurah.number) : null;
+                            const jMast = isJuzStart  ? computeDisplayedPartMastery(juzSlice, learnData, selectedSurah.number)  : null;
+                            return (
+                              <div className="edge-pills-bar start">
+                                {isPageStart && (
+                                  <div className="page-edge-pill start">
+                                    ◆ PAGE {ayat.page} · {pMast.masteryPct}% ({pMast.learnedCount}/{pMast.totalCount})
+                                  </div>
+                                )}
+                                {isHizbStart && (
+                                  <div
+                                    className="hizb-edge-pill start"
+                                    style={{ cursor: 'pointer' }}
+                                    title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — cliquer pour afficher tout le Hizb` : `Hizb ${ayatHizb}`}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      setActiveHizbCoran(ayatHizb);
+                                      if (!hizbMode) setHizbMode(true);
+                                    }}
+                                  >
+                                    ◆ HIZB {ayatHizb}{isHizbCrossSurah ? ` · S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount})
+                                  </div>
+                                )}
+                                {isJuzStart && (
+                                  <div className="juz-edge-pill start">
+                                    ◆ JUZ {ayatJuz} · {jMast.masteryPct}% ({jMast.learnedCount}/{jMast.totalCount})
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           {/* Selection hint bar shown above the ayat when selecting */}
                           {isSelecting && (

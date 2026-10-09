@@ -69,49 +69,109 @@ function isAudioRequest(url) {
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
+const RUNTIME_CACHE = 'quran-runtime-v1';
+
 self.addEventListener('install',  () => self.skipWaiting());
 self.addEventListener('activate', e  => e.waitUntil(self.clients.claim()));
 
-// ── Fetch interception ────────────────────────────────────────────────────────
-self.addEventListener('fetch', e => {
-  if (!isAudioRequest(e.request.url)) return;
-
-  e.respondWith((async () => {
-    const key = urlToKey(e.request.url);
-
-    // 1. Serve from IDB
-    try {
-      const buf = await idbGet(key);
-      if (buf && buf.byteLength > 0) {
-        return new Response(buf, {
-          status: 200,
+function buildAudioResponse(buf, rangeHeader) {
+  const totalLength = buf.byteLength;
+  if (rangeHeader) {
+    const match = /bytes=(\d+)-(\d*)/.exec(rangeHeader);
+    if (match) {
+      const start = parseInt(match[1], 10);
+      const end = match[2] ? parseInt(match[2], 10) : totalLength - 1;
+      if (start < totalLength && end < totalLength && start <= end) {
+        const chunk = buf.slice(start, end + 1);
+        return new Response(chunk, {
+          status: 206,
+          statusText: 'Partial Content',
           headers: {
-            'Content-Type':   'audio/mpeg',
-            'Content-Length': String(buf.byteLength),
-            'Accept-Ranges':  'bytes',
+            'Content-Type': 'audio/mpeg',
+            'Content-Range': `bytes ${start}-${end}/${totalLength}`,
+            'Content-Length': String(chunk.byteLength),
+            'Accept-Ranges': 'bytes',
           },
         });
       }
-    } catch {}
-
-    // 2. Fetch (same-origin proxy in dev → no CORS; direct CDN in prod → no CORS on Android)
-    try {
-      const response = await fetch(e.request);
-      if (response.ok) {
-        const buf = await response.arrayBuffer();
-        if (buf.byteLength > 0) {
-          idbSet(key, buf).catch(() => {});
-          return new Response(buf, {
-            status:  200,
-            headers: { 'Content-Type': 'audio/mpeg', 'Content-Length': String(buf.byteLength), 'Accept-Ranges': 'bytes' },
-          });
-        }
-      }
-      return response;
-    } catch {
-      return new Response(null, { status: 503, statusText: 'Offline' });
     }
-  })());
+  }
+  return new Response(buf, {
+    status: 200,
+    headers: {
+      'Content-Type':   'audio/mpeg',
+      'Content-Length': String(totalLength),
+      'Accept-Ranges':  'bytes',
+    },
+  });
+}
+
+function isCacheableRuntimeApi(url) {
+  return (
+    url.startsWith('https://api.alquran.cloud/v1/') ||
+    url.startsWith('https://api.quran.com/api/v4/') ||
+    url.startsWith('https://fonts.googleapis.com/') ||
+    url.startsWith('https://fonts.gstatic.com/')
+  );
+}
+
+// ── Fetch interception ────────────────────────────────────────────────────────
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+  const reqUrl = e.request.url;
+
+  // 1. Audio requests -> IndexedDB + Range support
+  if (isAudioRequest(reqUrl)) {
+    const rangeHeader = e.request.headers.get('range');
+    e.respondWith((async () => {
+      const key = urlToKey(reqUrl);
+
+      // Serve from IDB
+      try {
+        const buf = await idbGet(key);
+        if (buf && buf.byteLength > 0) {
+          return buildAudioResponse(buf, rangeHeader);
+        }
+      } catch {}
+
+      // Fetch from network & cache in IDB
+      try {
+        const response = await fetch(e.request);
+        if (response.ok && response.status === 200) {
+          const buf = await response.arrayBuffer();
+          if (buf.byteLength > 0) {
+            idbSet(key, buf).catch(() => {});
+            return buildAudioResponse(buf, rangeHeader);
+          }
+        }
+        return response;
+      } catch {
+        return new Response(null, { status: 503, statusText: 'Offline' });
+      }
+    })());
+    return;
+  }
+
+  // 2. Quran API & Google Fonts -> Stale-While-Revalidate / Cache Fallback
+  if (isCacheableRuntimeApi(reqUrl)) {
+    e.respondWith((async () => {
+      try {
+        const cache = await caches.open(RUNTIME_CACHE);
+        const cached = await cache.match(e.request);
+        const networkPromise = fetch(e.request).then(res => {
+          if (res && res.ok) {
+            cache.put(e.request, res.clone()).catch(() => {});
+          }
+          return res;
+        });
+        return cached || (await networkPromise);
+      } catch {
+        const cache = await caches.open(RUNTIME_CACHE).catch(() => null);
+        const cached = await cache?.match(e.request);
+        return cached || new Response(null, { status: 503, statusText: 'Offline' });
+      }
+    })());
+  }
 });
 
 // ── Pre-cache on demand ───────────────────────────────────────────────────────

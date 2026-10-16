@@ -16,9 +16,13 @@ import {
   saveSessionUser,
   openAppInNewTab,
   DEFAULT_GOOGLE_USER,
+  isDemoLoginAllowed,
 } from "../../utils/authManager.js";
 
 export function LoginScreen({ onLoggedIn }) {
+  // La connexion rapide fabrique une session SANS authentification : réservée
+  // au développement / à l'aperçu, jamais disponible dans un build de production.
+  const demoAllowed = isDemoLoginAllowed();
   const [mode, setMode]                 = useState("login"); // "login" | "register"
   const [email, setEmail]               = useState("");
   const [password, setPassword]         = useState("");
@@ -116,6 +120,8 @@ export function LoginScreen({ onLoggedIn }) {
       }
     } catch (e) {
       const parsed = parseAuthError(e);
+      // Annulation volontaire du sélecteur de compte natif : ce n'est pas une erreur.
+      if (parsed.isUserCancelled) return;
       if (parsed.isPopupClosure || isIframe) {
         setShowIframeModal(true);
       }
@@ -126,6 +132,7 @@ export function LoginScreen({ onLoggedIn }) {
   };
 
   const handleQuickGoogleLogin = (emailOverride, nameOverride) => {
+    if (!demoAllowed) return;
     const user = createDemoGoogleUser({
       email: emailOverride || customGoogleEmail || DEFAULT_GOOGLE_USER.email,
       displayName: nameOverride || customGoogleName || DEFAULT_GOOGLE_USER.displayName,
@@ -235,7 +242,8 @@ export function LoginScreen({ onLoggedIn }) {
           CONTINUER AVEC GOOGLE
         </button>
 
-        {/* Quick Google 1-Click login banner */}
+        {/* Quick Google 1-Click login banner — dev/aperçu uniquement */}
+        {demoAllowed && (
         <div style={{ marginBottom: 20, textAlign: "center" }}>
           <button
             type="button"
@@ -255,6 +263,7 @@ export function LoginScreen({ onLoggedIn }) {
             ⚡ Connexion rapide 1-clic ({DEFAULT_GOOGLE_USER.displayName})
           </button>
         </div>
+        )}
 
         {/* Fallback popup assistance modal / banner */}
         {showIframeModal && (
@@ -270,9 +279,12 @@ export function LoginScreen({ onLoggedIn }) {
               <span>🛡️</span> Sécurité Navigateur (Iframe)
             </div>
             <p style={{ fontSize: 10.5, color: "var(--text2)", lineHeight: 1.5, marginBottom: 12 }}>
-              Le navigateur ferme automatiquement les popups Google depuis cette prévisualisation. Vous pouvez continuer immédiatement :
+              {demoAllowed
+                ? "Le navigateur ferme automatiquement les popups Google depuis cette prévisualisation. Vous pouvez continuer immédiatement :"
+                : "Le navigateur a fermé ou bloqué la fenêtre Google. Ouvrez l'application dans un nouvel onglet pour vous connecter :"}
             </p>
 
+            {demoAllowed && (
             <button
               onClick={() => handleQuickGoogleLogin()}
               style={{
@@ -292,6 +304,7 @@ export function LoginScreen({ onLoggedIn }) {
             >
               ✓ Continuer avec {DEFAULT_GOOGLE_USER.displayName}
             </button>
+            )}
 
             <div style={{ display: "flex", gap: 8 }}>
               <button

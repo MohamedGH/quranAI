@@ -22,7 +22,10 @@ export const isFirebaseConfigured = Boolean(
 
 export const firebaseConfig = {
   apiKey: envApiKey || "AIzaSyDummyKeyForMockOnly",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "quran-app-demo.firebaseapp.com",
+  // Par défaut, dérivé du projet configuré : l'ancien repli fixe
+  // "quran-app-demo.firebaseapp.com" ne correspondait pas au vrai projet dès
+  // que VITE_FIREBASE_AUTH_DOMAIN manquait, cassant les flux popup/redirect.
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${envProjectId || "quran-app-demo"}.firebaseapp.com`,
   projectId: envProjectId || "quran-app-demo",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "quran-app-demo.appspot.com",
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1234567890",

@@ -28,7 +28,8 @@ import { ArchitecturePdfModal } from "./components/common/ArchitecturePdfModal.j
 import { SurahHeader } from "./components/common/SurahHeader.jsx";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "./utils/safeStorage.js";
-import { getSavedSessionUser, saveSessionUser, clearSessionUser } from "./utils/authManager.js";
+import { getSavedSessionUser, saveSessionUser, clearSessionUser, shouldRestoreSavedSession, isCloudSyncEligible } from "./utils/authManager.js";
+import { nativeSignOut } from "./utils/nativeAuth.js";
 
 import { LoginScreen } from "./components/sync/LoginScreen.jsx";
 import { SyncConsole } from "./components/sync/SyncConsole.jsx";
@@ -4802,15 +4803,24 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    const saved = getSavedSessionUser();
     const unsub = onAuthStateChanged(firebaseAuth, (u) => {
       if (u) {
         setUser(u);
         saveSessionUser(u);
-      } else if (saved) {
-        setUser(saved);
       } else {
-        setUser(null);
+        // Relu À CHAQUE appel : l'ancienne version capturait la session au
+        // montage (fermeture périmée), donc après une déconnexion le
+        // listener « Firebase = personne » ré-ouvrait l'ancienne session.
+        const saved = getSavedSessionUser();
+        if (shouldRestoreSavedSession(saved)) {
+          // Profil local / invité / démo : pas de session Firebase attendue.
+          setUser(saved);
+        } else {
+          // Session Firebase périmée (révoquée, supprimée, persistance
+          // vidée) ou démo interdite en production : ne pas rester « connecté ».
+          if (saved) clearSessionUser();
+          setUser(null);
+        }
       }
       setAuthReady(true);
     });
@@ -4824,7 +4834,9 @@ export default function App() {
 
   const handleSignOut = () => {
     clearSessionUser();
-    signOut(firebaseAuth).catch(() => {}).finally(() => setUser(null));
+    setUser(null); // immédiat : ne dépend pas du résultat réseau des déconnexions
+    signOut(firebaseAuth).catch(() => {});
+    nativeSignOut();
   };
 
   if (!authReady) {
@@ -4854,7 +4866,9 @@ export default function App() {
   return (
     <Provider store={store}>
       <HashRouter>
-        <CloudSyncManager uid={user.uid} />
+        {/* Synchro cloud réservée aux vraies sessions Firebase : un profil
+            local, invité ou démo a un uid fictif (users/<uid> devinable). */}
+        {isCloudSyncEligible(user) && <CloudSyncManager uid={user.uid} />}
         <SyncConsole />
         <ErrorBoundary>
           <AppInner currentUser={user} onSignOut={handleSignOut} />

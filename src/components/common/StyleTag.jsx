@@ -504,6 +504,12 @@ export const CSS = `
     border-color: #5bc8f5;
     color: #5bc8f5;
   }
+  .m-action-btn.mastery-filter.active {
+    background: rgba(62, 184, 160, 0.18);
+    border-color: var(--teal);
+    color: var(--teal2);
+    box-shadow: 0 0 10px rgba(62, 184, 160, 0.2);
+  }
   .m-act-icon {
     font-size: 11px;
     line-height: 1;
@@ -1169,8 +1175,77 @@ export const CSS = `
   .ayat-arabic{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 26px);line-height:2;direction:rtl;text-align:right;flex:1;min-width:0;overflow-wrap:break-word;word-break:break-word;color:var(--text);}
   .char-span{display:inline;transition:color .04s;color:var(--text);}
   .char-span.char-done{color:var(--teal);}
-  .char-span.char-active{color:var(--gold2);text-shadow:0 0 14px rgba(232,201,110,.65);}
   .ayat-learned-badge{font-size:9px;letter-spacing:1px;color:var(--green);padding:2px 8px;border:1px solid var(--green);border-radius:10px;margin-top:6px;flex-shrink:0;align-self:flex-start;}
+
+  /* ── AYAT MASTERY WIDGET (TOUJOURS VISIBLE) ── */
+  .ayat-mastery-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: flex-end;
+    justify-content: flex-start;
+    flex-shrink: 0;
+    padding-top: 3px;
+    min-width: 52px;
+  }
+  .ayat-mastery-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 8px;
+    letter-spacing: 0.6px;
+    padding: 2px 5px;
+    border-radius: 8px;
+    font-family: 'Cinzel', serif;
+    font-weight: 700;
+    white-space: nowrap;
+    line-height: 1.2;
+    transition: all 0.2s ease;
+  }
+
+  /* ── PAGE & PART NAVIGATOR BARS (SINGLE LINED, NEVER BREAKING ON MOBILE) ── */
+  .page-navigator-bar, .part-navigator-bar {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: nowrap !important;
+    white-space: nowrap !important;
+    overflow-x: auto !important;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .page-navigator-bar::-webkit-scrollbar, .part-navigator-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+  .page-nav-group-left, .page-nav-group-right {
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    flex-shrink: 0 !important;
+    gap: 3px !important;
+  }
+  .page-nav-group-center {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-wrap: nowrap !important;
+    white-space: nowrap !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    gap: 5px !important;
+  }
+  .page-nav-btn {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    transition: all 0.15s ease !important;
+  }
+  .page-nav-badge {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
 
   /* ── SUBMENU ──────────────────────────────────────────────────────── */
   @keyframes pageIn{from{opacity:0}to{opacity:1}}
@@ -1531,6 +1606,8 @@ export const CSS = `
   .ctrl-btn.play-btn{width:38px;height:38px;background:var(--gold);border-color:var(--gold);color:var(--bg);font-size:14px;}
   .ctrl-btn.play-btn:hover{background:var(--gold2);}
   .ctrl-btn.loop-on{border-color:var(--teal);color:var(--teal);background:rgba(62,184,160,.1);}
+  .ctrl-btn.active-silence{border-color:#ff7eb3 !important;color:#ff7eb3 !important;background:rgba(255,126,179,.18) !important;box-shadow:0 0 8px rgba(255,126,179,.3) !important;}
+  .silence-trigger-btn{border-radius:50% !important;flex-shrink:0 !important;touch-action:manipulation;}
   .reciter-trigger{gap:5px;padding:0 10px;width:auto;min-width:44px;font-family:'Cinzel',serif;font-size:10px;}
   .reciter-trigger-label{max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .reciter-sheet-backdrop{position:fixed;inset:0;z-index:350;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);}
@@ -2051,6 +2128,41 @@ export const CSS = `
     .submenu-tabs{ overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; gap:4px; }
     .submenu-tabs::-webkit-scrollbar{ display:none; }
     .mode-btn{ padding:5px 8px; font-size:8px; white-space:nowrap; flex-shrink:0; }
+
+    /* Single-line Page & Part Navigator Bar on mobile */
+    .page-navigator-bar, .part-navigator-bar {
+      padding: 4px 6px !important;
+      gap: 3px !important;
+      flex-wrap: nowrap !important;
+      white-space: nowrap !important;
+    }
+    .page-nav-group-center {
+      gap: 3px !important;
+      flex-wrap: nowrap !important;
+      white-space: nowrap !important;
+    }
+    .page-nav-btn {
+      padding: 2px 5px !important;
+      font-size: 7.5px !important;
+    }
+    .page-nav-input {
+      width: 36px !important;
+      font-size: 11px !important;
+      padding: 2px 3px !important;
+    }
+    .page-nav-badge {
+      font-size: 7px !important;
+      padding: 1.5px 5px !important;
+      letter-spacing: 0.5px !important;
+    }
+    .ayat-mastery-col {
+      min-width: 46px;
+      gap: 2px;
+    }
+    .ayat-mastery-badge {
+      font-size: 7px;
+      padding: 1.5px 4px;
+    }
 
     /* Surah header compact */
     .surah-header{ padding:3px 8px; }

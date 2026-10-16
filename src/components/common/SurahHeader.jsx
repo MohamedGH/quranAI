@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { sel, uiActions } from "../../store.js";
-import { masteryColor, computeDisplayedPartMastery } from "./Mastery.jsx";
+import { masteryColor, computeMastery, computeDisplayedPartMastery } from "./Mastery.jsx";
 import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
 
@@ -78,12 +78,40 @@ export function SurahHeader({
   const [showOptionsDrawer, setShowOptionsDrawer] = useState(false);
   const [showLangDrawer, setShowLangDrawer] = useState(false);
   const [showColorPickerModal, setShowColorPickerModal] = useState(false);
+  const [showMasteryFilter, setShowMasteryFilter] = useState(false);
 
   const dispatch = useDispatch();
   const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
   const tajweedPalette = useSelector(sel.tajweedPalette) || "classic";
   const tajweedCustomColors = useSelector(sel.tajweedCustomColors) || {};
   const activeTjColors = getActiveTajweedColors(tajweedPalette, tajweedCustomColors);
+
+  const masteryFilterRange  = useSelector(sel.masteryFilterRange);
+  const masteryFilterActive = useSelector(sel.masteryFilterActive);
+  const masteryFilterPreset = useSelector(sel.masteryFilterPreset);
+  const ayatFilterRange     = useSelector(sel.ayatFilterRange);
+  const ayatFilterActive    = useSelector(sel.ayatFilterActive);
+  const isAnyFilterActive   = useSelector(sel.isAnyFilterActive);
+
+  const totalAyahsInSurah = selectedSurah?.numberOfAyahs || ayats?.length || 1;
+  const currentAyatRange = ayatFilterRange || [1, totalAyahsInSurah];
+
+  const matchingAyatsCount = React.useMemo(() => {
+    if (!ayats || !ayats.length) return 0;
+    const [minM, maxM] = masteryFilterRange || [0, 100];
+    const [fromA, toA] = ayatFilterRange || [1, totalAyahsInSurah];
+    return ayats.filter(a => {
+      const snNum = Number(a.surahNumber ?? a.surah?.number ?? selectedSurah?.number ?? 1);
+      const anNum = Number(a.numberInSurah);
+      if (ayatFilterActive && (anNum < fromA || anNum > toA)) return false;
+      if (masteryFilterActive) {
+        const ldVal = learnData?.[`${snNum}:${anNum}`];
+        const m = computeMastery(ldVal, a.text);
+        if (m < minM || m > maxM) return false;
+      }
+      return true;
+    }).length;
+  }, [ayats, learnData, selectedSurah?.number, masteryFilterRange, masteryFilterActive, ayatFilterRange, ayatFilterActive, totalAyahsInSurah]);
 
   if (!selectedSurah) return null;
 
@@ -425,7 +453,384 @@ export function SurahHeader({
           </span>
           {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
         </button>
+
+        {/* 5. Filter Action Button (Custom Ayat Range & Mastery Level) */}
+        <button
+          onClick={() => {
+            setShowMasteryFilter(v => !v);
+            setShowTajweedDrawer(false);
+            setShowOptionsDrawer(false);
+            setShowLangDrawer(false);
+            setShowAyatJump(false);
+          }}
+          className={`m-action-btn mastery-filter ${isAnyFilterActive || showMasteryFilter ? 'active' : ''}`}
+          title={
+            isAnyFilterActive
+              ? `Filtre actif : ${ayatFilterActive ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}` : ''}${ayatFilterActive && masteryFilterActive ? ' · ' : ''}${masteryFilterActive ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%` : ''} (${matchingAyatsCount} versets)`
+              : "Filtrer les versets par plage de versets et/ou niveau de maîtrise"
+          }
+          style={isAnyFilterActive ? { borderColor: 'var(--teal)', color: 'var(--teal2)', background: 'rgba(62,184,160,0.18)' } : undefined}
+        >
+          <span className="m-act-icon">🎯</span>
+          <span className="m-act-label">
+            {ayatFilterActive && masteryFilterActive
+              ? `v.${currentAyatRange[0]}–${currentAyatRange[1]} · ${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
+              : ayatFilterActive
+              ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}`
+              : masteryFilterActive
+              ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
+              : "FILTRER"}
+          </span>
+          {isAnyFilterActive && (
+            <span className="m-act-badge" style={{ background: 'var(--teal)', color: '#000', fontWeight: 'bold' }}>
+              {matchingAyatsCount}
+            </span>
+          )}
+        </button>
       </div>
+
+      {/* ── Custom Ayat Range & Mastery Filter Inline Panel ── */}
+      {showMasteryFilter && (
+        <div className="m-mastery-panel" style={{
+          background: 'var(--surface2)',
+          borderBottom: '1px solid var(--border)',
+          padding: '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          animation: 'panelDropdownIn 0.16s ease-out forwards',
+        }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 13 }}>🎯</span>
+              <span style={{ fontSize: 10, letterSpacing: 1.2, fontFamily: "'Cinzel',serif", color: 'var(--gold2)', fontWeight: 600 }}>
+                FILTRER LES VERSETS (PLAGE & MAÎTRISE)
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isAnyFilterActive && (
+                <button
+                  onClick={() => dispatch(uiActions.resetAllFilters())}
+                  style={{
+                    fontSize: 8, letterSpacing: 0.8, padding: '3px 8px', borderRadius: 4,
+                    background: 'rgba(224,90,90,0.15)', border: '1px solid rgba(224,90,90,0.4)',
+                    color: '#ff7e7e', cursor: 'pointer', fontFamily: "'Cinzel',serif"
+                  }}
+                  title="Réinitialiser tous les filtres et afficher tous les versets"
+                >
+                  ✕ TOUT RÉINITIALISER
+                </button>
+              )}
+              <button
+                className="m-close-inline-btn"
+                onClick={() => setShowMasteryFilter(false)}
+                aria-label="Fermer"
+              >✕</button>
+            </div>
+          </div>
+
+          {/* ── Section 1: Custom Ayat Range ── */}
+          <div style={{
+            background: 'var(--surface3)',
+            borderRadius: 8,
+            border: '1px solid var(--border2)',
+            padding: '10px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11 }}>📖</span>
+                <span style={{ fontSize: 8.5, fontFamily: "'Cinzel',serif", letterSpacing: 1, color: 'var(--gold)', fontWeight: 600 }}>
+                  PLAGE DE VERSETS : {ayatFilterActive ? `VERSETS ${currentAyatRange[0]} À ${currentAyatRange[1]}` : `TOUS (1 À ${totalAyahsInSurah})`}
+                </span>
+              </div>
+              {ayatFilterActive && (
+                <button
+                  onClick={() => dispatch(uiActions.resetAyatFilter())}
+                  style={{
+                    fontSize: 7.5, letterSpacing: 0.5, padding: '2px 6px', borderRadius: 4,
+                    background: 'transparent', border: '1px solid var(--border2)', color: 'var(--text3)', cursor: 'pointer'
+                  }}
+                  title="Afficher tous les versets de la sourate"
+                >
+                  ✕ Réinitialiser plage
+                </button>
+              )}
+            </div>
+
+            {/* Quick ayat range shortcuts */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+              <span style={{ fontSize: 8, color: 'var(--text3)', letterSpacing: 0.5 }}>RACCOURCIS :</span>
+              {[
+                { label: `Tous (1 à ${totalAyahsInSurah})`, range: [1, totalAyahsInSurah], isAll: true },
+                ...(totalAyahsInSurah > 10 ? [{ label: `1 à 10`, range: [1, 10] }] : []),
+                ...(totalAyahsInSurah > 2 ? [
+                  { label: `1ère moitié (1–${Math.ceil(totalAyahsInSurah / 2)})`, range: [1, Math.ceil(totalAyahsInSurah / 2)] },
+                  { label: `2ème moitié (${Math.ceil(totalAyahsInSurah / 2) + 1}–${totalAyahsInSurah})`, range: [Math.ceil(totalAyahsInSurah / 2) + 1, totalAyahsInSurah] }
+                ] : []),
+                ...(totalAyahsInSurah > 10 ? [{ label: `10 derniers`, range: [Math.max(1, totalAyahsInSurah - 9), totalAyahsInSurah] }] : []),
+              ].map((sc, idx) => {
+                const isSelected = (!ayatFilterActive && sc.isAll) ||
+                  (ayatFilterActive && currentAyatRange[0] === sc.range[0] && currentAyatRange[1] === sc.range[1]);
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      if (sc.isAll) dispatch(uiActions.resetAyatFilter());
+                      else dispatch(uiActions.setAyatFilterRange(sc.range));
+                    }}
+                    style={{
+                      fontSize: 8,
+                      padding: '3px 7px',
+                      borderRadius: 5,
+                      border: isSelected ? '1px solid var(--teal)' : '1px solid var(--border2)',
+                      background: isSelected ? 'rgba(62,184,160,0.22)' : 'rgba(255,255,255,0.02)',
+                      color: isSelected ? 'var(--teal2)' : 'var(--text2)',
+                      cursor: 'pointer',
+                      fontWeight: isSelected ? 600 : 400,
+                    }}
+                  >
+                    {sc.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Steppers & Sliders for Ayat From and Ayat To */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginTop: 2 }}>
+              {/* From Ayat */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 8 }}>
+                  <span style={{ color: 'var(--text3)', letterSpacing: 0.5 }}>DU VERSET :</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      onClick={() => {
+                        const newFrom = Math.max(1, currentAyatRange[0] - 1);
+                        dispatch(uiActions.setAyatFilterRange([newFrom, currentAyatRange[1]]));
+                      }}
+                      style={{ width: 20, height: 20, borderRadius: 4, background: 'var(--surface2)', border: '1px solid var(--border2)', color: 'var(--text)', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >−</button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={currentAyatRange[1]}
+                      value={currentAyatRange[0]}
+                      onChange={e => {
+                        const val = Math.max(1, Math.min(Number(e.target.value) || 1, currentAyatRange[1]));
+                        dispatch(uiActions.setAyatFilterRange([val, currentAyatRange[1]]));
+                      }}
+                      style={{ width: 44, textAlign: 'center', background: 'var(--surface2)', border: '1px solid var(--border2)', color: 'var(--gold)', borderRadius: 4, padding: '2px 4px', fontSize: 9, fontFamily: "'Cinzel',serif", fontWeight: 600 }}
+                    />
+                    <button
+                      onClick={() => {
+                        const newFrom = Math.min(currentAyatRange[1], currentAyatRange[0] + 1);
+                        dispatch(uiActions.setAyatFilterRange([newFrom, currentAyatRange[1]]));
+                      }}
+                      style={{ width: 20, height: 20, borderRadius: 4, background: 'var(--surface2)', border: '1px solid var(--border2)', color: 'var(--text)', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >+</button>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={totalAyahsInSurah}
+                  value={currentAyatRange[0]}
+                  onChange={e => {
+                    const val = Number(e.target.value);
+                    dispatch(uiActions.setAyatFilterRange([Math.min(val, currentAyatRange[1]), currentAyatRange[1]]));
+                  }}
+                  style={{ width: '100%', accentColor: 'var(--teal)', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* To Ayat */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 8 }}>
+                  <span style={{ color: 'var(--text3)', letterSpacing: 0.5 }}>AU VERSET :</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      onClick={() => {
+                        const newTo = Math.max(currentAyatRange[0], currentAyatRange[1] - 1);
+                        dispatch(uiActions.setAyatFilterRange([currentAyatRange[0], newTo]));
+                      }}
+                      style={{ width: 20, height: 20, borderRadius: 4, background: 'var(--surface2)', border: '1px solid var(--border2)', color: 'var(--text)', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >−</button>
+                    <input
+                      type="number"
+                      min={currentAyatRange[0]}
+                      max={totalAyahsInSurah}
+                      value={currentAyatRange[1]}
+                      onChange={e => {
+                        const val = Math.max(currentAyatRange[0], Math.min(Number(e.target.value) || totalAyahsInSurah, totalAyahsInSurah));
+                        dispatch(uiActions.setAyatFilterRange([currentAyatRange[0], val]));
+                      }}
+                      style={{ width: 44, textAlign: 'center', background: 'var(--surface2)', border: '1px solid var(--border2)', color: 'var(--gold)', borderRadius: 4, padding: '2px 4px', fontSize: 9, fontFamily: "'Cinzel',serif", fontWeight: 600 }}
+                    />
+                    <button
+                      onClick={() => {
+                        const newTo = Math.min(totalAyahsInSurah, currentAyatRange[1] + 1);
+                        dispatch(uiActions.setAyatFilterRange([currentAyatRange[0], newTo]));
+                      }}
+                      style={{ width: 20, height: 20, borderRadius: 4, background: 'var(--surface2)', border: '1px solid var(--border2)', color: 'var(--text)', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >+</button>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={totalAyahsInSurah}
+                  value={currentAyatRange[1]}
+                  onChange={e => {
+                    const val = Number(e.target.value);
+                    dispatch(uiActions.setAyatFilterRange([currentAyatRange[0], Math.max(val, currentAyatRange[0])]));
+                  }}
+                  style={{ width: '100%', accentColor: 'var(--teal)', cursor: 'pointer' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 2: Mastery Level Filter ── */}
+          <div style={{
+            background: 'var(--surface3)',
+            borderRadius: 8,
+            border: '1px solid var(--border2)',
+            padding: '10px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11 }}>🎯</span>
+                <span style={{ fontSize: 8.5, fontFamily: "'Cinzel',serif", letterSpacing: 1, color: 'var(--gold)', fontWeight: 600 }}>
+                  NIVEAU DE MAÎTRISE : {masteryFilterActive ? `${masteryFilterRange[0]}% À ${masteryFilterRange[1]}%` : "TOUS (0% À 100%)"}
+                </span>
+              </div>
+              {masteryFilterActive && (
+                <button
+                  onClick={() => dispatch(uiActions.resetMasteryFilter())}
+                  style={{
+                    fontSize: 7.5, letterSpacing: 0.5, padding: '2px 6px', borderRadius: 4,
+                    background: 'transparent', border: '1px solid var(--border2)', color: 'var(--text3)', cursor: 'pointer'
+                  }}
+                  title="Réinitialiser le filtre de maîtrise"
+                >
+                  ✕ Réinitialiser maîtrise
+                </button>
+              )}
+            </div>
+
+            {/* Quick preset chips */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+              <span style={{ fontSize: 8, color: 'var(--text3)', letterSpacing: 0.5 }}>PRÉSÉLECTIONS :</span>
+              {[
+                { id: 'all', label: 'Tous (0–100%)', range: [0, 100] },
+                { id: 'unstarted', label: 'Non commencés (0%)', range: [0, 0] },
+                { id: 'toLearn', label: 'À réviser (0–49%)', range: [0, 49] },
+                { id: 'inProgress', label: 'En cours (50–79%)', range: [50, 79] },
+                { id: 'mastered', label: 'Maîtrisés (80–100%)', range: [80, 100] },
+                { id: 'perfect', label: 'Parfaits (100%)', range: [100, 100] },
+              ].map(p => {
+                const isSelected = (masteryFilterPreset === p.id) ||
+                  (masteryFilterRange[0] === p.range[0] && masteryFilterRange[1] === p.range[1]);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => dispatch(uiActions.setMasteryFilterPreset(p.id))}
+                    style={{
+                      fontSize: 8,
+                      padding: '3px 7px',
+                      borderRadius: 5,
+                      border: isSelected ? '1px solid var(--teal)' : '1px solid var(--border2)',
+                      background: isSelected ? 'rgba(62,184,160,0.22)' : 'rgba(255,255,255,0.02)',
+                      color: isSelected ? 'var(--teal2)' : 'var(--text2)',
+                      cursor: 'pointer',
+                      fontWeight: isSelected ? 600 : 400,
+                      transition: 'all .15s',
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Dual Range Sliders & Inputs for custom interval */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginTop: 2 }}>
+              {/* Min Range Slider */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 8 }}>
+                  <span style={{ color: 'var(--text3)', letterSpacing: 0.5 }}>MINIMUM :</span>
+                  <span style={{ fontSize: 9, fontFamily: "'Cinzel',serif", color: 'var(--gold)', fontWeight: 600 }}>
+                    {masteryFilterRange[0]}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={masteryFilterRange[0]}
+                  onChange={e => {
+                    const val = Number(e.target.value);
+                    dispatch(uiActions.setMasteryFilterRange([Math.min(val, masteryFilterRange[1]), masteryFilterRange[1]]));
+                  }}
+                  style={{ width: '100%', accentColor: 'var(--teal)', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Max Range Slider */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 8 }}>
+                  <span style={{ color: 'var(--text3)', letterSpacing: 0.5 }}>MAXIMUM :</span>
+                  <span style={{ fontSize: 9, fontFamily: "'Cinzel',serif", color: 'var(--gold)', fontWeight: 600 }}>
+                    {masteryFilterRange[1]}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={masteryFilterRange[1]}
+                  onChange={e => {
+                    const val = Number(e.target.value);
+                    dispatch(uiActions.setMasteryFilterRange([masteryFilterRange[0], Math.max(val, masteryFilterRange[0])]));
+                  }}
+                  style={{ width: '100%', accentColor: 'var(--teal)', cursor: 'pointer' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Status summary */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 8.5,
+            color: 'var(--text3)',
+            padding: '2px 4px',
+            flexWrap: 'wrap',
+            gap: 6,
+          }}>
+            <span>
+              {isAnyFilterActive ? (
+                <>Filtre actif : {ayatFilterActive ? <strong style={{ color: 'var(--teal2)' }}>Versets {currentAyatRange[0]} à {currentAyatRange[1]}</strong> : ''}{ayatFilterActive && masteryFilterActive ? ' · ' : ''}{masteryFilterActive ? <strong style={{ color: 'var(--teal2)' }}>Maîtrise {masteryFilterRange[0]}% à {masteryFilterRange[1]}%</strong> : ''} · <strong style={{ color: matchingAyatsCount > 0 ? 'var(--gold)' : '#ff7e7e' }}>{matchingAyatsCount} verset(s)</strong> affiché(s) sur {ayats?.length || totalAyahsInSurah}</>
+              ) : (
+                <>Aucun filtre · Tous les versets sont affichés ({ayats?.length || totalAyahsInSurah} versets)</>
+              )}
+            </span>
+            {isAnyFilterActive && (
+              <span style={{ color: 'var(--teal)', fontSize: 8, letterSpacing: 0.5, fontWeight: 600 }}>FILTRE ACTIF ✓</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Jump to Verse Inline Stepper ── */}
       {showAyatJump && (

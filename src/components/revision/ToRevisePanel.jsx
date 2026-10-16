@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { sel, playerActions } from "../../store.js";
 import { useToRevise } from "../../utils/toRevise.js";
 import { splitArabicWords, splitArabicChars } from "../../utils/arabicUtils.js";
 import { computeMastery, MasteryBar } from "../common/Mastery.jsx";
 
 export function ToRevisePanel({ ayat, surahNum, ld, setLData }) {
+  const dispatch = useDispatch();
+  const silenceEnabled = useSelector(sel.silenceWordsToRevise);
+  const silenceMode = useSelector(sel.silenceMode);
   const [expandedWord, setExpandedWord] = React.useState(null);
 
   const { revise, isActive, selWords, selParts, selChars, toggleAll, toggleWord: toggleWordBase, toggleChar, togglePart } =
@@ -138,6 +143,61 @@ export function ToRevisePanel({ ayat, surahNum, ld, setLData }) {
             : 'Ayat entier marqué'}
         </div>
       )}
+
+      {/* Masquage audio pendant récitation */}
+      <div style={{ display:'flex', flexDirection:'column', gap:8, borderTop:'1px solid var(--border)', paddingTop:10 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ fontSize:8, letterSpacing:1.5, color:'var(--text3)', display:'flex', alignItems:'center', gap:5 }}>
+            <span>🤫</span>
+            <span>MASQUAGE AUDIO PENDANT LA RÉCITATION</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => dispatch(playerActions.setSilenceWordsToRevise(!silenceEnabled))}
+            style={{
+              fontSize:8, letterSpacing:1, padding:'3px 10px', borderRadius:12, cursor:'pointer',
+              border: silenceEnabled ? '1px solid #ff7eb3' : '1px solid var(--border)',
+              background: silenceEnabled ? 'rgba(255,126,179,0.18)' : 'rgba(255,255,255,0.04)',
+              color: silenceEnabled ? '#ff7eb3' : 'var(--text3)',
+              fontWeight: 600,
+            }}
+          >
+            {silenceEnabled ? '✓ ACTIF' : 'INACTIF'}
+          </button>
+        </div>
+
+        {silenceEnabled && (
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ fontSize:8, color:'var(--text3)', letterSpacing:1 }}>MODE :</span>
+            <button
+              type="button"
+              onClick={() => dispatch(playerActions.setSilenceMode('mute'))}
+              style={{
+                fontSize:8, padding:'3px 8px', borderRadius:5, cursor:'pointer',
+                border: silenceMode === 'mute' ? '1px solid #ff7eb3' : '1px solid var(--border)',
+                background: silenceMode === 'mute' ? 'rgba(255,126,179,0.15)' : 'transparent',
+                color: silenceMode === 'mute' ? '#ff7eb3' : 'var(--text3)',
+                fontWeight: silenceMode === 'mute' ? 600 : 400,
+              }}
+            >
+              🤫 Muet (laisser le temps)
+            </button>
+            <button
+              type="button"
+              onClick={() => dispatch(playerActions.setSilenceMode('skip'))}
+              style={{
+                fontSize:8, padding:'3px 8px', borderRadius:5, cursor:'pointer',
+                border: silenceMode === 'skip' ? '1px solid #3eb8a0' : '1px solid var(--border)',
+                background: silenceMode === 'skip' ? 'rgba(62,184,160,0.15)' : 'transparent',
+                color: silenceMode === 'skip' ? '#3eb8a0' : 'var(--text3)',
+                fontWeight: silenceMode === 'skip' ? 600 : 400,
+              }}
+            >
+              ⏭️ Sauter (immédiat)
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Revise history */}
       {(ld?.reviseHistory || []).length > 0 && (

@@ -83,6 +83,14 @@ import {
 } from "./utils/reciterAudio.js";
 import { DATA_KEYS, getDeviceId, mergeLearnData, mergeActivity, mergeCollections } from "./utils/syncUtils.js";
 import { useToRevise } from "./utils/toRevise.js";
+import { SilenceReviseControl } from "./components/audio/SilenceReviseControl.jsx";
+import {
+  hasAyatTimestamps,
+  resolveSilencedWordIndices,
+  computeSilenceIntervals,
+  findActiveSilenceInterval,
+  calculateNextPlaybackTime,
+} from "./utils/audioSilenceManager.js";
 
 function AppInner({ currentUser, onSignOut }) {
   const dispatch = useDispatch();
@@ -206,6 +214,17 @@ function AppInner({ currentUser, onSignOut }) {
     const target = `/quran/${selectedSurah.number}/${openAyatNum}`;
     if (location.pathname !== target) navigate(target, { replace: true });
   }, [openAyatNum, selectedSurah?.number]);
+
+  // ── Sync Route → Redux (silenceRevise & silenceMode) ──
+  useEffect(() => {
+    if (parsedRoute.silenceRevise) {
+      dispatch(playerActions.setSilenceWordsToRevise(true));
+    }
+    if (parsedRoute.silenceMode) {
+      dispatch(playerActions.setSilenceMode(parsedRoute.silenceMode));
+    }
+  }, [parsedRoute.silenceRevise, parsedRoute.silenceMode, dispatch]);
+
   const showTsBar           = useSelector(sel.showTsBar);
   const enableTimestamps     = useSelector(sel.enableTimestamps);
   const enableLetterByLetter = useSelector(sel.enableLetterByLetter);
@@ -292,6 +311,11 @@ function AppInner({ currentUser, onSignOut }) {
   const voiceInputText  = useSelector(sel.voiceInputText);
   const goals           = useSelector(sel.goals, shallowEqual);
   const activity        = useSelector(sel.activity, shallowEqual);
+  const masteryFilterRange  = useSelector(sel.masteryFilterRange);
+  const masteryFilterActive = useSelector(sel.masteryFilterActive);
+  const masteryFilterPreset = useSelector(sel.masteryFilterPreset);
+  const ayatFilterRange     = useSelector(sel.ayatFilterRange);
+  const ayatFilterActive    = useSelector(sel.ayatFilterActive);
 
   // ── Dispatch shims (drop-in replacements for old setState calls) ───
   const setSurahs          = (v) => dispatch(quranActions.setSurahs(v));
@@ -797,6 +821,18 @@ function AppInner({ currentUser, onSignOut }) {
   const rafRef          = useRef(null);
   const lastTimeDispatchRef = useRef(0);
 
+  // Silence sur les mots à réviser (masquage audio)
+  const silenceWordsToRevise   = useSelector(sel.silenceWordsToRevise);
+  const silenceMode            = useSelector(sel.silenceMode);
+  const customSilencedWordsMap = useSelector(sel.customSilencedWordsMap);
+
+  const silenceWordsToReviseRef    = useRef(silenceWordsToRevise);
+  const silenceModeRef             = useRef(silenceMode);
+  const currentSilenceIntervalsRef = useRef([]);
+
+  useEffect(() => { silenceWordsToReviseRef.current = silenceWordsToRevise; }, [silenceWordsToRevise]);
+  useEffect(() => { silenceModeRef.current = silenceMode; }, [silenceMode]);
+
   // Maintenir ref miroir de isMainPlaying (utilisable dans les callbacks)
   useEffect(() => { isPlayingRef.current = isMainPlaying; }, [isMainPlaying]);
 
@@ -805,6 +841,31 @@ function AppInner({ currentUser, onSignOut }) {
       if (mainAudioRef.current) {
         const ms = mainAudioRef.current.currentTime * 1000;
         mainCurrentMsRef.current = ms;
+
+        // Audio Silence / Masking on Words to Revise (strictly requires timestamps)
+        if (silenceWordsToReviseRef.current && currentSilenceIntervalsRef.current?.length > 0) {
+          const activeInterval = findActiveSilenceInterval(ms, currentSilenceIntervalsRef.current);
+          if (activeInterval) {
+            if (silenceModeRef.current === "skip") {
+              const nextTime = calculateNextPlaybackTime(ms, currentSilenceIntervalsRef.current, 20);
+              mainAudioRef.current.currentTime = nextTime / 1000;
+            } else {
+              // Mute mode: silence audio during the word
+              if (!mainAudioRef.current.muted) {
+                mainAudioRef.current.muted = true;
+              }
+            }
+          } else {
+            if (mainAudioRef.current.muted) {
+              mainAudioRef.current.muted = false;
+            }
+          }
+        } else {
+          if (mainAudioRef.current.muted) {
+            mainAudioRef.current.muted = false;
+          }
+        }
+
         const now = performance.now();
         // Throttle Redux dispatch to 4Hz (every 250ms) to avoid high-frequency store churn
         if (now - lastTimeDispatchRef.current >= 250) {
@@ -820,6 +881,7 @@ function AppInner({ currentUser, onSignOut }) {
 
   const stopRaf = useCallback(() => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (mainAudioRef.current?.muted) { mainAudioRef.current.muted = false; }
   }, []);
 
   // Robust "resume playback" helper — tries immediately, and again as soon as the
@@ -886,6 +948,21 @@ function AppInner({ currentUser, onSignOut }) {
     if (changed) ayatRefs.current[ayats[i]?.numberInSurah]?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [ayats, mainAyatIdx, pageMode, activePageCoran, hizbMode, activeHizbCoran, getAyatHizb, juzMode, activeJuzCoran, getAyatJuz]);
 
+  const handleFastBackward = useCallback(() => {
+    if (mainAudioRef.current) {
+      const ct = mainAudioRef.current.currentTime || 0;
+      if (ct > 5) {
+        mainAudioRef.current.currentTime = Math.max(0, ct - 5);
+      } else if (mainAyatIdx > (loopActive ? loopStart : 0)) {
+        const prevIdx = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
+        playMainAyat(prevIdx);
+        if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play().catch(() => {}), 100);
+      } else {
+        mainAudioRef.current.currentTime = 0;
+      }
+    }
+  }, [mainAyatIdx, loopActive, loopStart, playMainAyat, isMainPlaying]);
+
   const handleMainEnded = useCallback(() => {
     const next = mainAyatIdx + 1;
     if (loopActive) {
@@ -939,6 +1016,12 @@ function AppInner({ currentUser, onSignOut }) {
         const idx = Math.max((a.findIndex(x => x.numberInSurah === (mainAudioRef.current?._ayatNum)) || 0) - 1, 0);
         playMainAyat(idx);
         playWhenReady();
+      },
+      seekbackward: (details) => {
+        const skipTime = details?.seekOffset || 5;
+        if (mainAudioRef.current) {
+          mainAudioRef.current.currentTime = Math.max(0, (mainAudioRef.current.currentTime || 0) - skipTime);
+        }
       },
     };
     Object.entries(handlers).forEach(([action, handler]) => {
@@ -1722,6 +1805,28 @@ function AppInner({ currentUser, onSignOut }) {
   const currentMainAyat = crossPlayingAyat || ayats[mainAyatIdx];
   const audioUrl = a => a ? `${getAudioBase()}/${a.number}.mp3` : "";
 
+  // Calcul dynamique des intervalles de silence pour le verset en cours
+  useEffect(() => {
+    if (!currentMainAyat || !selectedSurah) {
+      currentSilenceIntervalsRef.current = [];
+      return;
+    }
+    const ayatSurahNum = currentMainAyat.surah?.number || selectedSurah.number;
+    const tsKey = tskey(ayatSurahNum, currentMainAyat.numberInSurah);
+    const ts = timestampsMapRef.current[tsKey] || timestampsMap[tsKey];
+    if (!hasAyatTimestamps(ts)) {
+      currentSilenceIntervalsRef.current = [];
+      return;
+    }
+    const ldKey = `${ayatSurahNum}:${currentMainAyat.numberInSurah}`;
+    const ld = learnData[ldKey];
+    const custom = customSilencedWordsMap[ldKey] || [];
+    const totalWords = ts.words?.length || splitArabicWords(currentMainAyat.text || "").length;
+    const silencedIndices = resolveSilencedWordIndices({ ld, customIndices: custom, totalWords });
+    const intervals = computeSilenceIntervals(ts, silencedIndices);
+    currentSilenceIntervalsRef.current = intervals;
+  }, [currentMainAyat, selectedSurah, tsVersion, learnData, customSilencedWordsMap, timestampsMap]);
+
   const playPartInlineCommon = useCallback((targetAyat, targetTs, part, loop = false) => {
     if (!targetTs?.words || !part?.wordIndices?.length) return;
     const url = audioUrl(targetAyat);
@@ -2265,50 +2370,56 @@ function AppInner({ currentUser, onSignOut }) {
                   const pageMastery = computeDisplayedPartMastery(pageAyatsForCur, learnData, selectedSurah.number);
                   return (
                     <div style={{ position:'sticky', top:0, zIndex:10, background:'var(--surface2)', borderBottom:'1px solid var(--border)' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-                        padding:'6px 14px', gap:8, flexWrap:'wrap' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                      <div className="page-navigator-bar" style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                        padding:'5px 10px', gap:6, flexWrap:'nowrap', whiteSpace:'nowrap', overflowX:'auto', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
+                        <div className="page-nav-group-left" style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
                           <button onClick={() => setactivePageCoran(pages[0])} disabled={idx<=0}
                             title="Première page de la sourate"
-                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:10, padding:'3px 6px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
                               cursor: idx>0 ? 'pointer' : 'default', lineHeight:1 }}>⏮</button>
                           <button onClick={() => setactivePageCoran(pages[idx-1])} disabled={idx<=0}
-                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:8, letterSpacing:0.8, padding:'3px 7px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                              cursor: idx>0 ? 'pointer' : 'default' }}>← {idx>0 ? pages[idx-1] : ''}</button>
+                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: idx>0 ? 'pointer' : 'default', whiteSpace:'nowrap' }}>← {idx>0 ? pages[idx-1] : ''}</button>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'center' }}>
-                          <span style={{ fontSize:7, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>PAGE</span>
+                        <div className="page-nav-group-center" style={{ display:'flex', alignItems:'center', gap:5, flexWrap:'nowrap', whiteSpace:'nowrap', justifyContent:'center', minWidth:0, flexShrink:1 }}>
+                          <span style={{ fontSize:7, letterSpacing:1.5, color:'var(--text3)', fontFamily:"'Cinzel',serif", flexShrink:0 }}>PAGE</span>
                           <input type="number" value={curPage}
                             onChange={e => { const v=parseInt(e.target.value); if(pages.includes(v)) setactivePageCoran(v); }}
-                            style={{ width:48, textAlign:'center', background:'var(--surface3)',
-                              border:'1px solid #c878ff', borderRadius:6, padding:'3px 6px',
-                              color:'#c878ff', fontSize:13, fontFamily:"'Cinzel',serif", outline:'none' }} />
-                          <span style={{ fontSize:7, color:'var(--text3)' }}>/ {pages[pages.length-1]}</span>
+                            className="page-nav-input"
+                            style={{ width:40, textAlign:'center', background:'var(--surface3)',
+                              border:'1px solid #c878ff', borderRadius:5, padding:'2px 4px',
+                              color:'#c878ff', fontSize:12, fontFamily:"'Cinzel',serif", outline:'none', flexShrink:0 }} />
+                          <span style={{ fontSize:7, color:'var(--text3)', flexShrink:0 }}>/ {pages[pages.length-1]}</span>
                           {/* Page Mastery Badge */}
                           <span
                             title={`Maîtrise de la Page ${curPage} : ${pageMastery.masteryPct}% (${pageMastery.learnedCount}/${pageMastery.totalCount} versets appris)`}
+                            className="page-nav-badge"
                             style={{
-                              fontSize:7.5, letterSpacing:1, padding:'2px 8px', borderRadius:10,
+                              fontSize:7.5, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
                               background:'rgba(255,255,255,.04)',
                               border:`1px solid ${masteryColor(pageMastery.masteryPct)}`,
                               color:masteryColor(pageMastery.masteryPct),
                               fontFamily:"'Cinzel',serif", fontWeight:700,
-                              display:'inline-flex', alignItems:'center', gap:4,
+                              display:'inline-flex', alignItems:'center', gap:3, flexShrink:0, whiteSpace:'nowrap',
                             }}
                           >
                             <span>MAÎTRISE {pageMastery.masteryPct}%</span>
-                            <span style={{ opacity:0.75, fontSize:7 }}>({pageMastery.learnedCount}/{pageMastery.totalCount})</span>
+                            <span style={{ opacity:0.75, fontSize:6.5 }}>({pageMastery.learnedCount}/{pageMastery.totalCount})</span>
                             {pageMastery.isFullyLearned && <span>✓</span>}
                           </span>
                           {curPageHizb != null && (
-                            <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                            <span
+                              className="page-nav-badge"
+                              style={{ fontSize:7, letterSpacing:1, padding:'2px 6px', borderRadius:10,
                               background:'rgba(255,209,102,.12)', border:'1px solid rgba(255,209,102,.4)',
-                              color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                              HIZB {curPageHizb}
+                              color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+                              H.{curPageHizb}
                             </span>
                           )}
                           {/* Page loop button */}
@@ -2332,7 +2443,7 @@ function AppInner({ currentUser, onSignOut }) {
                             };
                             return (
                               <button onClick={togglePageLoop} title={isPageLoop ? 'Arrêter boucle page' : 'Lire page en boucle'}
-                                style={{ fontSize:12, padding:'2px 7px', borderRadius:6, cursor:'pointer', lineHeight:1,
+                                style={{ fontSize:11, padding:'2px 5px', borderRadius:5, cursor:'pointer', lineHeight:1, flexShrink:0,
                                   background: isPageLoop ? 'rgba(200,120,255,.2)' : 'transparent',
                                   border: `1px solid ${isPageLoop ? '#c878ff' : 'rgba(255,255,255,.15)'}`,
                                   color: isPageLoop ? '#c878ff' : 'var(--text3)', transition:'all .2s' }}>
@@ -2341,18 +2452,20 @@ function AppInner({ currentUser, onSignOut }) {
                             );
                           })()}
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                        <div className="page-nav-group-right" style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
                           <button onClick={() => setactivePageCoran(pages[idx+1])} disabled={idx>=pages.length-1}
-                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:8, letterSpacing:0.8, padding:'3px 7px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: idx<pages.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                              cursor: idx<pages.length-1 ? 'pointer' : 'default' }}>
+                              color: idx<pages.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: idx<pages.length-1 ? 'pointer' : 'default', whiteSpace:'nowrap' }}>
                             {idx<pages.length-1 ? pages[idx+1] : ''} →</button>
                           <button onClick={() => setactivePageCoran(pages[pages.length-1])} disabled={idx>=pages.length-1}
                             title="Dernière page de la sourate"
-                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:10, padding:'3px 6px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: idx<pages.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              color: idx<pages.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
                               cursor: idx<pages.length-1 ? 'pointer' : 'default', lineHeight:1 }}>⏭</button>
                         </div>
                       </div>
@@ -2414,64 +2527,74 @@ function AppInner({ currentUser, onSignOut }) {
                   };
                   return (
                     <div style={{ position:'sticky', top:0, zIndex:10, background:'var(--surface2)', borderBottom:'1px solid var(--border)' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-                        padding:'6px 14px', gap:8, flexWrap:'wrap' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                      <div className="part-navigator-bar" style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                        padding:'5px 10px', gap:6, flexWrap:'nowrap', whiteSpace:'nowrap', overflowX:'auto', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
+                        <div className="page-nav-group-left" style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
                           <button onClick={() => goToHizb(surahHizbs[0] ?? 1)} disabled={curHizb <= 1}
                             title="Premier Hizb de la sourate"
-                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:10, padding:'3px 6px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: curHizb > 1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              color: curHizb > 1 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
                               cursor: curHizb > 1 ? 'pointer' : 'default', lineHeight:1 }}>⏮</button>
                           <button onClick={() => goToHizb(curHizb - 1)} disabled={curHizb <= 1}
-                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:8, letterSpacing:0.8, padding:'3px 7px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: curHizb > 1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                              cursor: curHizb > 1 ? 'pointer' : 'default' }}>← {curHizb > 1 ? curHizb - 1 : ''}</button>
+                              color: curHizb > 1 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: curHizb > 1 ? 'pointer' : 'default', whiteSpace:'nowrap' }}>← {curHizb > 1 ? curHizb - 1 : ''}</button>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'center' }}>
-                          <span style={{ fontSize:7, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>HIZB</span>
+                        <div className="page-nav-group-center" style={{ display:'flex', alignItems:'center', gap:5, flexWrap:'nowrap', whiteSpace:'nowrap', justifyContent:'center', minWidth:0, flexShrink:1 }}>
+                          <span style={{ fontSize:7, letterSpacing:1.5, color:'var(--text3)', fontFamily:"'Cinzel',serif", flexShrink:0 }}>HIZB</span>
                           <input type="number" min={1} max={60} value={curHizb ?? ''}
                             onChange={e => { const v=parseInt(e.target.value, 10); if(v >= 1 && v <= 60) goToHizb(v); }}
-                            style={{ width:48, textAlign:'center', background:'var(--surface3)',
-                              border:'1px solid #ffd166', borderRadius:6, padding:'3px 6px',
-                              color:'#ffd166', fontSize:13, fontFamily:"'Cinzel',serif", outline:'none' }} />
-                          <span style={{ fontSize:7, color:'var(--text3)' }}>/ 60</span>
+                            className="page-nav-input"
+                            style={{ width:40, textAlign:'center', background:'var(--surface3)',
+                              border:'1px solid #ffd166', borderRadius:5, padding:'2px 4px',
+                              color:'#ffd166', fontSize:12, fontFamily:"'Cinzel',serif", outline:'none', flexShrink:0 }} />
+                          <span style={{ fontSize:7, color:'var(--text3)', flexShrink:0 }}>/ 60</span>
                           {/* Hizb Mastery Badge */}
                           <span
                             title={`Maîtrise du Hizb ${curHizb} : ${hizbMastery.masteryPct}% (${hizbMastery.learnedCount}/${hizbMastery.totalCount} versets appris)`}
+                            className="page-nav-badge"
                             style={{
-                              fontSize:7.5, letterSpacing:1, padding:'2px 8px', borderRadius:10,
+                              fontSize:7.5, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
                               background:'rgba(255,255,255,.04)',
                               border:`1px solid ${masteryColor(hizbMastery.masteryPct)}`,
                               color:masteryColor(hizbMastery.masteryPct),
                               fontFamily:"'Cinzel',serif", fontWeight:700,
-                              display:'inline-flex', alignItems:'center', gap:4,
+                              display:'inline-flex', alignItems:'center', gap:3, flexShrink:0, whiteSpace:'nowrap',
                             }}
                           >
                             <span>MAÎTRISE {hizbMastery.masteryPct}%</span>
-                            <span style={{ opacity:0.75, fontSize:7 }}>({hizbMastery.learnedCount}/{hizbMastery.totalCount})</span>
+                            <span style={{ opacity:0.75, fontSize:6.5 }}>({hizbMastery.learnedCount}/{hizbMastery.totalCount})</span>
                             {hizbMastery.isFullyLearned && <span>✓</span>}
                           </span>
                           {isMultiSurah && (
-                            <span style={{ fontSize:7.5, letterSpacing:1, padding:'2px 7px', borderRadius:10,
+                            <span
+                              className="page-nav-badge"
+                              style={{ fontSize:7, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
                               background:'rgba(255,209,102,.16)', border:'1px solid rgba(255,209,102,.5)',
-                              color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                              ⇄ {hizbSegments.length} SOURATES (S.{hizbSegments[0].surahNum}–S.{hizbSegments[hizbSegments.length-1].surahNum})
+                              color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+                              ⇄ {hizbSegments.length} S.
                             </span>
                           )}
                           {curHizbPage != null && (
-                            <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                            <span
+                              className="page-nav-badge"
+                              style={{ fontSize:7, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
                               background:'rgba(200,120,255,.12)', border:'1px solid rgba(200,120,255,.4)',
-                              color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                              PAGE {curHizbPage}
+                              color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+                              P.{curHizbPage}
                             </span>
                           )}
                           {curHizbJuz != null && (
-                            <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                            <span
+                              className="page-nav-badge"
+                              style={{ fontSize:7, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
                               background:'rgba(86,212,188,.12)', border:'1px solid rgba(86,212,188,.4)',
-                              color:'#56d4bc', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                              JUZ {curHizbJuz}
+                              color:'#56d4bc', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+                              J.{curHizbJuz}
                             </span>
                           )}
                           {/* Hizb loop button */}
@@ -2495,7 +2618,7 @@ function AppInner({ currentUser, onSignOut }) {
                             };
                             return (
                               <button onClick={toggleHizbLoop} title={isHizbLoop ? 'Arrêter boucle hizb' : 'Lire hizb en boucle'}
-                                style={{ fontSize:12, padding:'2px 7px', borderRadius:6, cursor:'pointer', lineHeight:1,
+                                style={{ fontSize:11, padding:'2px 5px', borderRadius:5, cursor:'pointer', lineHeight:1, flexShrink:0,
                                   background: isHizbLoop ? 'rgba(255,209,102,.2)' : 'transparent',
                                   border: `1px solid ${isHizbLoop ? '#ffd166' : 'rgba(255,255,255,.15)'}`,
                                   color: isHizbLoop ? '#ffd166' : 'var(--text3)', transition:'all .2s' }}>
@@ -2504,18 +2627,20 @@ function AppInner({ currentUser, onSignOut }) {
                             );
                           })()}
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                        <div className="page-nav-group-right" style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
                           <button onClick={() => goToHizb(curHizb + 1)} disabled={curHizb >= 60}
-                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:8, letterSpacing:0.8, padding:'3px 7px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: curHizb < 60 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                              cursor: curHizb < 60 ? 'pointer' : 'default' }}>
+                              color: curHizb < 60 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: curHizb < 60 ? 'pointer' : 'default', whiteSpace:'nowrap' }}>
                             {curHizb < 60 ? curHizb + 1 : ''} →</button>
                           <button onClick={() => goToHizb(surahHizbs[surahHizbs.length-1] ?? 60)} disabled={curHizb >= 60}
                             title="Dernier Hizb de la sourate"
-                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:10, padding:'3px 6px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: curHizb < 60 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              color: curHizb < 60 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
                               cursor: curHizb < 60 ? 'pointer' : 'default', lineHeight:1 }}>⏭</button>
                         </div>
                       </div>
@@ -2573,57 +2698,65 @@ function AppInner({ currentUser, onSignOut }) {
                   const juzMastery = computeDisplayedPartMastery(juzAyats, learnData, selectedSurah.number);
                   return (
                     <div style={{ position:'sticky', top:0, zIndex:10, background:'var(--surface2)', borderBottom:'1px solid var(--border)' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-                        padding:'6px 14px', gap:8, flexWrap:'wrap' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                      <div className="part-navigator-bar" style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                        padding:'5px 10px', gap:6, flexWrap:'nowrap', whiteSpace:'nowrap', overflowX:'auto', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
+                        <div className="page-nav-group-left" style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
                           <button onClick={() => setActiveJuzCoran(juzs[0])} disabled={idx<=0}
                             title="Premier Juz de la sourate"
-                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:10, padding:'3px 6px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
                               cursor: idx>0 ? 'pointer' : 'default', lineHeight:1 }}>⏮</button>
                           <button onClick={() => setActiveJuzCoran(juzs[idx-1])} disabled={idx<=0}
-                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:8, letterSpacing:0.8, padding:'3px 7px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                              cursor: idx>0 ? 'pointer' : 'default' }}>← {idx>0 ? juzs[idx-1] : ''}</button>
+                              color: idx>0 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: idx>0 ? 'pointer' : 'default', whiteSpace:'nowrap' }}>← {idx>0 ? juzs[idx-1] : ''}</button>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', justifyContent:'center' }}>
-                          <span style={{ fontSize:7, letterSpacing:2, color:'var(--text3)', fontFamily:"'Cinzel',serif" }}>JUZ</span>
+                        <div className="page-nav-group-center" style={{ display:'flex', alignItems:'center', gap:5, flexWrap:'nowrap', whiteSpace:'nowrap', justifyContent:'center', minWidth:0, flexShrink:1 }}>
+                          <span style={{ fontSize:7, letterSpacing:1.5, color:'var(--text3)', fontFamily:"'Cinzel',serif", flexShrink:0 }}>JUZ</span>
                           <input type="number" value={curJuz ?? ''}
                             onChange={e => { const v=parseInt(e.target.value); if(juzs.includes(v)) setActiveJuzCoran(v); }}
-                            style={{ width:48, textAlign:'center', background:'var(--surface3)',
-                              border:'1px solid #56d4bc', borderRadius:6, padding:'3px 6px',
-                              color:'#56d4bc', fontSize:13, fontFamily:"'Cinzel',serif", outline:'none' }} />
-                          <span style={{ fontSize:7, color:'var(--text3)' }}>/ {juzs[juzs.length-1]}</span>
+                            className="page-nav-input"
+                            style={{ width:40, textAlign:'center', background:'var(--surface3)',
+                              border:'1px solid #56d4bc', borderRadius:5, padding:'2px 4px',
+                              color:'#56d4bc', fontSize:12, fontFamily:"'Cinzel',serif", outline:'none', flexShrink:0 }} />
+                          <span style={{ fontSize:7, color:'var(--text3)', flexShrink:0 }}>/ {juzs[juzs.length-1]}</span>
                           {/* Juz Mastery Badge */}
                           <span
                             title={`Maîtrise du Juz ${curJuz} : ${juzMastery.masteryPct}% (${juzMastery.learnedCount}/${juzMastery.totalCount} versets appris)`}
+                            className="page-nav-badge"
                             style={{
-                              fontSize:7.5, letterSpacing:1, padding:'2px 8px', borderRadius:10,
+                              fontSize:7.5, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
                               background:'rgba(255,255,255,.04)',
                               border:`1px solid ${masteryColor(juzMastery.masteryPct)}`,
                               color:masteryColor(juzMastery.masteryPct),
                               fontFamily:"'Cinzel',serif", fontWeight:700,
-                              display:'inline-flex', alignItems:'center', gap:4,
+                              display:'inline-flex', alignItems:'center', gap:3, flexShrink:0, whiteSpace:'nowrap',
                             }}
                           >
                             <span>MAÎTRISE {juzMastery.masteryPct}%</span>
-                            <span style={{ opacity:0.75, fontSize:7 }}>({juzMastery.learnedCount}/{juzMastery.totalCount})</span>
+                            <span style={{ opacity:0.75, fontSize:6.5 }}>({juzMastery.learnedCount}/{juzMastery.totalCount})</span>
                             {juzMastery.isFullyLearned && <span>✓</span>}
                           </span>
                           {curJuzHizb != null && (
-                            <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                            <span
+                              className="page-nav-badge"
+                              style={{ fontSize:7, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
                               background:'rgba(255,209,102,.12)', border:'1px solid rgba(255,209,102,.4)',
-                              color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                              HIZB {curJuzHizb}
+                              color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+                              H.{curJuzHizb}
                             </span>
                           )}
                           {curJuzPage != null && (
-                            <span style={{ fontSize:7.5, letterSpacing:1.2, padding:'2px 7px', borderRadius:10,
+                            <span
+                              className="page-nav-badge"
+                              style={{ fontSize:7, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
                               background:'rgba(200,120,255,.12)', border:'1px solid rgba(200,120,255,.4)',
-                              color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
-                              PAGE {curJuzPage}
+                              color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+                              P.{curJuzPage}
                             </span>
                           )}
                           {/* Juz loop button */}
@@ -2646,7 +2779,7 @@ function AppInner({ currentUser, onSignOut }) {
                             };
                             return (
                               <button onClick={toggleJuzLoop} title={isJuzLoop ? 'Arrêter boucle juz' : 'Lire juz en boucle'}
-                                style={{ fontSize:12, padding:'2px 7px', borderRadius:6, cursor:'pointer', lineHeight:1,
+                                style={{ fontSize:11, padding:'2px 5px', borderRadius:5, cursor:'pointer', lineHeight:1, flexShrink:0,
                                   background: isJuzLoop ? 'rgba(86,212,188,.2)' : 'transparent',
                                   border: `1px solid ${isJuzLoop ? '#56d4bc' : 'rgba(255,255,255,.15)'}`,
                                   color: isJuzLoop ? '#56d4bc' : 'var(--text3)', transition:'all .2s' }}>
@@ -2655,18 +2788,20 @@ function AppInner({ currentUser, onSignOut }) {
                             );
                           })()}
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                        <div className="page-nav-group-right" style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
                           <button onClick={() => setActiveJuzCoran(juzs[idx+1])} disabled={idx>=juzs.length-1}
-                            style={{ fontSize:8, letterSpacing:1, padding:'3px 10px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:8, letterSpacing:0.8, padding:'3px 7px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
-                              cursor: idx<juzs.length-1 ? 'pointer' : 'default' }}>
+                              color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: idx<juzs.length-1 ? 'pointer' : 'default', whiteSpace:'nowrap' }}>
                             {idx<juzs.length-1 ? juzs[idx+1] : ''} →</button>
                           <button onClick={() => setActiveJuzCoran(juzs[juzs.length-1])} disabled={idx>=juzs.length-1}
                             title="Dernier Juz de la sourate"
-                            style={{ fontSize:11, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                            className="page-nav-btn"
+                            style={{ fontSize:10, padding:'3px 6px', fontFamily:"'Cinzel',serif",
                               background:'transparent', border:'1px solid var(--border2)',
-                              color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:6,
+                              color: idx<juzs.length-1 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
                               cursor: idx<juzs.length-1 ? 'pointer' : 'default', lineHeight:1 }}>⏭</button>
                         </div>
                       </div>
@@ -2692,7 +2827,7 @@ function AppInner({ currentUser, onSignOut }) {
                       const curPage = pageMode ? (activePageCoran ?? ayats[mainAyatIdx]?.page) : null;
                       const curHizb = hizbMode ? resolvedActiveHizb : null;
                       const curJuz  = juzMode  ? (activeJuzCoran  ?? getAyatJuz(ayats[mainAyatIdx])  ?? getAyatJuz(ayats[0]))  : null;
-                      const visible = curPage
+                      let rawAyats = curPage
                         ? ayats.filter(a => a.page === curPage)
                         : curHizb
                         ? (currentHizbCrossAyats.length > 0
@@ -2700,8 +2835,119 @@ function AppInner({ currentUser, onSignOut }) {
                             : ayats.filter(a => getAyatHizb(a) === curHizb))
                         : curJuz
                         ? ayats.filter(a => getAyatJuz(a) === curJuz)
-                        : ayats.slice(0, renderLimit);
-                      return visible.map((ayat, visIdx) => {
+                        : ayats;
+
+                      const isFilterActive = masteryFilterActive || ayatFilterActive;
+                      if (ayatFilterActive && ayatFilterRange) {
+                        const [fromA, toA] = ayatFilterRange;
+                        rawAyats = rawAyats.filter(a => {
+                          const anNum = Number(a.numberInSurah);
+                          return anNum >= fromA && anNum <= toA;
+                        });
+                      }
+
+                      if (masteryFilterActive) {
+                        const [minM, maxM] = masteryFilterRange || [0, 100];
+                        rawAyats = rawAyats.filter(a => {
+                          const snNum = Number(a.surahNumber ?? a.surah?.number ?? selectedSurah?.number ?? 1);
+                          const anNum = Number(a.numberInSurah);
+                          const ldVal = getLData(snNum, anNum);
+                          const m = computeMastery(ldVal, a.text);
+                          return m >= minM && m <= maxM;
+                        });
+                      }
+
+                      const visible = (curPage || curHizb || curJuz || isFilterActive)
+                        ? rawAyats
+                        : rawAyats.slice(0, renderLimit);
+
+                      return (
+                        <>
+                          {isFilterActive && (
+                            <div className="m-active-filter-bar" style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '7px 14px',
+                              margin: '8px 10px 12px 10px',
+                              background: 'rgba(62,184,160,0.12)',
+                              border: '1px solid rgba(62,184,160,0.3)',
+                              borderRadius: 8,
+                              fontSize: 9,
+                              fontFamily: "'Cinzel',serif",
+                              letterSpacing: 0.8,
+                              color: 'var(--teal2)',
+                              flexWrap: 'wrap',
+                              gap: 8,
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span>🎯</span>
+                                <span>
+                                  Filtre actif : {ayatFilterActive ? `Versets ${ayatFilterRange[0]} à ${ayatFilterRange[1]}` : ''}{ayatFilterActive && masteryFilterActive ? ' · ' : ''}{masteryFilterActive ? `Maîtrise ${masteryFilterRange[0]}% – ${masteryFilterRange[1]}%` : ''} · <strong style={{ color: 'var(--gold)' }}>{visible.length}</strong> verset{visible.length > 1 ? 's' : ''} affiché{visible.length > 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => dispatch(uiActions.resetAllFilters())}
+                                style={{
+                                  background: 'rgba(255,255,255,0.06)',
+                                  border: '1px solid var(--border2)',
+                                  borderRadius: 5,
+                                  padding: '3px 8px',
+                                  color: 'var(--text2)',
+                                  fontSize: 8.5,
+                                  cursor: 'pointer',
+                                  fontFamily: "'Cinzel',serif",
+                                  transition: 'all .15s',
+                                }}
+                              >
+                                ✕ TOUT AFFICHER
+                              </button>
+                            </div>
+                          )}
+
+                          {visible.length === 0 && isFilterActive && (
+                            <div style={{
+                              textAlign: 'center',
+                              padding: '40px 20px',
+                              background: 'var(--surface2)',
+                              borderRadius: 12,
+                              border: '1px dashed var(--border2)',
+                              margin: '16px 12px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 10,
+                            }}>
+                              <span style={{ fontSize: 26 }}>🎯</span>
+                              <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600 }}>
+                                Aucun verset pour ces critères de filtrage
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)', maxWidth: 380, lineHeight: 1.5 }}>
+                                {ayatFilterActive && `Plage de versets : ${ayatFilterRange[0]} à ${ayatFilterRange[1]}. `}
+                                {masteryFilterActive && `Tranche de maîtrise : ${masteryFilterRange[0]}% à ${masteryFilterRange[1]}%.`}
+                              </div>
+                              <button
+                                onClick={() => dispatch(uiActions.resetAllFilters())}
+                                style={{
+                                  marginTop: 6,
+                                  padding: '7px 16px',
+                                  borderRadius: 8,
+                                  background: 'rgba(62,184,160,0.2)',
+                                  border: '1px solid var(--teal)',
+                                  color: 'var(--teal2)',
+                                  fontFamily: "'Cinzel',serif",
+                                  fontSize: 10,
+                                  letterSpacing: 1,
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                RÉINITIALISER LE FILTRE (TOUT AFFICHER)
+                              </button>
+                            </div>
+                          )}
+
+                          {visible.map((ayat, visIdx) => {
                       const ayatSurahNum = ayat.surahNumber ?? ayat.surah?.number ?? selectedSurah.number;
                       const isOtherSurah = ayatSurahNum !== selectedSurah.number;
                       const ayatCompositeKey = `${ayatSurahNum}:${ayat.numberInSurah}`;
@@ -3284,22 +3530,75 @@ function AppInner({ currentUser, onSignOut }) {
                             {renderAyatText()}
                             {(() => {
                               const m = masteryMap[lkey(ayatSurahNum, ayat.numberInSurah)] ?? 0;
-                              if (!ld.learned && !ld.toRevise && m <= 0) return null;
                               return (
-                                <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end", flexShrink: 0, paddingTop: 4 }}>
+                                <div
+                                  className="ayat-mastery-col"
+                                  title={`Maîtrise du verset : ${m}%${ld.learned ? " · Appris" : ""}${ld.toRevise ? " · À réviser" : ""}`}
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 3,
+                                    alignItems: "flex-end",
+                                    justifyContent: "flex-start",
+                                    flexShrink: 0,
+                                    paddingTop: 3,
+                                    minWidth: 52,
+                                  }}
+                                >
+                                  {/* Badge Maîtrise toujours visible */}
+                                  <div
+                                    className="ayat-mastery-badge"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 3,
+                                      fontSize: 8,
+                                      letterSpacing: 0.6,
+                                      padding: "2px 5px",
+                                      borderRadius: 8,
+                                      border: `1px solid ${masteryColor(m)}`,
+                                      color: masteryColor(m),
+                                      background: m > 0 ? "rgba(255,255,255,.04)" : "rgba(255,255,255,.01)",
+                                      fontFamily: "'Cinzel',serif",
+                                      fontWeight: 700,
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    <span style={{ fontSize: 6.5, opacity: 0.8, letterSpacing: 0.4 }}>MAÎTRISE</span>
+                                    <span>{m}%</span>
+                                    {ld.learned && <span style={{ color: "var(--green)", fontSize: 8 }}>✓</span>}
+                                  </div>
+
+                                  {/* Micro barre de progression de maîtrise */}
+                                  <div
+                                    style={{
+                                      width: 46,
+                                      height: 2.5,
+                                      background: "var(--surface3)",
+                                      borderRadius: 2,
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        height: "100%",
+                                        width: `${m}%`,
+                                        background: masteryColor(m),
+                                        borderRadius: 2,
+                                        transition: "width .3s ease",
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Indicateurs complémentaires */}
                                   {ld.learned && (
-                                    <span style={{ fontSize: 8.5, letterSpacing: 1, color: "var(--green)", fontFamily: "'Cinzel',serif", fontWeight: 700 }} title="Verset appris">
-                                      ✓ APPRIS
+                                    <span style={{ fontSize: 7.5, letterSpacing: 0.8, color: "var(--green)", fontFamily: "'Cinzel',serif", fontWeight: 700 }} title="Verset appris">
+                                       ✓ APPRIS
                                     </span>
                                   )}
                                   {ld.toRevise && (
-                                    <span style={{ fontSize: 8, letterSpacing: 0.8, color: "var(--gold2)", fontFamily: "'Cinzel',serif" }} title="À réviser">
-                                      🔖 RÉVISER
-                                    </span>
-                                  )}
-                                  {m > 0 && !ld.learned && (
-                                    <span style={{ fontSize: 8.5, letterSpacing: 0.8, color: masteryColor(m), fontFamily: "'Cinzel',serif", fontWeight: 600 }}>
-                                      {m}%
+                                    <span style={{ fontSize: 7.5, letterSpacing: 0.6, color: "var(--gold2)", fontFamily: "'Cinzel',serif", fontWeight: 600 }} title="À réviser">
+                                       🔖 RÉVISER
                                     </span>
                                   )}
                                 </div>
@@ -3433,7 +3732,9 @@ function AppInner({ currentUser, onSignOut }) {
                           )}
                         </React.Fragment>
                       );
-                    }); })()}</>}
+                    })}
+                        </>
+                      ); })()}</>}
                 </div>
               </>
             )}
@@ -3571,6 +3872,7 @@ function AppInner({ currentUser, onSignOut }) {
               masteryPercent={masteryPct}
               loopActive={isCurrentLoop}
               onToggleLoop={handleToggleLoop}
+              onFastBackward={handleFastBackward}
               reciterName={activeRecitator?.label || recitatorId}
               recitators={RECITATORS}
               recitatorId={recitatorId}
@@ -3751,7 +4053,11 @@ function AppInner({ currentUser, onSignOut }) {
                 <button className="ctrl-btn" title="Verset précédent" onClick={() => {
                   const i = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
                   playMainAyat(i); if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play(), 100);
-                }}>◀</button>
+                }}>⏮</button>
+                <button
+                  className="ctrl-btn"
+                  title="Reculer de 5 secondes (Retour rapide / Fast backward)"
+                  onClick={handleFastBackward}>⏪</button>
                 <button className="ctrl-btn play-btn" title={isMainPlaying ? "Pause" : "Lecture"} onClick={() => {
                   if (!isMainPlaying) { playMainAyat(loopActive ? loopStart : mainAyatIdx); setIsMainPlaying(true); }
                   else { setIsMainPlaying(false); setPlayingAyatNum(null); mainAudioRef.current?.pause(); }
@@ -3759,7 +4065,7 @@ function AppInner({ currentUser, onSignOut }) {
                 <button className="ctrl-btn" title="Verset suivant" onClick={() => {
                   const i = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
                   playMainAyat(i); if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play(), 100);
-                }}>▶</button>
+                }}>⏭</button>
                 <button
                   className={`ctrl-btn${loopActive || showLoopBar ? " loop-on" : ""}`}
                   title={showLoopBar ? "Fermer les réglages de boucle" : "Boucle de versets (configurer / activer)"}
@@ -3773,6 +4079,22 @@ function AppInner({ currentUser, onSignOut }) {
                     }
                   }}
                   style={{ fontSize: 12 }}>↺</button>
+                {/* Silence / Masquage sur mots à réviser */}
+                <SilenceReviseControl
+                  compact={true}
+                  timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
+                  ld={currentMainAyat ? learnData[`${selectedSurah.number}:${currentMainAyat.numberInSurah}`] : null}
+                  ayatText={currentMainAyat?.text || ""}
+                  surahNum={selectedSurah.number}
+                  ayatNum={currentMainAyat?.numberInSurah}
+                  currentMs={mainCurrentMsRef.current}
+                  isPlaying={isMainPlaying}
+                  onLoadTimestamps={() => {
+                    loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
+                      if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
+                    });
+                  }}
+                />
                 {/* Reciter picker */}
                 <button
                   className={`ctrl-btn reciter-trigger${showRecitPanel ? " loop-on" : ""}`}

@@ -12,6 +12,7 @@ import { RevisionEcritureMode } from "./RevisionEcritureMode.jsx";
 import { TajweedExercice } from "./TajweedExercice.jsx";
 import { AyatMemorisationWorkflow } from "../memorisation/AyatMemorisationWorkflow.jsx";
 import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
+import { computeMastery, masteryColor } from "../common/Mastery.jsx";
 
 export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive, translationLang, ayatTranslation, wbwWords, onFullScreen }) {
   const [copied, setCopied] = useState(false);
@@ -93,6 +94,7 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
   };
 
   const hasSecondaryBadge = !!ld?.toRevise || (ayatInCollections?.length > 0) || ayatLoopActive;
+  const verseMastery = computeMastery(ld, ayat.text);
 
   return (
     <div
@@ -156,6 +158,32 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
             ›
           </button>
         )}
+
+        {/* Badge Maîtrise du verset — Toujours visible */}
+        <div
+          className="submenu-verse-mastery-chip"
+          title={`Maîtrise de ce verset : ${verseMastery}%${ld?.learned ? ' · Appris' : ''}${ld?.toRevise ? ' · À réviser' : ''}`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: 8,
+            padding: "3px 7px",
+            borderRadius: 6,
+            border: `1px solid ${masteryColor(verseMastery)}`,
+            color: masteryColor(verseMastery),
+            background: verseMastery > 0 ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.02)",
+            fontFamily: "'Cinzel',serif",
+            fontWeight: 700,
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+            lineHeight: 1.2,
+          }}
+        >
+          <span style={{ fontSize: 6.5, opacity: 0.8 }}>MAÎTRISE</span>
+          <span>{verseMastery}%</span>
+          {ld?.learned && <span style={{ color: "var(--green)" }}>✓</span>}
+        </div>
 
         {/* Compact "Plus d'outils & modes" trigger */}
         <div className="submenu-more-wrap" ref={moreMenuRef}>

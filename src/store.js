@@ -36,6 +36,11 @@ const uiSlice = createSlice({
     activePageCoran:     null,
     activeHizbCoran:     null,
     activeJuzCoran:      null,
+    masteryFilterRange:  load("quran_masteryFilterRange", [0, 100]),
+    masteryFilterActive: load("quran_masteryFilterActive", false),
+    masteryFilterPreset: load("quran_masteryFilterPreset", "all"),
+    ayatFilterRange:     null, // null | [fromAyatNum, toAyatNum]
+    ayatFilterActive:    false,
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -134,6 +139,86 @@ const uiSlice = createSlice({
     setActivePageCoran: (s, a) => { s.activePageCoran = a.payload ?? null; },
     setActiveHizbCoran: (s, a) => { s.activeHizbCoran = a.payload ?? null; },
     setActiveJuzCoran:  (s, a) => { s.activeJuzCoran  = a.payload ?? null; },
+    setMasteryFilterRange: (s, a) => {
+      const [rawMin, rawMax] = Array.isArray(a.payload) ? a.payload : [0, 100];
+      const min = Math.max(0, Math.min(100, Number(rawMin) || 0));
+      const max = Math.max(min, Math.min(100, Number(rawMax) || 100));
+      s.masteryFilterRange = [min, max];
+      s.masteryFilterActive = (min > 0 || max < 100);
+      s.masteryFilterPreset = (min === 0 && max === 100) ? "all" : "custom";
+      save("quran_masteryFilterRange", [min, max]);
+      save("quran_masteryFilterActive", s.masteryFilterActive);
+      save("quran_masteryFilterPreset", s.masteryFilterPreset);
+    },
+    setMasteryFilterActive: (s, a) => {
+      s.masteryFilterActive = Boolean(a.payload);
+      save("quran_masteryFilterActive", s.masteryFilterActive);
+    },
+    setMasteryFilterPreset: (s, a) => {
+      const preset = a.payload;
+      s.masteryFilterPreset = preset;
+      save("quran_masteryFilterPreset", preset);
+      let range = [0, 100];
+      let active = true;
+      if (preset === "all") {
+        range = [0, 100];
+        active = false;
+      } else if (preset === "unstarted") {
+        range = [0, 0];
+      } else if (preset === "toLearn") {
+        range = [0, 49];
+      } else if (preset === "inProgress") {
+        range = [50, 79];
+      } else if (preset === "mastered") {
+        range = [80, 100];
+      } else if (preset === "perfect") {
+        range = [100, 100];
+      }
+      s.masteryFilterRange = range;
+      s.masteryFilterActive = active;
+      save("quran_masteryFilterRange", range);
+      save("quran_masteryFilterActive", active);
+    },
+    resetMasteryFilter: (s) => {
+      s.masteryFilterRange = [0, 100];
+      s.masteryFilterActive = false;
+      s.masteryFilterPreset = "all";
+      save("quran_masteryFilterRange", [0, 100]);
+      save("quran_masteryFilterActive", false);
+      save("quran_masteryFilterPreset", "all");
+    },
+    setAyatFilterRange: (s, a) => {
+      if (!a.payload) {
+        s.ayatFilterRange = null;
+        s.ayatFilterActive = false;
+        return;
+      }
+      const [from, to] = a.payload;
+      const min = Math.max(1, Number(from) || 1);
+      const max = Math.max(min, Number(to) || min);
+      s.ayatFilterRange = [min, max];
+      s.ayatFilterActive = true;
+    },
+    resetAyatFilter: (s) => {
+      s.ayatFilterRange = null;
+      s.ayatFilterActive = false;
+    },
+    resetAllFilters: (s) => {
+      s.masteryFilterRange = [0, 100];
+      s.masteryFilterActive = false;
+      s.masteryFilterPreset = "all";
+      s.ayatFilterRange = null;
+      s.ayatFilterActive = false;
+      save("quran_masteryFilterRange", [0, 100]);
+      save("quran_masteryFilterActive", false);
+      save("quran_masteryFilterPreset", "all");
+    },
+  },
+  extraReducers: (builder) => {
+    builder.addCase("quran/setSelectedSurah", (s) => {
+      s.ayatFilterRange = null;
+      s.ayatFilterActive = false;
+    });
   },
 });
 
@@ -205,6 +290,10 @@ const playerSlice = createSlice({
     playingPart:    null,   // { ayatNum, partId } | null
     partCurrentMs:  0,
     localPlaying:   null,
+    // Audio silence / masking for revision (requires word timestamps)
+    silenceWordsToRevise: load("quran_silenceWordsToRevise", false),
+    silenceMode:          load("quran_silenceMode", "mute"), // "mute" | "skip"
+    customSilencedWordsMap: {}, // { [surahNum:ayatNum]: [wordIndex, ...] }
   },
   reducers: {
     setIsMainPlaying:  (s, a) => { s.isMainPlaying  = a.payload; },
@@ -232,6 +321,43 @@ const playerSlice = createSlice({
     setPartCurrentMs:  (s, a) => { s.partCurrentMs  = a.payload; },
     setLocalPlaying:   (s, a) => { s.localPlaying   = a.payload; },
     restoreLoopBySurahFromCloud: (s, a) => { s.loopBySurah = a.payload; },
+    // Silence / Revision audio reducers
+    setSilenceWordsToRevise: (s, a) => {
+      s.silenceWordsToRevise = Boolean(a.payload);
+      save("quran_silenceWordsToRevise", s.silenceWordsToRevise);
+    },
+    setSilenceMode: (s, a) => {
+      const mode = a.payload === "skip" ? "skip" : "mute";
+      s.silenceMode = mode;
+      save("quran_silenceMode", mode);
+    },
+    toggleCustomSilencedWord: (s, a) => {
+      const { key, wordIndex } = a.payload || {};
+      if (!key || typeof wordIndex !== "number") return;
+      const current = s.customSilencedWordsMap[key] || [];
+      const next = current.includes(wordIndex)
+        ? current.filter(i => i !== wordIndex)
+        : [...current, wordIndex].sort((x, y) => x - y);
+      s.customSilencedWordsMap = { ...s.customSilencedWordsMap, [key]: next };
+    },
+    setCustomSilencedWords: (s, a) => {
+      const { key, wordIndices } = a.payload || {};
+      if (!key) return;
+      s.customSilencedWordsMap = {
+        ...s.customSilencedWordsMap,
+        [key]: Array.isArray(wordIndices) ? [...wordIndices].sort((x, y) => x - y) : []
+      };
+    },
+    clearCustomSilencedWords: (s, a) => {
+      const key = a.payload;
+      if (!key) {
+        s.customSilencedWordsMap = {};
+      } else {
+        const copy = { ...s.customSilencedWordsMap };
+        delete copy[key];
+        s.customSilencedWordsMap = copy;
+      }
+    },
   },
 });
 
@@ -488,6 +614,12 @@ export const sel = {
   activePageCoran: (s) => s.ui.activePageCoran,
   activeHizbCoran: (s) => s.ui.activeHizbCoran,
   activeJuzCoran:  (s) => s.ui.activeJuzCoran,
+  masteryFilterRange:  (s) => s.ui.masteryFilterRange || [0, 100],
+  masteryFilterActive: (s) => !!s.ui.masteryFilterActive,
+  masteryFilterPreset: (s) => s.ui.masteryFilterPreset || "all",
+  ayatFilterRange:     (s) => s.ui.ayatFilterRange || null,
+  ayatFilterActive:    (s) => !!s.ui.ayatFilterActive,
+  isAnyFilterActive:   (s) => !!s.ui.masteryFilterActive || !!s.ui.ayatFilterActive,
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,
@@ -521,6 +653,9 @@ export const sel = {
   playingPart:     (s) => s.player.playingPart,
   partCurrentMs:   (s) => s.player.partCurrentMs,
   localPlaying:    (s) => s.player.localPlaying,
+  silenceWordsToRevise: (s) => !!s.player.silenceWordsToRevise,
+  silenceMode:          (s) => s.player.silenceMode || "mute",
+  customSilencedWordsMap: (s) => s.player.customSilencedWordsMap || {},
   // learn
   learnData:       (s) => s.learn.data,
   partSelectAyat:  (s) => s.learn.partSelectAyat,

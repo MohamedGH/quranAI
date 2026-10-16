@@ -1,6 +1,14 @@
 import { normalizeArabic } from "../../utils/recitationDiff.js";
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useSelector } from "react-redux";
+import { sel } from "../../store.js";
 import { fixChars } from "../../utils/reciterAudio.js";
+import {
+  resolveSilencedWordIndices,
+  computeSilenceIntervals,
+  findActiveSilenceInterval,
+  calculateNextPlaybackTime,
+} from "../../utils/audioSilenceManager.js";
 
 export function QAyatPlayer({ ayatText, timestamps, parts, audioUrl, learnData }) {
   const [currentMs,  setCurrentMs]  = React.useState(0);
@@ -10,6 +18,17 @@ export function QAyatPlayer({ ayatText, timestamps, parts, audioUrl, learnData }
   const audioRef = React.useRef(null);
   const rafRef   = React.useRef(null);
   const containerRef = React.useRef(null);
+
+  // Audio silence state from Redux
+  const silenceWordsToRevise = useSelector(sel.silenceWordsToRevise);
+  const silenceMode          = useSelector(sel.silenceMode);
+
+  const silenceIntervals = useMemo(() => {
+    if (!silenceWordsToRevise || !timestamps?.words) return [];
+    const totalWords = timestamps.words.length;
+    const silencedIndices = resolveSilencedWordIndices({ ld: learnData, totalWords });
+    return computeSilenceIntervals(timestamps, silencedIndices);
+  }, [silenceWordsToRevise, timestamps, learnData]);
 
   const PART_COLORS  = ["rgba(201,168,76,.22)","rgba(62,184,160,.18)","rgba(111,207,154,.18)","rgba(224,90,90,.15)","rgba(200,120,255,.15)"];
   const PART_BORDERS = ["var(--gold)","var(--teal)","var(--green)","var(--red)","#c878ff"];
@@ -40,9 +59,27 @@ export function QAyatPlayer({ ayatText, timestamps, parts, audioUrl, learnData }
           });
         });
       }
+      // Apply silence / masking for revision
+      if (silenceWordsToRevise && silenceIntervals.length > 0) {
+        const activeInterval = findActiveSilenceInterval(ms, silenceIntervals);
+        if (activeInterval) {
+          if (silenceMode === "skip") {
+            const nextTime = calculateNextPlaybackTime(ms, silenceIntervals, 20);
+            a.currentTime = nextTime / 1000;
+          } else {
+            if (!a.muted) a.muted = true;
+          }
+        } else {
+          if (a.muted) a.muted = false;
+        }
+      } else {
+        if (a.muted) a.muted = false;
+      }
+
       // Stop at range end
       if (rangeEnd !== null && ms >= rangeEnd) {
         a.pause();
+        if (a.muted) a.muted = false;
         setIsPlaying(false);
         setRangeEnd(null);
         setRangeStart(null);
@@ -55,7 +92,10 @@ export function QAyatPlayer({ ayatText, timestamps, parts, audioUrl, learnData }
     rafRef.current = requestAnimationFrame(tick);
   };
 
-  const stopRaf = () => { cancelAnimationFrame(rafRef.current); };
+  const stopRaf = () => {
+    cancelAnimationFrame(rafRef.current);
+    if (audioRef.current?.muted) audioRef.current.muted = false;
+  };
 
   // Clear highlight
   const clearHighlight = () => {

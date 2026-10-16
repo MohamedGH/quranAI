@@ -48,6 +48,11 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       const page =
         pageRaw != null && Number.isFinite(pageRaw) ? Math.max(1, Math.min(604, pageRaw)) : null;
 
+      const silenceReviseParam = params.get("silenceRevise") || params.get("silence");
+      const silenceRevise = silenceReviseParam === "1" || silenceReviseParam === "true";
+      const silenceModeParam = params.get("silenceMode");
+      const silenceMode = silenceModeParam === "skip" ? "skip" : silenceModeParam === "mute" ? "mute" : null;
+
       return Object.freeze({
         activePage,
         surahNum,
@@ -58,6 +63,8 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
         isCrossSurah,
         juz,
         page,
+        silenceRevise,
+        silenceMode,
       });
     },
     Object.freeze({
@@ -70,6 +77,8 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       isCrossSurah: false,
       juz: null,
       page: null,
+      silenceRevise: false,
+      silenceMode: null,
     }),
     { code: ERROR_CODES.ROUTE_PARSE_ERROR, pathname, search }
   ).value;
@@ -87,6 +96,8 @@ export const buildQuranRoute = ({
   isCrossSurah = false,
   juz = null,
   page = null,
+  silenceRevise = false,
+  silenceMode = null,
 } = {}) => {
   if (activePage && activePage !== "quran") {
     return `/${activePage}`;
@@ -113,6 +124,12 @@ export const buildQuranRoute = ({
   }
   if (page != null && Number.isFinite(Number(page))) {
     query.set("page", String(Math.max(1, Math.min(604, Math.round(Number(page))))));
+  }
+  if (silenceRevise) {
+    query.set("silenceRevise", "1");
+  }
+  if (silenceMode && (silenceMode === "skip" || silenceMode === "mute")) {
+    query.set("silenceMode", silenceMode);
   }
 
   const qs = query.toString();

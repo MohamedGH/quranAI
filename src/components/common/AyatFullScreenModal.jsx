@@ -5,6 +5,8 @@ import { isQalqala, getMaddType, isIzhar, isIdgham, isTafkhim, isTarqiq, getTajw
 import { arabicRoot } from "../../utils/arabicUtils.js";
 import { segmentAyatTranslation } from "../../utils/translationUtils.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
+import { masteryColor } from "./Mastery.jsx";
+import { SilenceReviseControl } from "../audio/SilenceReviseControl.jsx";
 
 // Helper for Arabic Eastern digits: e.g. 108 -> ۱۰۸
 function toArabicDigits(num) {
@@ -49,6 +51,7 @@ export function AyatFullScreenModal({
   masteryPercent = 0,
   loopActive = false,
   onToggleLoop,
+  onFastBackward,
   reciterName = "",
   recitators = [],
   recitatorId = "",
@@ -2350,21 +2353,23 @@ export function AyatFullScreenModal({
               </button>
             )}
 
-            {masteryPercent > 0 && (
+            {masteryPercent != null && (
               <div
                 style={{
                   fontSize: 9,
                   letterSpacing: 0.8,
                   padding: "5px 10px",
                   borderRadius: 20,
-                  border: "1px solid rgba(201,168,76,0.4)",
-                  color: "var(--gold2)",
+                  border: `1px solid ${masteryColor(masteryPercent)}`,
+                  color: masteryColor(masteryPercent),
                   fontFamily: "'Cinzel',serif",
-                  background: "rgba(201,168,76,0.08)",
+                  background: masteryPercent > 0 ? "rgba(201,168,76,0.08)" : "rgba(255,255,255,0.03)",
                   display: "flex",
                   alignItems: "center",
                   minHeight: 34,
+                  fontWeight: 700,
                 }}
+                title={`Maîtrise du verset : ${masteryPercent}%`}
               >
                 MAÎTRISE: {masteryPercent}%
               </div>
@@ -2606,6 +2611,44 @@ export function AyatFullScreenModal({
               ↺
             </button>
           )}
+
+          {/* Fast Backward button (Retour rapide 5s) */}
+          {onFastBackward && (
+            <button
+              id="btn-fs-fast-backward"
+              onClick={onFastBackward}
+              title="Reculer de 5 secondes (Retour rapide / Fast backward)"
+              style={{
+                width: isMobile ? 38 : 36,
+                height: isMobile ? 38 : 36,
+                borderRadius: "50%",
+                border: "1px solid rgba(255,255,255,0.15)",
+                background: "rgba(255,255,255,0.04)",
+                color: "var(--text2)",
+                fontSize: 13,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all .15s",
+              }}
+            >
+              ⏪
+            </button>
+          )}
+
+          {/* Silence mots à réviser (bouton discret 1-clic) */}
+          <SilenceReviseControl
+            compact={true}
+            buttonSize={isMobile ? 38 : 36}
+            timestamps={timestamps}
+            ld={ld}
+            ayatText={ayat?.text || ""}
+            surahNum={selectedSurah?.number}
+            ayatNum={currentAyatNum}
+            isPlaying={isPlaying}
+            onLoadTimestamps={onLoadTimestamps}
+          />
 
           {/* Main Play / Pause Trigger */}
           <button

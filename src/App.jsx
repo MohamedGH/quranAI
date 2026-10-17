@@ -45,6 +45,8 @@ import { ConcordancePage } from "./components/pages/ConcordancePage.jsx";
 import { QuranBookPage } from "./components/pages/QuranBookPage.jsx";
 import { QuranBook3DPage } from "./components/pages/QuranBook3DPage.jsx";
 import { PrononciationPage } from "./components/pages/PrononciationPage.jsx";
+import { RecordingsPage } from "./components/pages/RecordingsPage.jsx";
+
 
 import { Submenu } from "./components/modes/Submenu.jsx";
 import { DecouverteMode } from "./components/modes/DecouverteMode.jsx";
@@ -1924,6 +1926,8 @@ function AppInner({ currentUser, onSignOut }) {
               { id: "dashboard",     icon: "📊", label: "DASH" },
               { id: "collections",   icon: "🗂", label: "COLL." },
               { id: "revision",      icon: "✏",  label: "RÉVISION" },
+              { id: "recordings",    icon: "🎙",  label: "ENREG." },
+
             ].map(({ id, icon, label }) => (
               <button
                 key={id}
@@ -2183,6 +2187,29 @@ function AppInner({ currentUser, onSignOut }) {
                     }, 1200);
                   }
                 }}
+              /></AnimatedPage>
+            } />
+            <Route path="/recordings" element={
+              <AnimatedPage pageKey="recordings"><RecordingsPage
+                onNavigate={(pageOrPath, opts) => {
+                  if (pageOrPath === "quran" && opts) {
+                    navigate(`/quran/${opts.surah}/${opts.ayat}`);
+                    const s = surahs.find(x => x.number === opts.surah);
+                    if (s) {
+                      setSelectedSurah(s);
+                      setTimeout(() => {
+                        const el = ayatRefs.current[opts.ayat];
+                        if (el) { el.scrollIntoView({ behavior:"smooth", block:"center" }); setOpenAyatNum(opts.ayat); }
+                      }, 1200);
+                    }
+                  } else {
+                    navigate("/quran");
+                  }
+                }}
+                showQalqala={showQalqala}
+                showMadd={showMadd}
+                showIzhar={showIzhar}
+                showIdgham={showIdgham}
               /></AnimatedPage>
             } />
             <Route path="/revision" element={

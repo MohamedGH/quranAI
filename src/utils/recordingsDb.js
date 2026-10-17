@@ -41,3 +41,14 @@ export async function deleteRecording(id) {
     tx.onerror = () => rej(tx.error);
   });
 }
+
+export async function getAllRecordings() {
+  const db = await openRecDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => res(req.result || []);
+    req.onerror = () => rej(req.error);
+  });
+}
+

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { sel, uiActions } from "../../store.js";
+import { sel, uiActions, playerActions } from "../../store.js";
 import { masteryColor, computeMastery, computeDisplayedPartMastery } from "./Mastery.jsx";
 import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
@@ -85,6 +85,7 @@ export function SurahHeader({
   const tajweedPalette = useSelector(sel.tajweedPalette) || "classic";
   const tajweedCustomColors = useSelector(sel.tajweedCustomColors) || {};
   const activeTjColors = getActiveTajweedColors(tajweedPalette, tajweedCustomColors);
+  const isCoachEnabled = useSelector(sel.tajweedCoachEnabled);
 
   const masteryFilterRange  = useSelector(sel.masteryFilterRange);
   const masteryFilterActive = useSelector(sel.masteryFilterActive);
@@ -949,6 +950,27 @@ export function SurahHeader({
                 </div>
               </button>
             ))}
+          </div>
+
+          {/* Coach Vocal & Pause Prédictive Tajwid */}
+          <div style={{ margin: "4px 0", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 8 }}>
+            <button
+              onClick={() => dispatch(playerActions.setTajweedCoachEnabled(!isCoachEnabled))}
+              className={`m-tajweed-rule-row ${isCoachEnabled ? 'active' : ''}`}
+              style={{
+                background: isCoachEnabled ? 'rgba(45, 212, 191, 0.16)' : 'rgba(255,255,255,.03)',
+                borderColor: isCoachEnabled ? '#2dd4bf' : 'rgba(255,255,255,.1)',
+              }}
+            >
+              <div className="m-tajweed-rule-left">
+                <span className="m-tajweed-rule-dot" style={{ background: isCoachEnabled ? '#2dd4bf' : 'var(--text3)', boxShadow: isCoachEnabled ? '0 0 8px #2dd4bf88' : 'none' }} />
+                <span className="m-tajweed-rule-arabic" style={{ color: isCoachEnabled ? '#2dd4bf' : undefined }}>🎙 ☪</span>
+                <span className="m-tajweed-rule-sub" style={{ fontWeight: 600 }}>Coach Vocal Tajwid (Pause & Annonce audio)</span>
+              </div>
+              <div className={`m-toggle-switch ${isCoachEnabled ? 'on' : ''}`} style={{ borderColor: isCoachEnabled ? '#2dd4bf' : undefined }}>
+                <div className="m-toggle-knob" style={{ background: isCoachEnabled ? '#2dd4bf' : undefined }} />
+              </div>
+            </button>
           </div>
 
           <div className="m-drawer-footer-actions" style={{ display: "flex", flexDirection: "column", gap: 8 }}>

@@ -294,6 +294,21 @@ const playerSlice = createSlice({
     silenceWordsToRevise: load("quran_silenceWordsToRevise", false),
     silenceMode:          load("quran_silenceMode", "mute"), // "mute" | "skip"
     customSilencedWordsMap: {}, // { [surahNum:ayatNum]: [wordIndex, ...] }
+    // Tajweed Audio Coach (pause & voice announcement before tajweed rules)
+    tajweedCoachEnabled: load("quran_tajweedCoachEnabled", false),
+    tajweedCoachLang: load("quran_tajweedCoachLang", "fr"), // "fr" | "ar" | "both"
+    tajweedCoachAutoResume: load("quran_tajweedCoachAutoResume", true),
+    tajweedCoachDelay: load("quran_tajweedCoachDelay", 1.5),
+    tajweedCoachSound: load("quran_tajweedCoachSound", true),
+    tajweedCoachRulesEnabled: load("quran_tajweedCoachRulesEnabled", {
+      qalqala: true,
+      iqlab: true,
+      ikhfa: true,
+      izhar: true,
+      idgham: true,
+      ghunnah: true,
+      madd: true
+    }),
   },
   reducers: {
     setIsMainPlaying:  (s, a) => { s.isMainPlaying  = a.payload; },
@@ -357,6 +372,36 @@ const playerSlice = createSlice({
         delete copy[key];
         s.customSilencedWordsMap = copy;
       }
+    },
+    setTajweedCoachEnabled: (s, a) => {
+      s.tajweedCoachEnabled = Boolean(a.payload);
+      save("quran_tajweedCoachEnabled", s.tajweedCoachEnabled);
+    },
+    setTajweedCoachLang: (s, a) => {
+      s.tajweedCoachLang = a.payload;
+      save("quran_tajweedCoachLang", s.tajweedCoachLang);
+    },
+    setTajweedCoachAutoResume: (s, a) => {
+      s.tajweedCoachAutoResume = Boolean(a.payload);
+      save("quran_tajweedCoachAutoResume", s.tajweedCoachAutoResume);
+    },
+    setTajweedCoachDelay: (s, a) => {
+      s.tajweedCoachDelay = Number(a.payload);
+      save("quran_tajweedCoachDelay", s.tajweedCoachDelay);
+    },
+    setTajweedCoachSound: (s, a) => {
+      s.tajweedCoachSound = Boolean(a.payload);
+      save("quran_tajweedCoachSound", s.tajweedCoachSound);
+    },
+    toggleTajweedCoachRule: (s, a) => {
+      const ruleKey = a.payload;
+      if (!ruleKey) return;
+      const current = s.tajweedCoachRulesEnabled?.[ruleKey] ?? true;
+      s.tajweedCoachRulesEnabled = {
+        ...(s.tajweedCoachRulesEnabled || {}),
+        [ruleKey]: !current
+      };
+      save("quran_tajweedCoachRulesEnabled", s.tajweedCoachRulesEnabled);
     },
   },
 });
@@ -656,6 +701,20 @@ export const sel = {
   silenceWordsToRevise: (s) => !!s.player.silenceWordsToRevise,
   silenceMode:          (s) => s.player.silenceMode || "mute",
   customSilencedWordsMap: (s) => s.player.customSilencedWordsMap || {},
+  tajweedCoachEnabled: (s) => !!s.player.tajweedCoachEnabled,
+  tajweedCoachLang: (s) => s.player.tajweedCoachLang || "fr",
+  tajweedCoachAutoResume: (s) => s.player.tajweedCoachAutoResume ?? true,
+  tajweedCoachDelay: (s) => s.player.tajweedCoachDelay ?? 1.5,
+  tajweedCoachSound: (s) => s.player.tajweedCoachSound ?? true,
+  tajweedCoachRulesEnabled: (s) => s.player.tajweedCoachRulesEnabled || {
+    qalqala: true,
+    iqlab: true,
+    ikhfa: true,
+    izhar: true,
+    idgham: true,
+    ghunnah: true,
+    madd: true
+  },
   // learn
   learnData:       (s) => s.learn.data,
   partSelectAyat:  (s) => s.learn.partSelectAyat,

@@ -86,6 +86,13 @@ import {
 import { DATA_KEYS, getDeviceId, mergeLearnData, mergeActivity, mergeCollections } from "./utils/syncUtils.js";
 import { useToRevise } from "./utils/toRevise.js";
 import { SilenceReviseControl } from "./components/audio/SilenceReviseControl.jsx";
+import { TajweedAudioCoachControl } from "./components/audio/TajweedAudioCoachControl.jsx";
+import { TajweedCoachAnnouncementHUD } from "./components/audio/TajweedCoachAnnouncementHUD.jsx";
+import {
+  extractAyatTajweedTimestamps,
+  speakTajweedAnnouncement,
+  stopTajweedSpeech
+} from "./utils/tajweedAudioCoach.js";
 import {
   hasAyatTimestamps,
   resolveSilencedWordIndices,
@@ -514,6 +521,7 @@ function AppInner({ currentUser, onSignOut }) {
   const setActiveHizbCoran = useCallback((v) => dispatch(uiActions.setActiveHizbCoran(typeof v === 'function' ? v(store.getState().ui.activeHizbCoran) : v)), [dispatch]);
   const setActiveJuzCoran  = useCallback((v) => dispatch(uiActions.setActiveJuzCoran(typeof v === 'function' ? v(store.getState().ui.activeJuzCoran) : v)), [dispatch]);
   const [crossPlayingAyat, setCrossPlayingAyat] = useState(null);
+  const currentMainAyat = crossPlayingAyat || ayats[mainAyatIdx];
   const [surahMeta,   setSurahMeta]   = useState(null); // { hizb, juz, page, wordCount }
   const [pageMeta,    setPageMeta]    = useState(null); // { hizb, juz, ayatCount, wordCount } for current page
   const getAyatHizb = useCallback((a) => {
@@ -835,14 +843,125 @@ function AppInner({ currentUser, onSignOut }) {
   useEffect(() => { silenceWordsToReviseRef.current = silenceWordsToRevise; }, [silenceWordsToRevise]);
   useEffect(() => { silenceModeRef.current = silenceMode; }, [silenceMode]);
 
+  // Tajweed Audio Coach (Pause prédictive & annonce vocale des règles)
+  const isCoachEnabled        = useSelector(sel.tajweedCoachEnabled);
+  const coachLang             = useSelector(sel.tajweedCoachLang);
+  const autoResume            = useSelector(sel.tajweedCoachAutoResume);
+  const delaySec              = useSelector(sel.tajweedCoachDelay);
+  const playSound             = useSelector(sel.tajweedCoachSound);
+  const coachRulesMap         = useSelector(sel.tajweedCoachRulesEnabled);
+
+  const tajweedCoachEnabledRef    = useRef(isCoachEnabled);
+  const tajweedCoachLangRef       = useRef(coachLang);
+  const tajweedCoachAutoResumeRef = useRef(autoResume);
+  const tajweedCoachDelayRef      = useRef(delaySec);
+  const tajweedCoachSoundRef      = useRef(playSound);
+  const coachRulesMapRef          = useRef(coachRulesMap);
+
+  useEffect(() => { tajweedCoachEnabledRef.current = isCoachEnabled; }, [isCoachEnabled]);
+  useEffect(() => { tajweedCoachLangRef.current = coachLang; }, [coachLang]);
+  useEffect(() => { tajweedCoachAutoResumeRef.current = autoResume; }, [autoResume]);
+  useEffect(() => { tajweedCoachDelayRef.current = delaySec; }, [delaySec]);
+  useEffect(() => { tajweedCoachSoundRef.current = playSound; }, [playSound]);
+  useEffect(() => { coachRulesMapRef.current = coachRulesMap; }, [coachRulesMap]);
+
+  const [activeTajweedAnnouncement, setActiveTajweedAnnouncement] = useState(null);
+  const [isTajweedSpeaking, setIsTajweedSpeaking]                 = useState(false);
+  const isTajweedPausedRef            = useRef(false);
+  const announcedTajweedRuleIdsRef    = useRef(new Set());
+  const currentAyatTajweedRulesRef    = useRef([]);
+
+  const handleResumeFromTajweedCoach = useCallback((force = false) => {
+    // Prevent premature resume if speech synthesis is still actively speaking
+    if (!force && typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.speaking) {
+      return;
+    }
+    stopTajweedSpeech();
+    setActiveTajweedAnnouncement(null);
+    setIsTajweedSpeaking(false);
+    isTajweedPausedRef.current = false;
+    if (mainAudioRef.current && isPlayingRef.current) {
+      mainAudioRef.current.play().catch(() => {});
+    }
+  }, []);
+
+  // Sync Tajweed rules for current playing ayat
+  useEffect(() => {
+    if (currentMainAyat?.text) {
+      const sn = selectedSurah?.number;
+      const an = currentMainAyat.numberInSurah;
+      const tsKey = sn != null && an != null ? tskey(sn, an) : null;
+      const ts = (tsKey && timestampsMapRef.current[tsKey]) || (tsKey && timestampsMap[tsKey]) || null;
+      currentAyatTajweedRulesRef.current = extractAyatTajweedTimestamps(currentMainAyat.text, ts);
+      announcedTajweedRuleIdsRef.current.clear();
+      setActiveTajweedAnnouncement(null);
+      setIsTajweedSpeaking(false);
+      isTajweedPausedRef.current = false;
+    } else {
+      currentAyatTajweedRulesRef.current = [];
+      announcedTajweedRuleIdsRef.current.clear();
+      setActiveTajweedAnnouncement(null);
+      setIsTajweedSpeaking(false);
+      isTajweedPausedRef.current = false;
+    }
+  }, [currentMainAyat, selectedSurah, tsVersion]);
+
   // Maintenir ref miroir de isMainPlaying (utilisable dans les callbacks)
   useEffect(() => { isPlayingRef.current = isMainPlaying; }, [isMainPlaying]);
 
   const startRaf = useCallback(() => {
     const tick = () => {
       if (mainAudioRef.current) {
+        // Enforce pause if Tajweed coach is active and speaking
+        if (isTajweedPausedRef.current && !mainAudioRef.current.paused) {
+          mainAudioRef.current.pause();
+        }
+
         const ms = mainAudioRef.current.currentTime * 1000;
         mainCurrentMsRef.current = ms;
+
+        // Tajweed Audio Coach: Pause when coming near a Tajweed rule and announce it vocally
+        if (
+          tajweedCoachEnabledRef.current &&
+          currentAyatTajweedRulesRef.current.length > 0 &&
+          !isTajweedPausedRef.current
+        ) {
+          const upcoming = currentAyatTajweedRulesRef.current.find(r => {
+            if (r.startMs == null) return false;
+            if (announcedTajweedRuleIdsRef.current.has(r.id)) return false;
+            // Check if user enabled this specific rule in settings
+            const map = coachRulesMapRef.current || {};
+            const ruleCategory = r.ruleId?.includes('madd') ? 'madd' : (r.ruleId === 'idgham_ghunnah' || r.ruleId === 'idgham_no_ghunnah' ? 'idgham' : r.ruleId);
+            if (map[ruleCategory] === false) {
+              announcedTajweedRuleIdsRef.current.add(r.id); // skip checking this rule again
+              return false;
+            }
+            const diff = r.startMs - ms;
+            return diff <= 420 && diff >= -150;
+          });
+
+          if (upcoming) {
+            isTajweedPausedRef.current = true;
+            announcedTajweedRuleIdsRef.current.add(upcoming.id);
+            if (mainAudioRef.current) {
+              mainAudioRef.current.pause();
+            }
+            setActiveTajweedAnnouncement(upcoming);
+            setIsTajweedSpeaking(true);
+
+            speakTajweedAnnouncement(
+              upcoming,
+              tajweedCoachLangRef.current,
+              tajweedCoachSoundRef.current
+            ).then(() => {
+              // Spoken audio of rule has completely finished!
+              setIsTajweedSpeaking(false);
+              if (tajweedCoachAutoResumeRef.current && tajweedCoachDelayRef.current <= 0.1) {
+                handleResumeFromTajweedCoach(true);
+              }
+            });
+          }
+        }
 
         // Audio Silence / Masking on Words to Revise (strictly requires timestamps)
         if (silenceWordsToReviseRef.current && currentSilenceIntervalsRef.current?.length > 0) {
@@ -1804,7 +1923,6 @@ function AppInner({ currentUser, onSignOut }) {
     s.name.includes(search) || String(s.number).includes(search)
   ), [surahs, search]);
 
-  const currentMainAyat = crossPlayingAyat || ayats[mainAyatIdx];
   const audioUrl = a => a ? `${getAudioBase()}/${a.number}.mp3` : "";
 
   // Calcul dynamique des intervalles de silence pour le verset en cours
@@ -4122,6 +4240,19 @@ function AppInner({ currentUser, onSignOut }) {
                     });
                   }}
                 />
+                {/* Coach Vocal Tajwid (pause prédictive & annonce vocale des règles) */}
+                <TajweedAudioCoachControl
+                  compact={true}
+                  timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
+                  ayatText={currentMainAyat?.text || ""}
+                  surahNum={selectedSurah.number}
+                  ayatNum={currentMainAyat?.numberInSurah}
+                  onLoadTimestamps={() => {
+                    loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
+                      if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
+                    });
+                  }}
+                />
                 {/* Reciter picker */}
                 <button
                   className={`ctrl-btn reciter-trigger${showRecitPanel ? " loop-on" : ""}`}
@@ -4312,6 +4443,15 @@ function AppInner({ currentUser, onSignOut }) {
         onClose={() => { setShowArabicKeyboard(false); try { localStorage.setItem('quran_arabic_keyboard', '0'); } catch {} }}
       />
       <OfflineIndicator />
+      {activeTajweedAnnouncement && (
+        <TajweedCoachAnnouncementHUD
+          announcement={activeTajweedAnnouncement}
+          onManualResume={handleResumeFromTajweedCoach}
+          autoResume={autoResume}
+          delaySec={delaySec}
+          isSpeaking={isTajweedSpeaking}
+        />
+      )}
     </>
     </ArabicKeyboardContext.Provider>
   );

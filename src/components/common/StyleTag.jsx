@@ -789,6 +789,14 @@ export const CSS = `
     from { transform: translateY(100%); }
     to { transform: translateY(0); }
   }
+  @keyframes slideUpFade {
+    from { transform: translate(-50%, 20px); opacity: 0; }
+    to { transform: translate(-50%, 0); opacity: 1; }
+  }
+  @keyframes pulseDot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.35; transform: scale(0.8); }
+  }
 
   .m-drawer-handle {
     width: 36px;
@@ -1175,6 +1183,17 @@ export const CSS = `
   .ayat-arabic{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 26px);line-height:2;direction:rtl;text-align:right;flex:1;min-width:0;overflow-wrap:break-word;word-break:break-word;color:var(--text);}
   .char-span{display:inline;transition:color .04s;color:var(--text);}
   .char-span.char-done{color:var(--teal);}
+  .char-span.char-tajweed-focus{
+    background-color: var(--tj-active-color, #fbbf24) !important;
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    border-radius: 4px !important;
+    box-shadow: 0 0 14px var(--tj-active-color, #fbbf24) !important;
+    padding: 1px 4px !important;
+    display: inline-block !important;
+    transform: scale(1.15) !important;
+    animation: pulseDot 1.2s infinite ease-in-out !important;
+  }
   .ayat-learned-badge{font-size:9px;letter-spacing:1px;color:var(--green);padding:2px 8px;border:1px solid var(--green);border-radius:10px;margin-top:6px;flex-shrink:0;align-self:flex-start;}
 
   /* ── AYAT MASTERY WIDGET (TOUJOURS VISIBLE) ── */

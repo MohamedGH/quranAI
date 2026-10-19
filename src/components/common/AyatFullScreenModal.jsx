@@ -7,6 +7,7 @@ import { segmentAyatTranslation } from "../../utils/translationUtils.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
 import { masteryColor } from "./Mastery.jsx";
 import { SilenceReviseControl } from "../audio/SilenceReviseControl.jsx";
+import { TajweedAudioCoachControl } from "../audio/TajweedAudioCoachControl.jsx";
 
 // Helper for Arabic Eastern digits: e.g. 108 -> ۱۰۸
 function toArabicDigits(num) {
@@ -2647,6 +2648,16 @@ export function AyatFullScreenModal({
             surahNum={selectedSurah?.number}
             ayatNum={currentAyatNum}
             isPlaying={isPlaying}
+            onLoadTimestamps={onLoadTimestamps}
+          />
+
+          {/* Coach Vocal Tajwid */}
+          <TajweedAudioCoachControl
+            compact={true}
+            timestamps={timestamps}
+            ayatText={ayat?.text || ""}
+            surahNum={selectedSurah?.number}
+            ayatNum={currentAyatNum}
             onLoadTimestamps={onLoadTimestamps}
           />
 

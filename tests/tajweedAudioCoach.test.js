@@ -69,4 +69,19 @@ describe("Tajweed Audio Coach Engine", () => {
     expect(iqlab.matchedWith).toBe('ب');
     expect(iqlab.speechFr).toContain('Mîm');
   });
+
+  it("manages tajweedCoachRulesEnabled in store and toggles specific rules", async () => {
+    const { store, playerActions, sel } = await import("../src/store.js");
+    const initialRules = sel.tajweedCoachRulesEnabled(store.getState());
+    expect(initialRules).toBeDefined();
+    expect(initialRules.qalqala).toBe(true);
+
+    // Toggle qalqala off
+    store.dispatch(playerActions.toggleTajweedCoachRule("qalqala"));
+    expect(sel.tajweedCoachRulesEnabled(store.getState()).qalqala).toBe(false);
+
+    // Toggle qalqala back on
+    store.dispatch(playerActions.toggleTajweedCoachRule("qalqala"));
+    expect(sel.tajweedCoachRulesEnabled(store.getState()).qalqala).toBe(true);
+  });
 });

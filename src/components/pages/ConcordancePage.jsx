@@ -9,6 +9,7 @@ import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
 
 
 function ConcordGroup({ group, debouncedQ, onNavigate, isLinked, toggleLink, textCache, onOpenCollModal, ayatInCollectionsFn }) {
+  if (!group || !Array.isArray(group.ayats)) return null;
   const [open, setOpen] = useState(true);
   const [ayatsWithText, setAyatsWithText] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -16,8 +17,9 @@ function ConcordGroup({ group, debouncedQ, onNavigate, isLinked, toggleLink, tex
   useEffect(() => {
     let cancelled = false;
     async function loadText() {
+      if (!group?.surahNum || !group?.ayats) return;
       if (textCache.current[group.surahNum]) {
-        setAyatsWithText(group.ayats.map(a => ({
+        setAyatsWithText((group.ayats || []).map(a => ({
           ...a,
           text: textCache.current[group.surahNum][a.numberInSurah] || a.text || ''
         })));
@@ -28,13 +30,13 @@ function ConcordGroup({ group, debouncedQ, onNavigate, isLinked, toggleLink, tex
         const textMap = await fetchSurahSimple(group.surahNum);
         textCache.current[group.surahNum] = textMap;
         if (!cancelled) {
-          setAyatsWithText(group.ayats.map(a => ({
+          setAyatsWithText((group.ayats || []).map(a => ({
             ...a,
             text: textMap[a.numberInSurah] || a.text || ''
           })));
         }
       } catch (e) {
-        if (!cancelled) setAyatsWithText(group.ayats);
+        if (!cancelled) setAyatsWithText(group.ayats || []);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -57,6 +59,9 @@ function ConcordGroup({ group, debouncedQ, onNavigate, isLinked, toggleLink, tex
     });
   };
 
+  const ayatsCount = (group?.ayats || []).length;
+  const displayAyats = (ayatsWithText?.length ? ayatsWithText : group?.ayats) || [];
+
   return (
     <div className="concord-surah-group" style={{ background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:10, overflow:'hidden' }}>
       <div
@@ -65,7 +70,7 @@ function ConcordGroup({ group, debouncedQ, onNavigate, isLinked, toggleLink, tex
       >
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <span style={{ fontSize:10, fontFamily:"'Cinzel',serif", color:'var(--gold2)' }}>{group.surahNum}. {group.surahEn}</span>
-          <span style={{ fontSize:9, color:'var(--text3)' }}>({group.ayats.length} verset{group.ayats.length > 1 ? 's' : ''})</span>
+          <span style={{ fontSize:9, color:'var(--text3)' }}>({ayatsCount} verset{ayatsCount > 1 ? 's' : ''})</span>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:16, color:'var(--gold)' }}>{group.surahAr}</span>
@@ -77,9 +82,10 @@ function ConcordGroup({ group, debouncedQ, onNavigate, isLinked, toggleLink, tex
           {loading ? (
             <div style={{ padding:10, textAlign:'center', color:'var(--text3)', fontSize:9 }}>Chargement des textes…</div>
           ) : (
-            (ayatsWithText.length ? ayatsWithText : group.ayats).map(ayat => {
+            displayAyats.map(ayat => {
               const linked = isLinked ? isLinked(group.surahNum, ayat.numberInSurah) : false;
-              const inColls = ayatInCollectionsFn ? ayatInCollectionsFn(group.surahNum, ayat.numberInSurah) : [];
+              const inColls = (ayatInCollectionsFn ? ayatInCollectionsFn(group.surahNum, ayat.numberInSurah) : []) || [];
+              const hasInColls = inColls.length > 0;
               return (
                 <div
                   key={ayat.numberInSurah}
@@ -104,7 +110,7 @@ function ConcordGroup({ group, debouncedQ, onNavigate, isLinked, toggleLink, tex
                     {onOpenCollModal && (
                       <button
                         onClick={() => onOpenCollModal(group.surahNum, ayat.numberInSurah)}
-                        style={{ fontSize:10, padding:'3px 6px', borderRadius:6, background: inColls.length ? 'rgba(200,120,255,.2)' : 'transparent', border:'1px solid ' + (inColls.length ? '#c878ff' : 'var(--border2)'), color: inColls.length ? '#c878ff' : 'var(--text3)', cursor:'pointer' }}
+                        style={{ fontSize:10, padding:'3px 6px', borderRadius:6, background: hasInColls ? 'rgba(200,120,255,.2)' : 'transparent', border:'1px solid ' + (hasInColls ? '#c878ff' : 'var(--border2)'), color: hasInColls ? '#c878ff' : 'var(--text3)', cursor:'pointer' }}
                         title="Ajouter à une collection"
                       >
                         📁

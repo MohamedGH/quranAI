@@ -858,6 +858,9 @@ export function getTajweedStyleForChar(fullChars, fullIdx, options = {}) {
     showMadd,
     showIzhar,
     showIdgham,
+    showIkhfa,
+    showIqlab,
+    showGhunnah,
     showTajweedTone,
     palette = 'classic',
     customColors = {},
@@ -872,9 +875,9 @@ export function getTajweedStyleForChar(fullChars, fullIdx, options = {}) {
   const maddType    = showMadd ? getMaddType(fullChars, fullIdx) : null;
   const izharOn     = showIzhar && isIzhar(fullChars, fullIdx);
   const idghamOn    = showIdgham && isIdgham(fullChars, fullIdx);
-  const iqlabOn     = (showIzhar || showIdgham) && isIqlab(fullChars, fullIdx);
-  const ikhfaOn     = (showIzhar || showIdgham) && isIkhfa(fullChars, fullIdx);
-  const ghunnahOn   = isGhunnah(fullChars, fullIdx);
+  const iqlabOn     = showIqlab && isIqlab(fullChars, fullIdx);
+  const ikhfaOn     = showIkhfa && isIkhfa(fullChars, fullIdx);
+  const ghunnahOn   = showGhunnah && isGhunnah(fullChars, fullIdx);
   const tafkhimOn   = showTajweedTone && isTafkhim(fullChars, fullIdx);
   const tarqiqOn    = showTajweedTone && isTarqiq(fullChars, fullIdx);
 

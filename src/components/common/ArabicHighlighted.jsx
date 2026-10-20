@@ -19,7 +19,7 @@ import {
 // ─── PlayingArabicHighlighted — zero-rerender highlight via DOM refs ─────────
 // Renders chars once, then updates active/done classes via direct RAF + DOM refs only.
 export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlighted({
-  text, timestamps, mode, playingPart, ld, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone,
+  text, timestamps, mode, playingPart, ld, showQalqala, showMadd, showIzhar, showIdgham, showIkhfa, showIqlab, showGhunnah, showTajweedTone,
   palette, customColors, colors
 }) {
   const containerRef  = useRef(null);
@@ -150,6 +150,9 @@ export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlig
       showMadd={showMadd}
       showIzhar={showIzhar}
       showIdgham={showIdgham}
+      showIkhfa={showIkhfa}
+      showIqlab={showIqlab}
+      showGhunnah={showGhunnah}
       showTajweedTone={showTajweedTone}
       palette={palette}
       customColors={customColors}
@@ -159,7 +162,7 @@ export const PlayingArabicHighlighted = React.memo(function PlayingArabicHighlig
 });
 
 export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHighlighted({
-  text, timestamps, currentMs, rangeStartMs, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone,
+  text, timestamps, currentMs, rangeStartMs, showQalqala, showMadd, showIzhar, showIdgham, showIkhfa, showIqlab, showGhunnah, showTajweedTone,
   palette, customColors, colors
 }, ref) {
   let storePalette = "classic";
@@ -175,7 +178,7 @@ export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHigh
   const activeCustom = customColors || storeCustomColors;
   const activeColors = colors || getActiveTajweedColors(activePalette, activeCustom);
 
-  const hasTajweed = showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone;
+  const hasTajweed = showQalqala || showMadd || showIzhar || showIdgham || showIkhfa || showIqlab || showGhunnah || showTajweedTone;
 
   // Pre-compute tajweed styles and fixed chars once per text/timestamps+tajweed change
   // We reconstruct the full sequence across all words so cross-word rules (Idgham, Madd Munfasil) are accurately detected.
@@ -210,6 +213,9 @@ export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHigh
       showMadd,
       showIzhar,
       showIdgham,
+      showIkhfa,
+      showIqlab,
+      showGhunnah,
       showTajweedTone,
       colors: activeColors,
     };
@@ -224,7 +230,7 @@ export const ArabicHighlighted = React.memo(React.forwardRef(function ArabicHigh
         return { char: c.char, start: c.start, end: c.end, tajStyle };
       });
     });
-  }, [text, timestamps, showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone, hasTajweed, activeColors]);
+  }, [text, timestamps, showQalqala, showMadd, showIzhar, showIdgham, showIkhfa, showIqlab, showGhunnah, showTajweedTone, hasTajweed, activeColors]);
 
   if (!wordData || wordData.length === 0) {
     return <div className="ayat-arabic" ref={ref}>{text}</div>;

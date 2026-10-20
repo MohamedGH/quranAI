@@ -7,6 +7,11 @@ import { useToRevise } from "../../utils/toRevise.js";
 import { ToRevisePanel } from "../revision/ToRevisePanel.jsx";
 import { MasteryBadge } from "../common/Mastery.jsx";
 import { FirstContactQuestion } from "../questions/FirstContactQuestion.jsx";
+import {
+  extractAyatTajweedTimestamps,
+  speakTajweedAnnouncement,
+  stopTajweedSpeech
+} from "../../utils/tajweedAudioCoach.js";
 
 export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timestamps }) {
   const words = ayat.text ? ayat.text.split(' ').filter(Boolean) : [];
@@ -17,6 +22,26 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
   const [showQuiz, setShowQuiz]         = React.useState(false); // inline first contact quiz
   const audioRef = React.useRef(null);
   const seqTokenRef = React.useRef(0); // cancels a stale sequential playback when superseded
+
+  // Extract all Tajweed rules present in this ayat
+  const tajweedRules = React.useMemo(() => {
+    return extractAyatTajweedTimestamps(ayat?.text || "", timestamps);
+  }, [ayat?.text, timestamps]);
+
+  const [showTajweedRules, setShowTajweedRules] = React.useState(true);
+  const [activeTajweedId, setActiveTajweedId]   = React.useState(null);
+
+  // Group rules by word index for inline word badges
+  const wordTajweedMap = React.useMemo(() => {
+    const map = {};
+    tajweedRules.forEach(r => {
+      if (r.wordIdx != null) {
+        if (!map[r.wordIdx]) map[r.wordIdx] = [];
+        map[r.wordIdx].push(r);
+      }
+    });
+    return map;
+  }, [tajweedRules]);
 
   const hasToRevise = !!setLData;
   const { revise, isActive, selWords, selParts, selChars, toggleAll, toggleWord: toggleWordBase, toggleChar, togglePart } =
@@ -72,16 +97,67 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
     setPlayingWord(null);
   };
 
-  React.useEffect(() => () => { seqTokenRef.current += 1; audioRef.current?.pause(); }, []);
+  React.useEffect(() => () => { seqTokenRef.current += 1; audioRef.current?.pause(); stopTajweedSpeech(); }, []);
 
   // In RTL the first word rendered (index 0) is the rightmost → that's the first word read
   // words[0] = first word in reading order, so displayed number = i + 1
   const displayNum = (i) => i + 1;
   const isRevealed = (i) => i <= revealedUpTo;
 
-  const revealNext = () => setRevealedUpTo(v => Math.min(v + 1, words.length - 1));
-  const reset      = () => setRevealedUpTo(-1);
+  const revealNext = () => {
+    const nextIdx = Math.min(revealedUpTo + 1, words.length - 1);
+    setRevealedUpTo(nextIdx);
+    if (wordTajweedMap[nextIdx]?.length > 0) {
+      setActiveTajweedId(wordTajweedMap[nextIdx][0].id);
+    }
+    if (hasTs && audioUrl) {
+      playWordsSequential(nextIdx, nextIdx);
+    }
+  };
+  const reset      = () => {
+    setRevealedUpTo(-1);
+    setActiveTajweedId(null);
+  };
   const revealAll  = () => setRevealedUpTo(words.length - 1);
+
+  // Render word with authentic Tajweed styling on the concerned letters
+  const renderWordWithTajweed = (wordText, wordIdx) => {
+    const rules = wordTajweedMap[wordIdx];
+    if (!rules || rules.length === 0) return wordText;
+
+    const chars = [...wordText];
+    return chars.map((ch, cIdx) => {
+      const match = rules.find(r => {
+        const targetBare = r.char ? r.char.replace(/[ً-ّْٟ]/g, "") : "";
+        const matchedBare = r.matchedWith ? r.matchedWith.replace(/[ً-ّْٟ]/g, "") : "";
+        return (targetBare && ch === targetBare) || (matchedBare && ch === matchedBare) || (r.ruleId === 'iqlab' && ch === "ۢ");
+      });
+
+      if (match) {
+        const color = match.color || '#fbbf24';
+        const isThisRuleActive = activeTajweedId === match.id;
+        return (
+          <span
+            key={cIdx}
+            title={`${match.ruleNameFr} (${match.char}${match.matchedWith ? ` ➔ ${match.matchedWith}` : ''})`}
+            style={{
+              color: color,
+              fontWeight: 800,
+              textShadow: isThisRuleActive ? `0 0 8px ${color}` : `0 0 3px ${color}66`,
+              borderBottom: `2px solid ${color}`,
+              borderRadius: 2,
+              padding: '0 1px',
+              backgroundColor: isThisRuleActive ? `${color}33` : 'transparent',
+              transition: 'all .2s'
+            }}
+          >
+            {ch}
+          </span>
+        );
+      }
+      return <span key={cIdx}>{ch}</span>;
+    });
+  };
 
   const revealed   = revealedUpTo + 1;
   const hidden     = words.length - revealed;
@@ -162,6 +238,89 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
         </div>
       )}
 
+      {/* Tajweed Rules Summary Banner in Découverte Mode (if any) */}
+      {tajweedRules.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 8,
+          background: 'rgba(251, 191, 36, 0.05)',
+          border: '1px solid rgba(251, 191, 36, 0.22)',
+          borderRadius: 8,
+          padding: '8px 12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 9, letterSpacing: 1.2, color: '#fbbf24', fontFamily: "'Cinzel',serif", fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span>☪</span>
+              <span>TAJWID ({tajweedRules.length}) :</span>
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+              {tajweedRules.map(r => {
+                const isSelected = activeTajweedId === r.id;
+                const rColor = r.color || '#fbbf24';
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTajweedId(r.id);
+                      setShowTajweedRules(true);
+                      if (r.wordIdx != null) {
+                        setRevealedUpTo(Math.max(revealedUpTo, r.wordIdx));
+                        if (hasTs && audioUrl) playWordsSequential(r.wordIdx, r.wordIdx);
+                      }
+                      stopTajweedSpeech();
+                      speakTajweedAnnouncement(r, 'fr', true);
+                    }}
+                    style={{
+                      fontSize: 8,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      background: isSelected ? `${rColor}35` : `${rColor}15`,
+                      border: `1px solid ${isSelected ? rColor : `${rColor}55`}`,
+                      color: rColor,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      boxShadow: isSelected ? `0 0 8px ${rColor}55` : 'none',
+                      transition: 'all .2s'
+                    }}
+                    title={`Cliquer pour écouter la règle et le mot : ${r.ruleNameFr} (${r.char}${r.matchedWith ? ` ➔ ${r.matchedWith}` : ''})`}
+                  >
+                    <span style={{ fontFamily: "'Amiri Quran',serif", fontSize: 13, lineHeight: 1 }}>{r.char}{r.matchedWith ? ` ➔ ${r.matchedWith}` : ''}</span>
+                    <span>·</span>
+                    <span>{r.ruleNameFr}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowTajweedRules(v => !v)}
+            style={{
+              fontSize: 7.5,
+              letterSpacing: 1,
+              padding: '3px 8px',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontFamily: "'Cinzel',serif",
+              background: showTajweedRules ? 'rgba(251, 191, 36, 0.15)' : 'transparent',
+              border: '1px solid rgba(251, 191, 36, 0.35)',
+              color: '#fbbf24',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {showTajweedRules ? '▲ MASQUER DÉTAILS' : '▼ VOIR DÉTAILS TAJWID'}
+          </button>
+        </div>
+      )}
+
       {/* Word display */}
       <div style={{ direction: 'rtl', fontFamily: "'Amiri Quran',serif",
         lineHeight: 2.4, textAlign: 'center', padding: '14px 12px',
@@ -175,6 +334,7 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
           const hasChar = charSel.length > 0;
           const expanded= expandedWord === i;
           const playing = playingWord === i;
+          const isWordTajweedActive = wordTajweedMap[i]?.some(r => r.id === activeTajweedId);
 
           const handleClick = () => {
             if (markMode) {
@@ -185,8 +345,14 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
             if (!rev) {
               const fromIdx = revealedUpTo + 1; // first word newly revealed by this click
               setRevealedUpTo(i);
+              if (wordTajweedMap[i]?.length > 0) {
+                setActiveTajweedId(wordTajweedMap[i][0].id);
+              }
               if (hasTs && audioUrl) playWordsSequential(fromIdx, i);
             } else if (hasTs && audioUrl) {
+              if (wordTajweedMap[i]?.length > 0) {
+                setActiveTajweedId(wordTajweedMap[i][0].id);
+              }
               playWordsSequential(i, i);
             }
           };
@@ -200,20 +366,69 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
                 display: 'inline-block', padding: '3px 9px', borderRadius: 6,
                 fontFamily: "'Amiri Quran',serif", fontSize: rev ? 22 : 20,
                 color: rev ? (marked ? gold2 : playing ? 'var(--teal2)' : 'var(--text1)') : (markMode && marked ? gold2 : 'transparent'),
-                background: rev ? (marked ? 'rgba(201,168,76,.18)' : playing ? 'rgba(62,184,160,.15)' : 'rgba(255,255,255,.03)') : (markMode && marked ? 'rgba(201,168,76,.1)' : 'rgba(255,255,255,.07)'),
-                border: rev ? `1px solid ${marked ? gold : playing ? 'var(--teal)' : 'rgba(255,255,255,.06)'}` : (marked ? `1px solid ${gold}` : '1px solid rgba(255,255,255,.18)'),
+                background: rev
+                  ? (marked ? 'rgba(201,168,76,.18)' : playing ? 'rgba(62,184,160,.15)' : isWordTajweedActive ? 'rgba(251,191,36,.12)' : 'rgba(255,255,255,.03)')
+                  : (markMode && marked ? 'rgba(201,168,76,.1)' : 'rgba(255,255,255,.07)'),
+                border: rev
+                  ? isWordTajweedActive
+                    ? `2px solid ${wordTajweedMap[i][0].color || '#fbbf24'}`
+                    : `1px solid ${marked ? gold : playing ? 'var(--teal)' : 'rgba(255,255,255,.06)'}`
+                  : (marked ? `1px solid ${gold}` : '1px solid rgba(255,255,255,.18)'),
                 minWidth: rev ? 0 : 34, textAlign: 'center',
-                boxShadow: marked ? '0 0 8px rgba(201,168,76,.35)' : playing ? '0 0 6px rgba(62,184,160,.35)' : 'none',
+                boxShadow: isWordTajweedActive
+                  ? `0 0 10px ${wordTajweedMap[i][0].color || '#fbbf24'}88`
+                  : marked
+                  ? '0 0 8px rgba(201,168,76,.35)'
+                  : playing
+                  ? '0 0 6px rgba(62,184,160,.35)'
+                  : 'none',
                 transition: 'all .25s',
               }}>
-                {rev ? w : (markMode && marked ? w : '▪▪▪')}
+                {rev ? renderWordWithTajweed(w, i) : (markMode && marked ? renderWordWithTajweed(w, i) : '▪▪▪')}
               </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
                 <span style={{ fontSize: 7, letterSpacing: .5, lineHeight: 1,
                   color: marked ? gold2 : rev ? 'rgba(255,255,255,.18)' : 'var(--teal2)',
                   fontFamily: "'Cinzel',serif" }}>{num}</span>
                 {marked && (
                   <span style={{ fontSize: 8, color: gold2 }} title="Marqué à réviser">🔖</span>
+                )}
+                {/* Tajweed rule badge if present on this word */}
+                {wordTajweedMap[i] && (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowTajweedRules(true);
+                      const rule = wordTajweedMap[i][0];
+                      setActiveTajweedId(rule.id);
+                      if (!rev) setRevealedUpTo(Math.max(revealedUpTo, i));
+                      if (hasTs && audioUrl) playWordsSequential(i, i);
+                      stopTajweedSpeech();
+                      speakTajweedAnnouncement(rule, 'fr', true);
+                    }}
+                    title={`Règle de Tajwid : ${wordTajweedMap[i].map(r => `${r.ruleNameFr} (${r.char}${r.matchedWith ? ` ➔ ${r.matchedWith}` : ''})`).join(', ')} — Cliquer pour écouter l'explication et le mot`}
+                    style={{
+                      fontSize: 7.5,
+                      padding: '2px 5px',
+                      borderRadius: 4,
+                      background: isWordTajweedActive
+                        ? `${wordTajweedMap[i][0].color || '#fbbf24'}35`
+                        : `${wordTajweedMap[i][0].color || '#fbbf24'}20`,
+                      color: wordTajweedMap[i][0].color || '#fbbf24',
+                      border: `1px solid ${isWordTajweedActive ? (wordTajweedMap[i][0].color || '#fbbf24') : `${wordTajweedMap[i][0].color || '#fbbf24'}66`}`,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 2,
+                      boxShadow: isWordTajweedActive ? `0 0 8px ${wordTajweedMap[i][0].color || '#fbbf24'}66` : 'none',
+                      transition: 'all .2s'
+                    }}
+                  >
+                    <span>☪</span>
+                    <span>{wordTajweedMap[i].map(r => r.ruleNameFr).join(', ')}</span>
+                  </span>
                 )}
                 {/* Letter drill-down toggle trigger */}
                 <button
@@ -257,19 +472,39 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
               </button>
               <div style={{ textAlign: 'right' }}>
                 LETTRES & HARAKAT DE : <span style={{ fontFamily: "'Amiri Quran',serif", fontSize: 16, color: '#fff' }}>{w}</span>
+                {wordTajweedMap[wi] && (
+                  <span style={{ marginRight: 8, fontSize: 9, color: wordTajweedMap[wi][0].color || '#fbbf24', fontWeight: 700 }}>
+                    · ☪ {wordTajweedMap[wi].map(r => `${r.ruleNameFr} (${r.char})`).join(', ')}
+                  </span>
+                )}
               </div>
             </div>
             {clusters.map((c, ci) => {
               const cSel = charSel.includes(ci);
+              const tajweedMatch = wordTajweedMap[wi]?.find(r => {
+                const targetBare = r.char ? r.char.replace(/[ً-ّْٟ]/g, "") : "";
+                const matchedBare = r.matchedWith ? r.matchedWith.replace(/[ً-ّْٟ]/g, "") : "";
+                return (targetBare && c.includes(targetBare)) || (matchedBare && c.includes(matchedBare)) || c.includes("ۢ");
+              });
+              const tColor = tajweedMatch?.color || '#fbbf24';
+
               return (
-                <button key={ci} onClick={() => toggleChar(wi, ci)} style={{
-                  fontFamily: "'Amiri Quran',serif", fontSize: 22,
-                  padding: '4px 10px', minWidth: 36, borderRadius: 6, cursor: 'pointer',
-                  background: cSel ? 'rgba(91,200,245,.25)' : 'rgba(255,255,255,.05)',
-                  border: `1px solid ${cSel ? '#5bc8f5' : 'rgba(255,255,255,.12)'}`,
-                  color: cSel ? '#5bc8f5' : 'var(--text1)',
-                  boxShadow: cSel ? '0 0 6px rgba(91,200,245,.35)' : 'none',
-                  transition: 'all .12s' }}>{c}</button>
+                <div key={ci} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <button onClick={() => toggleChar(wi, ci)} style={{
+                    fontFamily: "'Amiri Quran',serif", fontSize: 22,
+                    padding: '4px 10px', minWidth: 36, borderRadius: 6, cursor: 'pointer',
+                    background: cSel ? 'rgba(91,200,245,.25)' : tajweedMatch ? `${tColor}18` : 'rgba(255,255,255,.05)',
+                    border: `1px solid ${cSel ? '#5bc8f5' : tajweedMatch ? tColor : 'rgba(255,255,255,.12)'}`,
+                    color: cSel ? '#5bc8f5' : tajweedMatch ? tColor : 'var(--text1)',
+                    boxShadow: cSel ? '0 0 6px rgba(91,200,245,.35)' : tajweedMatch ? `0 0 6px ${tColor}44` : 'none',
+                    fontWeight: tajweedMatch ? 700 : 400,
+                    transition: 'all .12s' }}>{c}</button>
+                  {tajweedMatch && (
+                    <span style={{ fontSize: 6.5, color: tColor, fontWeight: 700, lineHeight: 1 }} title={tajweedMatch.ruleNameFr}>
+                      ☪ {tajweedMatch.ruleNameFr}
+                    </span>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -334,6 +569,230 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
               border: '1px solid var(--border2)', borderRadius: 8,
               color: 'var(--text3)', fontSize: 9, letterSpacing: 1,
               fontFamily: "'Cinzel',serif", cursor: 'pointer' }}>TOUT</button>
+        )}
+      </div>
+
+      {/* Tajweed Rules Section in Découverte Mode */}
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.02)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: 10,
+        padding: '12px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        marginTop: 2
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, color: '#fbbf24' }}>☪</span>
+            <span style={{ fontSize: 9, letterSpacing: 1.5, color: '#fbbf24', fontFamily: "'Cinzel',serif", fontWeight: 700 }}>
+              RÈGLES DE TAJWID DU VERSET
+            </span>
+            <span style={{
+              fontSize: 8,
+              padding: '2px 8px',
+              borderRadius: 12,
+              background: tajweedRules.length > 0 ? 'rgba(251, 191, 36, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+              color: tajweedRules.length > 0 ? '#fbbf24' : 'var(--text3)',
+              fontWeight: 700
+            }}>
+              {tajweedRules.length > 0 ? `${tajweedRules.length} règle${tajweedRules.length > 1 ? 's' : ''}` : '0 règle'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowTajweedRules(v => !v)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text3)',
+              fontSize: 10,
+              cursor: 'pointer',
+              padding: '2px 6px',
+              fontWeight: 600
+            }}
+          >
+            {showTajweedRules ? '▲ MASQUER' : '▼ AFFICHER'}
+          </button>
+        </div>
+
+        {showTajweedRules && (
+          tajweedRules.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
+              {tajweedRules.map((rule) => {
+                const isSelected = activeTajweedId === rule.id;
+                const color = rule.color || '#fbbf24';
+                return (
+                  <div
+                    key={rule.id}
+                    style={{
+                      background: isSelected ? `${color}18` : 'rgba(15, 23, 42, 0.6)',
+                      border: `1px solid ${isSelected ? color : 'rgba(255, 255, 255, 0.08)'}`,
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      transition: 'all .2s'
+                    }}
+                  >
+                    {/* Header: Letter Badge + Rule Name */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span
+                          style={{
+                            minWidth: 26,
+                            height: 26,
+                            borderRadius: 6,
+                            background: `${color}25`,
+                            color: color,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontFamily: "'Amiri Quran', serif",
+                            fontSize: 16,
+                            fontWeight: 700,
+                            border: `1px solid ${color}66`,
+                            padding: '0 4px'
+                          }}
+                        >
+                          {rule.char}{rule.matchedWith ? ` ➔ ${rule.matchedWith}` : ''}
+                        </span>
+                        <div>
+                          <strong style={{ fontSize: 12, color: 'var(--text, #f8fafc)' }}>
+                            {rule.ruleNameFr}
+                          </strong>
+                          <span style={{ fontSize: 11, color: color, fontFamily: "'Amiri Quran', serif", marginRight: 4, marginLeft: 4 }}>
+                            ({rule.ruleNameAr})
+                          </span>
+                        </div>
+                      </div>
+
+                      {rule.wordIdx != null && (
+                        <span style={{ fontSize: 8.5, color: 'var(--text3, #94a3b8)', fontFamily: "'Cinzel', serif" }}>
+                          Mot #{rule.wordIdx + 1}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Letter info */}
+                    <div style={{ fontSize: 11, color: 'var(--text2, #cbd5e1)' }}>
+                      Lettre : <strong style={{ color: color }}>{rule.letterNameFr}</strong> ({rule.char})
+                      {rule.matchedWith && (
+                        <span> devant <strong style={{ color: color }}>{rule.matchedLetterNameFr || rule.matchedWith}</strong></span>
+                      )}
+                    </div>
+
+                    {/* Word in Arabic with letter highlighted */}
+                    {rule.wordText && (
+                      <div style={{
+                        direction: 'rtl',
+                        fontFamily: "'Amiri Quran', serif",
+                        fontSize: 17,
+                        color: 'var(--text, #f8fafc)',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        textAlign: 'center',
+                        border: '1px solid rgba(255, 255, 255, 0.06)'
+                      }}>
+                        {[...rule.wordText].map((ch, idx) => {
+                          const targetBare = rule.char ? rule.char.replace(/[ً-ّْٟ]/g, "") : "";
+                          const matchedBare = rule.matchedWith ? rule.matchedWith.replace(/[ً-ّْٟ]/g, "") : "";
+                          const isMatch = (targetBare && ch === targetBare) || (matchedBare && ch === matchedBare) || ch === "ۢ";
+                          return (
+                            <span
+                              key={idx}
+                              style={{
+                                color: isMatch ? color : 'inherit',
+                                fontWeight: isMatch ? 800 : 400,
+                                backgroundColor: isMatch ? `${color}33` : 'transparent',
+                                borderRadius: isMatch ? 3 : 0,
+                                padding: isMatch ? '0 2px' : 0
+                              }}
+                            >
+                              {ch}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    {(rule.ruleDescFr || rule.descFr) && (
+                      <div style={{ fontSize: 10, color: 'var(--text3, #94a3b8)', lineHeight: 1.35 }}>
+                        {rule.ruleDescFr || rule.descFr}
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      {rule.wordIdx != null && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTajweedId(rule.id);
+                            setRevealedUpTo(Math.max(revealedUpTo, rule.wordIdx));
+                            if (hasTs && audioUrl) playWordsSequential(rule.wordIdx, rule.wordIdx);
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                            color: 'var(--text2, #cbd5e1)',
+                            fontSize: 9,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 4
+                          }}
+                          title="Révéler et écouter le mot"
+                        >
+                          <span>▶</span>
+                          <span>Écouter le mot</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTajweedId(rule.id);
+                          stopTajweedSpeech();
+                          speakTajweedAnnouncement(rule, 'fr', true);
+                        }}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          background: `${color}25`,
+                          border: `1px solid ${color}88`,
+                          color: color,
+                          fontSize: 9,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4
+                        }}
+                        title="Écouter l'explication vocale de la règle"
+                      >
+                        <span>🎙</span>
+                        <span>Énoncé</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: 'var(--text3, #94a3b8)', padding: '6px 4px' }}>
+              Aucune règle majeure de Tajwid particulière détectée sur ce verset (récitation standard fluide).
+            </div>
+          )
         )}
       </div>
 

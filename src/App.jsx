@@ -24,6 +24,7 @@ import { PWAInstallButton } from "./components/common/PWAInstallButton.jsx";
 import { OfflineIndicator } from "./components/common/OfflineIndicator.jsx";
 import { getPlayableAudioUrl } from "./utils/offlineManager.js";
 import { AyatFullScreenModal } from "./components/common/AyatFullScreenModal.jsx";
+import { ArchitecturePdfModal } from "./components/common/ArchitecturePdfModal.jsx";
 import { SurahHeader } from "./components/common/SurahHeader.jsx";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "./utils/safeStorage.js";
@@ -563,6 +564,7 @@ function AppInner({ currentUser, onSignOut }) {
 
   const [showRappel, setShowRappel] = useState(false);
   const [showScheduledReminders, setShowScheduledReminders] = useState(false);
+  const [showArchitectureModal, setShowArchitectureModal] = useState(false);
   const [activeReminderToast, setActiveReminderToast] = useState(null);
   const [aideMemoireClickModes, setAideMemoireClickModes] = useState({});
 
@@ -2257,6 +2259,32 @@ function AppInner({ currentUser, onSignOut }) {
                     <div className="surah-name-ar">{s.name}</div>
                   </div>
                 ))}
+            </div>
+
+            <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)", background: "rgba(15, 23, 42, 0.5)" }}>
+              <button
+                type="button"
+                onClick={() => { setShowArchitectureModal(true); setSidebarOpen(false); }}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  background: "rgba(45, 212, 191, 0.12)",
+                  border: "1px solid rgba(45, 212, 191, 0.4)",
+                  color: "#2dd4bf",
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  cursor: "pointer",
+                  letterSpacing: 0.5
+                }}
+              >
+                <span>📐</span>
+                <span>DOSSIER D'ARCHITECTURE & PATTERNS (PDF)</span>
+              </button>
             </div>
           </aside>
 
@@ -4452,6 +4480,10 @@ function AppInner({ currentUser, onSignOut }) {
           isSpeaking={isTajweedSpeaking}
         />
       )}
+      <ArchitecturePdfModal
+        isOpen={showArchitectureModal}
+        onClose={() => setShowArchitectureModal(false)}
+      />
     </>
     </ArabicKeyboardContext.Provider>
   );

@@ -13,6 +13,7 @@ import { TajweedExercice } from "./TajweedExercice.jsx";
 import { AyatMemorisationWorkflow } from "../memorisation/AyatMemorisationWorkflow.jsx";
 import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 import { computeMastery, masteryColor } from "../common/Mastery.jsx";
+import { scanAyatTajweed } from "../../utils/tajweedRules.js";
 
 export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive, translationLang, ayatTranslation, wbwWords, onFullScreen }) {
   const [copied, setCopied] = useState(false);
@@ -22,9 +23,18 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
+  const ayatTajweedCount = React.useMemo(() => {
+    return scanAyatTajweed(ayat?.text || "").length;
+  }, [ayat?.text]);
+
   const PRIMARY_MODES = [
     { id: "lecture",       label: "LECTURE" },
-    { id: "decouverte",    label: "👁 DÉCOUVERTE" },
+    {
+      id: "decouverte",
+      label: "👁 DÉCOUVERTE",
+      badge: ayatTajweedCount > 0 ? `☪ ${ayatTajweedCount}` : null,
+      badgeTitle: `${ayatTajweedCount} règle${ayatTajweedCount > 1 ? 's' : ''} de Tajwid sur ce verset`
+    },
     { id: "progression",   label: "🎯 MÉMORISATION", highlight: !!ld?.memorisationState?.stepProgress },
     { id: "apprentissage", label: "✂ APPRENTISSAGE" },
     { id: "tajweed",       label: "☪ TAJWEED" },
@@ -133,7 +143,27 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
               onClick={() => { setSubmenuMode(m.id); setShowMoreMenu(false); }}
               style={submenuMode !== m.id && m.highlight ? { color: "var(--gold2)" } : undefined}
             >
-              {m.label}
+              <span>{m.label}</span>
+              {m.badge && (
+                <span
+                  title={m.badgeTitle}
+                  style={{
+                    marginLeft: 5,
+                    fontSize: 7.5,
+                    padding: "1px 5px",
+                    borderRadius: 10,
+                    background: submenuMode === m.id ? "rgba(251, 191, 36, 0.28)" : "rgba(251, 191, 36, 0.14)",
+                    border: "1px solid rgba(251, 191, 36, 0.45)",
+                    color: "#fbbf24",
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    display: "inline-flex",
+                    alignItems: "center"
+                  }}
+                >
+                  {m.badge}
+                </span>
+              )}
             </button>
           ))}
 

@@ -9,6 +9,7 @@ import { LearningEvolutionChart } from "../common/LearningEvolutionChart.jsx";
 import { MasteryTimelineWidget } from "../common/MasteryTimelineWidget.jsx";
 import { fetchSurahSimple } from "../../utils/reciterAudio.js";
 import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
+import { AyatMetadataExplorer } from "../dashboard/AyatMetadataExplorer.jsx";
 
 export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, onSetGoal, onRecordActivity, surahStats, surahTextCache = {}, onOpenReminders }) {
   const today = new Date();
@@ -159,19 +160,20 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
 
   // ── Dashboard layout (drag/resize/add/remove) ──────────────────────────────
   const ALL_WIDGETS = [
-    { id:"kpis",       label:"VUE D'ENSEMBLE & KPIS",       defaultSize:2 },
-    { id:"evolution",  label:"ÉVOLUTION DE L'APPRENTISSAGE",defaultSize:2 },
-    { id:"repartition",label:"RÉPARTITION DU CORAN",        defaultSize:1 },
-    { id:"week",       label:"ACTIVITÉ (7 DERNIERS JOURS)",  defaultSize:1 },
-    { id:"timeline",   label:"MAÎTRISE DANS LE TEMPS (30J)",defaultSize:2 },
-    { id:"calendrier", label:"CALENDRIER D'ACTIVITÉ",        defaultSize:2 },
-    { id:"objectifs",  label:"OBJECTIFS & SÉRIE",           defaultSize:1 },
-    { id:"sourates",   label:"SOURATES ÉTUDIÉES",           defaultSize:1 },
-    { id:"heatmap",    label:"HEATMAP D'ACTIVITÉ (7 SEM.)", defaultSize:2 },
-    { id:"top",        label:"TOP SOURATES",                defaultSize:1 },
-    { id:"recents",    label:"ACTIVITÉ RÉCENTE",            defaultSize:1 },
-    { id:"citation",   label:"CITATION",                    defaultSize:2 },
-    { id:"export",     label:"EXPORT / IMPORT",             defaultSize:2 },
+    { id:"kpis",          label:"VUE D'ENSEMBLE & KPIS",       defaultSize:2 },
+    { id:"ayat_metadata", label:"MÉTADONNÉES HISTORIQUES & RÉVISIONS", defaultSize:2 },
+    { id:"evolution",     label:"ÉVOLUTION DE L'APPRENTISSAGE",defaultSize:2 },
+    { id:"repartition",   label:"RÉPARTITION DU CORAN",        defaultSize:1 },
+    { id:"week",          label:"ACTIVITÉ (7 DERNIERS JOURS)",  defaultSize:1 },
+    { id:"timeline",      label:"MAÎTRISE DANS LE TEMPS (30J)",defaultSize:2 },
+    { id:"calendrier",    label:"CALENDRIER D'ACTIVITÉ",        defaultSize:2 },
+    { id:"objectifs",     label:"OBJECTIFS & SÉRIE",           defaultSize:1 },
+    { id:"sourates",      label:"SOURATES ÉTUDIÉES",           defaultSize:1 },
+    { id:"heatmap",       label:"HEATMAP D'ACTIVITÉ (7 SEM.)", defaultSize:2 },
+    { id:"top",           label:"TOP SOURATES",                defaultSize:1 },
+    { id:"recents",       label:"ACTIVITÉ RÉCENTE",            defaultSize:1 },
+    { id:"citation",      label:"CITATION",                    defaultSize:2 },
+    { id:"export",        label:"EXPORT / IMPORT",             defaultSize:2 },
   ];
 
   const loadLayout = () => {
@@ -225,6 +227,14 @@ export function DashboardPage({ learnData, surahs, onNavigate, goals, activity, 
         globalMasteryPct={globalMasteryPct}
         onNavigate={onNavigate}
       />;
+      case "ayat_metadata": return (
+        <AyatMetadataExplorer
+          learnData={learnData}
+          surahs={surahs}
+          surahTextCache={surahTextCache}
+          onNavigate={onNavigate}
+        />
+      );
       case "evolution": return readySecondary ? (
         <LearningEvolutionChart
           learnData={learnData}

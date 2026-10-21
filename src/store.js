@@ -426,12 +426,57 @@ const learnSlice = createSlice({
     setLearnEntry: (s, a) => {
       // a.payload = { key: "surahNum:ayatNum", value: {...} }
       const prev = s.data[a.payload.key] || {};
+      const nextVal = a.payload.value || {};
       const now  = new Date().toISOString();
+
+      // Track read dates history & milestones
+      const prevReadDates = Array.isArray(prev.readDates) ? prev.readDates : [];
+      const readCountIncreased = (nextVal.readCount || 0) > (prev.readCount || 0);
+      const readDates = readCountIncreased ? [...prevReadDates.slice(-49), now] : (nextVal.readDates || prevReadDates);
+      const firstReadAt = prev.firstReadAt || (readCountIncreased || (nextVal.readCount || 0) > 0 ? (prev.createdAt || now) : undefined);
+      const lastReadAt = readCountIncreased ? now : (nextVal.lastReadAt || prev.lastReadAt || (firstReadAt ? now : undefined));
+
+      // Track learning milestones (first vs last)
+      const justLearned = nextVal.learned && !prev.learned;
+      const firstLearnedAt = prev.firstLearnedAt || (justLearned ? now : (nextVal.learned ? (prev.learnedAt || now) : undefined));
+      const lastLearnedAt = justLearned ? now : (nextVal.lastLearnedAt || prev.lastLearnedAt || (nextVal.learned ? (prev.learnedAt || now) : undefined));
+      const learnedAt = justLearned ? now : (prev.learnedAt || (nextVal.learned ? now : undefined));
+
+      // Track part cut milestones
+      const prevPartsCount = (prev.parts || []).length;
+      const nextPartsCount = (nextVal.parts || []).length;
+      const partsIncreased = nextPartsCount > prevPartsCount;
+      const firstCutAt = prev.firstCutAt || (nextPartsCount > 0 ? (prev.firstCutAt || now) : undefined);
+      const lastCutAt = partsIncreased ? now : (nextVal.lastCutAt || prev.lastCutAt || (nextPartsCount > 0 ? now : undefined));
+
+      // Track words learned milestones
+      const prevWCount = Object.keys(prev.wordsLearned || {}).filter(k => prev.wordsLearned[k]).length;
+      const nextWCount = Object.keys(nextVal.wordsLearned || {}).filter(k => nextVal.wordsLearned[k]).length;
+      const wordsIncreased = nextWCount > prevWCount;
+      const firstWordLearnedAt = prev.firstWordLearnedAt || (nextWCount > 0 ? (prev.firstWordLearnedAt || now) : undefined);
+      const lastWordLearnedAt = wordsIncreased ? now : (nextVal.lastWordLearnedAt || prev.lastWordLearnedAt || (nextWCount > 0 ? now : undefined));
+
+      // Track toRevise milestones
+      const justToRevise = !prev.toRevise && !!nextVal.toRevise;
+      const firstRevisedAt = prev.firstRevisedAt || (justToRevise ? now : (nextVal.toRevise ? now : undefined));
+      const lastRevisedAt = justToRevise ? now : (nextVal.lastRevisedAt || prev.lastRevisedAt || (nextVal.toRevise ? now : undefined));
+
       const value = {
-        ...a.payload.value,
+        ...nextVal,
         updatedAt: now,
         createdAt: prev.createdAt || now,
-        learnedAt: a.payload.value.learned && !prev.learned ? now : (prev.learnedAt || (a.payload.value.learned ? now : undefined)),
+        learnedAt,
+        firstLearnedAt,
+        lastLearnedAt,
+        readDates,
+        firstReadAt,
+        lastReadAt,
+        firstCutAt,
+        lastCutAt,
+        firstWordLearnedAt,
+        lastWordLearnedAt,
+        firstRevisedAt,
+        lastRevisedAt,
       };
       s.data = { ...s.data, [a.payload.key]: value };
       save("quran_learnData", s.data);

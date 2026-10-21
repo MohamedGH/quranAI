@@ -88,6 +88,17 @@ export function mergeLearnData(base, incoming) {
             : val.updatedAt
           : b.updatedAt || val.updatedAt,
       readCount: Math.max(b.readCount || 0, val.readCount || 0),
+      firstReadAt: b.firstReadAt && val.firstReadAt ? (b.firstReadAt < val.firstReadAt ? b.firstReadAt : val.firstReadAt) : (b.firstReadAt || val.firstReadAt),
+      lastReadAt: b.lastReadAt && val.lastReadAt ? (b.lastReadAt > val.lastReadAt ? b.lastReadAt : val.lastReadAt) : (b.lastReadAt || val.lastReadAt),
+      readDates: Array.from(new Set([...(b.readDates || []), ...(val.readDates || [])])).sort().slice(-50),
+      firstLearnedAt: b.firstLearnedAt && val.firstLearnedAt ? (b.firstLearnedAt < val.firstLearnedAt ? b.firstLearnedAt : val.firstLearnedAt) : (b.firstLearnedAt || val.firstLearnedAt),
+      lastLearnedAt: b.lastLearnedAt && val.lastLearnedAt ? (b.lastLearnedAt > val.lastLearnedAt ? b.lastLearnedAt : val.lastLearnedAt) : (b.lastLearnedAt || val.lastLearnedAt),
+      firstCutAt: b.firstCutAt && val.firstCutAt ? (b.firstCutAt < val.firstCutAt ? b.firstCutAt : val.firstCutAt) : (b.firstCutAt || val.firstCutAt),
+      lastCutAt: b.lastCutAt && val.lastCutAt ? (b.lastCutAt > val.lastCutAt ? b.lastCutAt : val.lastCutAt) : (b.lastCutAt || val.lastCutAt),
+      firstWordLearnedAt: b.firstWordLearnedAt && val.firstWordLearnedAt ? (b.firstWordLearnedAt < val.firstWordLearnedAt ? b.firstWordLearnedAt : val.firstWordLearnedAt) : (b.firstWordLearnedAt || val.firstWordLearnedAt),
+      lastWordLearnedAt: b.lastWordLearnedAt && val.lastWordLearnedAt ? (b.lastWordLearnedAt > val.lastWordLearnedAt ? b.lastWordLearnedAt : val.lastWordLearnedAt) : (b.lastWordLearnedAt || val.lastWordLearnedAt),
+      firstRevisedAt: b.firstRevisedAt && val.firstRevisedAt ? (b.firstRevisedAt < val.firstRevisedAt ? b.firstRevisedAt : val.firstRevisedAt) : (b.firstRevisedAt || val.firstRevisedAt),
+      lastRevisedAt: b.lastRevisedAt && val.lastRevisedAt ? (b.lastRevisedAt > val.lastRevisedAt ? b.lastRevisedAt : val.lastRevisedAt) : (b.lastRevisedAt || val.lastRevisedAt),
       parts: Object.values(partsMap),
       recitAttempts: Object.values(attemptsMap)
         .sort((a, z) => (a.date < z.date ? -1 : 1))

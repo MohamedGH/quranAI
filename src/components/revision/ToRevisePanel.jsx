@@ -4,6 +4,7 @@ import { sel, playerActions } from "../../store.js";
 import { useToRevise } from "../../utils/toRevise.js";
 import { splitArabicWords, splitArabicChars } from "../../utils/arabicUtils.js";
 import { computeMastery, MasteryBar } from "../common/Mastery.jsx";
+import { getReviseTimeColor, getWordReviseDate } from "../../utils/reviseColorGradient.js";
 
 export function ToRevisePanel({ ayat, surahNum, ld, setLData }) {
   const dispatch = useDispatch();
@@ -50,14 +51,26 @@ export function ToRevisePanel({ ayat, surahNum, ld, setLData }) {
               const sel     = selWords.includes(i);
               const expanded= expandedWord === i;
               const charSel = selChars[i] || [];
+              const wDate   = sel ? getWordReviseDate(ld, i) : null;
+              const timeColor = sel ? getReviseTimeColor(wDate) : null;
+
+              const wordBorder = expanded ? '#5bc8f5' : sel ? timeColor.rgbaBorder : 'rgba(255,255,255,.1)';
+              const wordBg     = sel ? timeColor.rgbaBg : 'rgba(255,255,255,.03)';
+              const wordColor  = sel ? timeColor.hex : 'var(--text2)';
+              const wordGlow   = sel ? timeColor.rgbaGlow : 'none';
+
               return (
-                <div key={i} style={{ display:'flex', alignItems:'stretch', borderRadius:6, overflow:'hidden',
-                  border:`1px solid ${expanded ? '#5bc8f5' : sel ? gold : 'rgba(255,255,255,.1)'}`,
-                  background: sel ? 'rgba(201,168,76,.15)' : 'rgba(255,255,255,.03)' }}>
+                <div key={i} title={sel ? `À réviser depuis : ${timeColor.timeLabel} (${timeColor.days} j)` : 'Cliquer pour marquer à réviser'} style={{
+                  display:'flex', alignItems:'stretch', borderRadius:6, overflow:'hidden',
+                  border:`1px solid ${wordBorder}`,
+                  background: wordBg,
+                  boxShadow: wordGlow,
+                  transition:'all .2s' }}>
                   <button onClick={() => toggleWord(i)} style={{
                     fontFamily:"'Amiri Quran',serif", fontSize:18, padding:'4px 10px',
                     background:'transparent', border:'none', cursor:'pointer',
-                    color: sel ? gold2 : 'var(--text2)' }}>{w}</button>
+                    color: wordColor,
+                    fontWeight: sel ? 700 : 400 }}>{w}</button>
                   <button onClick={() => setExpandedWord(expanded ? null : i)}
                     style={{ padding:'0 7px', cursor:'pointer', border:'none',
                       background: expanded ? 'rgba(91,200,245,.15)' : charSel.length > 0 ? 'rgba(91,200,245,.08)' : 'rgba(255,255,255,.04)',
@@ -69,6 +82,45 @@ export function ToRevisePanel({ ayat, surahNum, ld, setLData }) {
                 </div>
               );
             })}
+          </div>
+
+          {/* Gradient Legend for Time Elapsed */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: "rgba(0,0,0,0.25)",
+            padding: "5px 10px",
+            borderRadius: 6,
+            fontSize: 7.5,
+            color: "var(--text3)",
+            letterSpacing: 0.8,
+            fontFamily: "'Cinzel',serif",
+            flexWrap: "wrap",
+            gap: 6
+          }}>
+            <span style={{ color: "var(--text2)" }}>COULEUR SELON TEMPS ÉCOULÉ :</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ffffff", border: "1px solid #ddd" }} />
+                <span>Blanc (Récent)</span>
+              </span>
+              <span>→</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fef08a" }} />
+                <span>Jaune (~3j)</span>
+              </span>
+              <span>→</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fb923c" }} />
+                <span>Orange (~7j)</span>
+              </span>
+              <span>→</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444" }} />
+                <span style={{ color: "#ef4444", fontWeight: 700 }}>Rouge (&gt;14j Urgent)</span>
+              </span>
+            </div>
           </div>
           {/* Inline char picker — shown below word row when a word is expanded */}
           {expandedWord !== null && (() => {

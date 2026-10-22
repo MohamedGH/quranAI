@@ -1180,6 +1180,8 @@ export const CSS = `
   .ayat-main:hover{background:rgba(255,255,255,.02);}
   .ayat-number-badge{width:32px;height:32px;border:1px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text3);flex-shrink:0;margin-top:4px;transition:all var(--transition);font-weight:600;}
   .ayat-playing .ayat-number-badge{border-color:var(--gold);color:var(--gold);box-shadow:0 0 12px rgba(201,168,76,.3);}
+  .ayat-page-badge{font-family:'Cinzel',serif;font-size:7px;font-weight:700;letter-spacing:.6px;padding:1px 5px;border-radius:6px;background:rgba(200,120,255,.12);border:1px solid rgba(200,120,255,.35);color:#c878ff;white-space:nowrap;line-height:1.2;cursor:default;transition:all var(--transition);}
+  .ayat-page-badge:hover{background:rgba(200,120,255,.24);border-color:#c878ff;color:#fff;}
   .ayat-arabic{font-family:'Amiri Quran',serif;font-size:var(--ayat-font-size, 26px);line-height:2;direction:rtl;text-align:right;flex:1;min-width:0;overflow-wrap:break-word;word-break:break-word;color:var(--text);}
   .char-span{display:inline;transition:color .04s;color:var(--text);}
   .char-span.char-done{color:var(--teal);}

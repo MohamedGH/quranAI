@@ -12,6 +12,7 @@ import {
   speakTajweedAnnouncement,
   stopTajweedSpeech
 } from "../../utils/tajweedAudioCoach.js";
+import { getReviseTimeColor, getWordReviseDate } from "../../utils/reviseColorGradient.js";
 
 export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timestamps }) {
   const words = ayat.text ? ayat.text.split(' ').filter(Boolean) : [];
@@ -357,28 +358,38 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
             }
           };
 
+          const wDate = marked ? getWordReviseDate(ld, i) : null;
+          const timeColor = marked ? getReviseTimeColor(wDate) : null;
+          const markedColor = timeColor ? timeColor.hex : gold2;
+          const markedBg = timeColor ? timeColor.rgbaBg : 'rgba(201,168,76,.18)';
+          const markedBorder = timeColor ? timeColor.rgbaBorder : gold;
+          const markedGlow = timeColor ? timeColor.rgbaGlow : '0 0 8px rgba(201,168,76,.35)';
+
           return (
             <span key={i}
               onClick={handleClick}
+              title={marked ? `À réviser depuis : ${timeColor?.timeLabel || 'récent'} (${timeColor?.days || 0}j)` : undefined}
               style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
                 gap: 2, cursor: markMode ? 'pointer' : (hasTs && audioUrl) || !rev ? 'pointer' : 'default', userSelect: 'none' }}>
               <span style={{
                 display: 'inline-block', padding: '3px 9px', borderRadius: 6,
                 fontFamily: "'Amiri Quran',serif", fontSize: rev ? 22 : 20,
-                color: rev ? (marked ? gold2 : playing ? 'var(--teal2)' : 'var(--text1)') : (markMode && marked ? gold2 : 'transparent'),
+                color: rev ? (marked ? markedColor : playing ? 'var(--teal2)' : 'var(--text1)') : (markMode && marked ? markedColor : 'transparent'),
                 background: rev
-                  ? (marked ? 'rgba(201,168,76,.18)' : playing ? 'rgba(62,184,160,.15)' : isWordTajweedActive ? 'rgba(251,191,36,.12)' : 'rgba(255,255,255,.03)')
-                  : (markMode && marked ? 'rgba(201,168,76,.1)' : 'rgba(255,255,255,.07)'),
+                  ? (marked ? markedBg : playing ? 'rgba(62,184,160,.15)' : isWordTajweedActive ? 'rgba(251,191,36,.12)' : 'rgba(255,255,255,.03)')
+                  : (markMode && marked ? markedBg : 'rgba(255,255,255,.07)'),
                 border: rev
                   ? isWordTajweedActive
                     ? `2px solid ${wordTajweedMap[i][0].color || '#fbbf24'}`
-                    : `1px solid ${marked ? gold : playing ? 'var(--teal)' : 'rgba(255,255,255,.06)'}`
-                  : (marked ? `1px solid ${gold}` : '1px solid rgba(255,255,255,.18)'),
+                    : marked
+                    ? `1px solid ${markedBorder}`
+                    : `1px solid ${playing ? 'var(--teal)' : 'rgba(255,255,255,.06)'}`
+                  : (marked ? `1px solid ${markedBorder}` : '1px solid rgba(255,255,255,.18)'),
                 minWidth: rev ? 0 : 34, textAlign: 'center',
                 boxShadow: isWordTajweedActive
                   ? `0 0 10px ${wordTajweedMap[i][0].color || '#fbbf24'}88`
                   : marked
-                  ? '0 0 8px rgba(201,168,76,.35)'
+                  ? markedGlow
                   : playing
                   ? '0 0 6px rgba(62,184,160,.35)'
                   : 'none',

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { extractAyatHistoricalMetadata, computeRevisionQueue, computeQuranAggregations } from "../../utils/quranHistoryAnalytics.js";
 import { masteryColor } from "../common/Mastery.jsx";
 import { SURAH_INFO } from "../../utils/arabicUtils.js";
+import { getReviseTimeColor, getWordReviseDate } from "../../utils/reviseColorGradient.js";
 
 /**
  * AyatHistoryModal — Detailed lifecycle inspector for a specific Ayat.
@@ -254,17 +255,25 @@ export function AyatHistoryModal({ surahNum, ayatNum, learnData, surahTextCache 
                       <div>
                         <strong style={{ color: "var(--gold2)" }}>Mots à réviser ({meta.reviseWordList.length}) : </strong>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4, direction: "rtl" }}>
-                          {meta.reviseWordList.map((w, idx) => (
-                            <span key={idx} style={{
-                              fontFamily: "'Amiri Quran',serif",
-                              fontSize: 16,
-                              padding: "2px 8px",
-                              borderRadius: 4,
-                              background: "rgba(255,159,67,.18)",
-                              border: "1px solid #ff9f43",
-                              color: "var(--gold2)",
-                            }}>{w}</span>
-                          ))}
+                          {meta.reviseWordList.map((w, idx) => {
+                            const origWi = meta.reviseWordIndices[idx];
+                            const wDate = getWordReviseDate(ld, origWi) || meta.lastRevisedAt;
+                            const timeColor = getReviseTimeColor(wDate);
+                            return (
+                              <span key={idx}
+                                title={`Marqué depuis : ${timeColor.timeLabel} (${timeColor.days}j)`}
+                                style={{
+                                fontFamily: "'Amiri Quran',serif",
+                                fontSize: 16,
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                background: timeColor.rgbaBg,
+                                border: `1px solid ${timeColor.rgbaBorder}`,
+                                color: timeColor.hex,
+                                boxShadow: timeColor.rgbaGlow,
+                              }}>{w} <span style={{ fontSize: 9, opacity: 0.8, marginRight: 4, fontFamily: "'Cinzel',serif" }}>({timeColor.timeLabel})</span></span>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -592,6 +601,45 @@ export function AyatMetadataExplorer({
             </div>
           </div>
 
+          {/* Color spectrum banner */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: "rgba(0,0,0,0.25)",
+            padding: "7px 12px",
+            borderRadius: 6,
+            fontSize: 8,
+            color: "var(--text3)",
+            letterSpacing: 0.8,
+            fontFamily: "'Cinzel',serif",
+            flexWrap: "wrap",
+            gap: 8,
+          }}>
+            <span style={{ color: "var(--text2)", fontWeight: 700 }}>COULEUR DES MOTS SELON TEMPS ÉCOULÉ :</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ffffff", border: "1px solid #ddd" }} />
+                <span>Blanc (Récent &lt;1j)</span>
+              </span>
+              <span>→</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fef08a" }} />
+                <span>Jaune (~3j)</span>
+              </span>
+              <span>→</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fb923c" }} />
+                <span>Orange (~7j)</span>
+              </span>
+              <span>→</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444" }} />
+                <span style={{ color: "#ef4444", fontWeight: 700 }}>Rouge (&gt;14j Urgent)</span>
+              </span>
+            </div>
+          </div>
+
           {revisionQueue.length === 0 ? (
             <div style={{
               padding: "24px 16px",
@@ -725,17 +773,25 @@ export function AyatMetadataExplorer({
                     </span>
                     {item.reviseScope !== "all" && item.reviseWordList.length > 0 && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, direction: "rtl", marginRight: "auto" }}>
-                        {item.reviseWordList.map((w, wi) => (
-                          <span key={wi} style={{
-                            fontFamily: "'Amiri Quran',serif",
-                            fontSize: 14,
-                            padding: "1px 6px",
-                            background: "rgba(255,159,67,.2)",
-                            border: "1px solid #ff9f43",
-                            borderRadius: 4,
-                            color: "var(--gold2)",
-                          }}>{w}</span>
-                        ))}
+                        {item.reviseWordList.map((w, wi) => {
+                          const origWi = item.reviseWordIndices[wi];
+                          const wDate = getWordReviseDate(learnData[item.key], origWi) || item.reviseDate;
+                          const timeColor = getReviseTimeColor(wDate);
+                          return (
+                            <span key={wi}
+                              title={`Marqué depuis : ${timeColor.timeLabel} (${timeColor.days}j)`}
+                              style={{
+                              fontFamily: "'Amiri Quran',serif",
+                              fontSize: 14,
+                              padding: "2px 7px",
+                              background: timeColor.rgbaBg,
+                              border: `1px solid ${timeColor.rgbaBorder}`,
+                              borderRadius: 4,
+                              color: timeColor.hex,
+                              boxShadow: timeColor.rgbaGlow,
+                            }}>{w} <span style={{ fontSize: 8, opacity: 0.8, marginRight: 3, fontFamily: "'Cinzel',serif" }}>({timeColor.timeLabel})</span></span>
+                          );
+                        })}
                       </div>
                     )}
                     <span style={{ fontSize: 8, color: "var(--text3)", marginLeft: "auto" }}>
@@ -992,11 +1048,19 @@ export function AyatMetadataExplorer({
                     fontWeight: 700,
                   }}>H{h.hizbNumber}</div>
                   <div>
-                    <div style={{ fontSize: 9.5, fontFamily: "'Cinzel',serif", color: "var(--text1)", fontWeight: 700 }}>
-                      HIZB {h.hizbNumber} (Juz {h.juzNumber})
+                    <div style={{ fontSize: 9.5, fontFamily: "'Cinzel',serif", color: "var(--text1)", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>HIZB {h.hizbNumber} (Juz {h.juzNumber})</span>
+                      {(h.bounds?.pageShort || h.pages?.pageShort) && (
+                        <span style={{ fontSize: 7.5, padding: "1px 5px", borderRadius: 4, background: "rgba(200,120,255,.12)", border: "1px solid rgba(200,120,255,.3)", color: "#c878ff", fontWeight: 600 }}>
+                          📖 {h.bounds?.pageShort || h.pages?.pageShort}
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 7.5, color: "var(--text3)" }}>
                       S.{h.bounds?.startSurah}:{h.bounds?.startAyah} → S.{h.bounds?.endSurah}:{h.bounds?.endAyah} ({h.totalAyahs} v.)
+                      {(h.bounds?.pageLabel || h.pages?.pageLabel) && (
+                        <span style={{ marginLeft: 6, color: "var(--teal2)" }}>· {h.bounds?.pageLabel || h.pages?.pageLabel}</span>
+                      )}
                     </div>
                   </div>
                 </div>

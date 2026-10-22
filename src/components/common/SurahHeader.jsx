@@ -1225,7 +1225,7 @@ export function SurahHeader({
               <span className="m-opt-card-icon">۞</span>
               <div className="m-opt-card-text">
                 <span className="m-opt-card-title">MODE HIZB</span>
-                <span className="m-opt-card-desc">Afficher et naviguer par Hizb (1 à 60)</span>
+                <span className="m-opt-card-desc">Afficher et naviguer par Hizb (1 à 60 avec pages Mushaf)</span>
               </div>
               <span className="m-opt-indicator">{hizbMode ? 'ON' : 'OFF'}</span>
             </button>

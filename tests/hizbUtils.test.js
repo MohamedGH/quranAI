@@ -3,6 +3,8 @@ import {
   clampHizbNumber,
   getHizbForSurahAyah,
   getHizbBounds,
+  getHizbPages,
+  HIZB_START_PAGES,
   getHizbSegments,
   getSurahsForHizb,
   isCrossSurahHizb,
@@ -93,5 +95,43 @@ describe('hizbUtils - Cross-Surah Hizb Engine', () => {
     expect(combined[0].isCrossSurahHizb).toBe(true);
     expect(combined[2].surahNumber).toBe(2);
     expect(combined[2].numberInSurah).toBe(1);
+  });
+
+  it('correctly maps Mushaf page spans for Hizbs (getHizbPages & HIZB_START_PAGES)', () => {
+    expect(HIZB_START_PAGES.length).toBe(60);
+    expect(HIZB_START_PAGES[0]).toBe(1);
+    expect(HIZB_START_PAGES[1]).toBe(11);
+    expect(HIZB_START_PAGES[59]).toBe(591);
+
+    const h1Pages = getHizbPages(1);
+    expect(h1Pages.startPage).toBe(1);
+    expect(h1Pages.endPage).toBe(10);
+    expect(h1Pages.totalPages).toBe(10);
+    expect(h1Pages.pageShort).toBe('P.1–10');
+    expect(h1Pages.pageLabel).toBe('Pages 1–10');
+
+    const h2Pages = getHizbPages(2);
+    expect(h2Pages.startPage).toBe(11);
+    expect(h2Pages.endPage).toBe(21);
+    expect(h2Pages.totalPages).toBe(11);
+    expect(h2Pages.pageShort).toBe('P.11–21');
+
+    const h60Pages = getHizbPages(60);
+    expect(h60Pages.startPage).toBe(591);
+    expect(h60Pages.endPage).toBe(604);
+    expect(h60Pages.totalPages).toBe(14);
+    expect(h60Pages.pageShort).toBe('P.591–604');
+  });
+
+  it('enriches getHizbBounds with Mushaf page boundaries', () => {
+    const b1 = getHizbBounds(1);
+    expect(b1.startPage).toBe(1);
+    expect(b1.endPage).toBe(10);
+    expect(b1.pageShort).toBe('P.1–10');
+
+    const b60 = getHizbBounds(60);
+    expect(b60.startPage).toBe(591);
+    expect(b60.endPage).toBe(604);
+    expect(b60.pageShort).toBe('P.591–604');
   });
 });

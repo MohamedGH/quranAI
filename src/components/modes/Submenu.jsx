@@ -215,6 +215,31 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
           {ld?.learned && <span style={{ color: "var(--green)" }}>✓</span>}
         </div>
 
+        {ayat?.page != null && (
+          <div
+            className="submenu-page-chip"
+            title={`Page Mushaf : ${ayat.page} (Verset ${ayat.numberInSurah})`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 3,
+              fontSize: 8,
+              padding: "3px 7px",
+              borderRadius: 6,
+              border: "1px solid rgba(200,120,255,.35)",
+              color: "#c878ff",
+              background: "rgba(200,120,255,.12)",
+              fontFamily: "'Cinzel',serif",
+              fontWeight: 700,
+              flexShrink: 0,
+              whiteSpace: "nowrap",
+              lineHeight: 1.2,
+            }}
+          >
+            <span>📖 P.{ayat.page}</span>
+          </div>
+        )}
+
         {/* Compact "Plus d'outils & modes" trigger */}
         <div className="submenu-more-wrap" ref={moreMenuRef}>
           <button

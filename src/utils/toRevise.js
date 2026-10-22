@@ -6,6 +6,27 @@ export function useToRevise(ld, surahNum, ayatNum, setLData) {
     const now = new Date().toISOString();
     setLData(surahNum, ayatNum, d => {
       const hist = [...(d.reviseHistory || [])];
+      const prevWordDates = { ...(d.wordsReviseDates || {}) };
+      const nextWordDates = { ...prevWordDates };
+
+      if (!nextRevise) {
+        // Revision cleared
+      } else if (nextRevise === true) {
+        // All words marked
+        nextWordDates["all"] = nextWordDates["all"] || now;
+      } else if (typeof nextRevise === "object" && Array.isArray(nextRevise.words)) {
+        // Ensure new words get stamped with current date
+        nextRevise.words.forEach(wi => {
+          if (!nextWordDates[wi]) nextWordDates[wi] = now;
+        });
+        // Clean up removed words
+        Object.keys(nextWordDates).forEach(k => {
+          if (k !== "all" && !nextRevise.words.includes(Number(k))) {
+            delete nextWordDates[k];
+          }
+        });
+      }
+
       const wasActive = !!prevRevise;
       const willBeActive = !!nextRevise;
       if (!wasActive && willBeActive) {
@@ -46,7 +67,7 @@ export function useToRevise(ld, surahNum, ayatNum, setLData) {
           });
         }
       }
-      return { ...d, toRevise: nextRevise, reviseHistory: hist };
+      return { ...d, toRevise: nextRevise, reviseHistory: hist, wordsReviseDates: nextWordDates };
     });
   };
 

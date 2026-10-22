@@ -1,5 +1,5 @@
 // ─── Quran Metadata & Ayat Historical Analytics Engine ────────────────────────
-import { getHizbBounds, getHizbSegments, getHizbForSurahAyah } from "./hizbUtils.js";
+import { getHizbBounds, getHizbPages, getHizbSegments, getHizbForSurahAyah } from "./hizbUtils.js";
 import { getJuzForHizb, getHizbsForJuz } from "./quranDomain.js";
 import { SURAH_INFO } from "./arabicUtils.js";
 import { computeMastery, getAyatLetterStats } from "../components/common/Mastery.jsx";
@@ -310,6 +310,7 @@ export function computeQuranAggregations(learnData = {}, surahs = [], surahTextC
 
   for (let h = 1; h <= 60; h++) {
     const bounds = getHizbBounds(h);
+    const pages = getHizbPages(h);
     const segments = getHizbSegments(h);
     const juz = getJuzForHizb(h);
 
@@ -364,6 +365,7 @@ export function computeQuranAggregations(learnData = {}, surahs = [], surahTextC
       hizbNumber: h,
       juzNumber: juz,
       bounds,
+      pages,
       segments,
       totalAyahs,
       learnedCount,

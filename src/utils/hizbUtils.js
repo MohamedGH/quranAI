@@ -121,13 +121,45 @@ export const getHizbForSurahAyah = (surahNum, ayahNum = 1) => {
 };
 
 /**
- * Purely computes the start and end (surah, ayah) boundaries for a given Hizb (1..60).
+ * Canonical Mushaf page number for the start of each of the 60 Hizbs (Hizb 1..60).
+ */
+export const HIZB_START_PAGES = Object.freeze([
+  1, 11, 22, 32, 42, 51, 62, 72, 82, 92,
+  102, 112, 121, 132, 142, 151, 162, 173, 182, 192,
+  201, 212, 222, 231, 242, 252, 262, 272, 282, 292,
+  302, 312, 322, 332, 342, 352, 362, 371, 382, 392,
+  402, 413, 422, 431, 442, 451, 462, 472, 482, 491,
+  502, 513, 522, 531, 542, 553, 562, 572, 582, 591
+]);
+
+/**
+ * Returns the page span { startPage, endPage, totalPages } for a given Hizb (1..60).
+ */
+export const getHizbPages = (hizbNum) => {
+  const h = clampHizbNumber(hizbNum);
+  if (!h) return null;
+  const startPage = HIZB_START_PAGES[h - 1];
+  const endPage = h < 60 ? HIZB_START_PAGES[h] - 1 : 604;
+  return Object.freeze({
+    hizb: h,
+    startPage,
+    endPage,
+    totalPages: endPage - startPage + 1,
+    pageLabel: startPage === endPage ? `Page ${startPage}` : `Pages ${startPage}–${endPage}`,
+    pageShort: startPage === endPage ? `P.${startPage}` : `P.${startPage}–${endPage}`,
+  });
+};
+
+/**
+ * Purely computes the start and end (surah, ayah) boundaries for a given Hizb (1..60),
+ * enriched with startPage and endPage.
  */
 export const getHizbBounds = (hizbNum) => {
   const h = clampHizbNumber(hizbNum);
   if (!h) return null;
   const startRef = HIZB_START_REFS[h - 1];
   const nextRef = h < 60 ? HIZB_START_REFS[h] : null;
+  const pages = getHizbPages(h);
 
   if (!nextRef) {
     return Object.freeze({
@@ -136,6 +168,10 @@ export const getHizbBounds = (hizbNum) => {
       startAyah: startRef.ayah,
       endSurah: 114,
       endAyah: SURAH_INFO[113].count,
+      startPage: pages?.startPage ?? 591,
+      endPage: pages?.endPage ?? 604,
+      pageLabel: pages?.pageLabel ?? "Pages 591–604",
+      pageShort: pages?.pageShort ?? "P.591–604",
     });
   }
 
@@ -151,6 +187,10 @@ export const getHizbBounds = (hizbNum) => {
     startAyah: startRef.ayah,
     endSurah,
     endAyah,
+    startPage: pages?.startPage,
+    endPage: pages?.endPage,
+    pageLabel: pages?.pageLabel,
+    pageShort: pages?.pageShort,
   });
 };
 

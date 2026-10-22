@@ -855,6 +855,24 @@ export function AyatFullScreenModal({
                 ))}
               </select>
               <span style={{ fontSize: 9, fontFamily: "'Cinzel',serif", color: "var(--text3)" }}>/ {totalAyats}</span>
+              {ayat.page != null && (
+                <span
+                  style={{
+                    fontSize: 8.5,
+                    fontFamily: "'Cinzel',serif",
+                    color: "#c878ff",
+                    fontWeight: 700,
+                    padding: "1px 6px",
+                    borderRadius: 4,
+                    background: "rgba(200,120,255,.14)",
+                    border: "1px solid rgba(200,120,255,.35)",
+                    whiteSpace: "nowrap",
+                  }}
+                  title={`Mushaf : Page ${ayat.page}`}
+                >
+                  P.{ayat.page}
+                </span>
+              )}
             </div>
 
             <button

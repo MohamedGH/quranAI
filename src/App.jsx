@@ -70,6 +70,7 @@ import {
   clampHizbNumber,
   getHizbForSurahAyah,
   getHizbBounds,
+  getHizbPages,
   getHizbSegments,
   getSurahsForHizb,
   isCrossSurahHizb,
@@ -86,6 +87,7 @@ import {
 } from "./utils/reciterAudio.js";
 import { DATA_KEYS, getDeviceId, mergeLearnData, mergeActivity, mergeCollections } from "./utils/syncUtils.js";
 import { useToRevise } from "./utils/toRevise.js";
+import { getReviseTimeColor, getWordReviseDate } from "./utils/reviseColorGradient.js";
 import { SilenceReviseControl } from "./components/audio/SilenceReviseControl.jsx";
 import { TajweedAudioCoachControl } from "./components/audio/TajweedAudioCoachControl.jsx";
 import { TajweedCoachAnnouncementHUD } from "./components/audio/TajweedCoachAnnouncementHUD.jsx";
@@ -2658,9 +2660,10 @@ function AppInner({ currentUser, onSignOut }) {
                   const hizbAyats = currentHizbCrossAyats.length > 0
                     ? currentHizbCrossAyats
                     : ayats.filter(a => getAyatHizb(a) === curHizb);
-                  const curHizbPage = hizbAyats[0]?.page;
-                  const curHizbJuz  = hizbAyats[0]?.juz ?? Math.ceil(curHizb / 2);
-                  const hizbMastery = computeDisplayedPartMastery(hizbAyats, learnData, selectedSurah.number);
+                  const curHizbPages = getHizbPages(curHizb);
+                  const curHizbJuz   = hizbAyats[0]?.juz ?? Math.ceil(curHizb / 2);
+                  const hizbMastery  = computeDisplayedPartMastery(hizbAyats, learnData, selectedSurah.number);
+                  const currentAyatPage = ayats[mainAyatIdx]?.page ?? hizbAyats[0]?.page;
                   const goToHizb = (targetHizb) => {
                     const clamped = clampHizbNumber(targetHizb);
                     if (!clamped) return;
@@ -2752,13 +2755,22 @@ function AppInner({ currentUser, onSignOut }) {
                               ⇄ {hizbSegments.length} S.
                             </span>
                           )}
-                          {curHizbPage != null && (
+                          {curHizbPages && (
                             <span
                               className="page-nav-badge"
-                              style={{ fontSize:7, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
-                              background:'rgba(200,120,255,.12)', border:'1px solid rgba(200,120,255,.4)',
-                              color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
-                              P.{curHizbPage}
+                              title={`Hizb ${curHizb} : ${curHizbPages.pageLabel} (${curHizbPages.totalPages} pages dans le Mushaf)${currentAyatPage ? ` · Verset actuel à la page ${currentAyatPage}` : ''}`}
+                              style={{
+                                fontSize:7.5, letterSpacing:0.8, padding:'2px 7px', borderRadius:10,
+                                background:'rgba(200,120,255,.14)', border:'1px solid rgba(200,120,255,.45)',
+                                color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap',
+                                display:'inline-flex', alignItems:'center', gap:4
+                              }}>
+                              <span>📖 {curHizbPages.pageShort}</span>
+                              {currentAyatPage && (
+                                <span style={{ opacity:0.75, fontSize:6.5 }}>
+                                  (p.{currentAyatPage})
+                                </span>
+                              )}
                             </span>
                           )}
                           {curHizbJuz != null && (
@@ -2827,6 +2839,11 @@ function AppInner({ currentUser, onSignOut }) {
                             const isCurrentSurah = seg.surahNum === selectedSurah.number;
                             const segAyats = hizbAyats.filter(a => (a.surahNumber ?? a.surah?.number ?? selectedSurah.number) === seg.surahNum);
                             const segMastery = computeDisplayedPartMastery(segAyats, learnData, seg.surahNum);
+                            const segStartPage = segAyats[0]?.page;
+                            const segEndPage = segAyats[segAyats.length - 1]?.page;
+                            const segPageLabel = (segStartPage && segEndPage)
+                              ? (segStartPage === segEndPage ? `p.${segStartPage}` : `p.${segStartPage}–${segEndPage}`)
+                              : null;
                             return (
                               <button
                                 key={seg.surahNum}
@@ -2837,10 +2854,15 @@ function AppInner({ currentUser, onSignOut }) {
                                   const el = ayatRefs.current[refKey] || (isCurrentSurah ? ayatRefs.current[seg.fromAyah] : null);
                                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                 }}
-                                title={`Défiler vers S.${seg.surahNum} ${seg.surahEn} (v.${seg.fromAyah}–${seg.toAyah}) · Maîtrise : ${segMastery.masteryPct}%`}
+                                title={`Défiler vers S.${seg.surahNum} ${seg.surahEn} (v.${seg.fromAyah}–${seg.toAyah})${segPageLabel ? ` · ${segPageLabel}` : ''} · Maîtrise : ${segMastery.masteryPct}%`}
                               >
                                 <span>S.{seg.surahNum} {seg.surahEn}</span>
                                 <span style={{ opacity: 0.75 }}>v.{seg.fromAyah}–{seg.toAyah}</span>
+                                {segPageLabel && (
+                                  <span style={{ fontSize: 7, color: '#c878ff', fontWeight: 600, opacity: 0.9 }}>
+                                    📖 {segPageLabel}
+                                  </span>
+                                )}
                                 <span style={{ color: masteryColor(segMastery.masteryPct), fontWeight: 700 }}>{segMastery.masteryPct}%</span>
                                 <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:11, color:'var(--gold)' }}>{seg.surahAr}</span>
                               </button>
@@ -3399,23 +3421,28 @@ function AppInner({ currentUser, onSignOut }) {
                                       const isHl  = _hlSet.has(wi);
                                       const isRevW = revWordSet === 'all' || (revWordSet && revWordSet.has(wi));
                                       const wRevChars = isRevW ? revChars[wi] : null;
-                                      const wColor  = isUnk?"#ff7eb3":isHl?"#ffd166":isRevW?"var(--gold2)":undefined;
-                                      const wShadow = isUnk?"0 0 8px rgba(255,126,179,.5)":isHl?"0 0 8px rgba(255,209,102,.6)":isRevW?"0 0 6px rgba(201,168,76,.4)":"none";
-                                      const wDecor  = isUnk?"underline dotted #ff7eb3":isRevW&&!wRevChars?.length?"underline wavy var(--gold)":"none";
-                                      const wBg     = isUnk?"rgba(255,126,179,.15)":isHl?"rgba(255,209,102,.12)":isRevW&&!wRevChars?.length?"rgba(201,168,76,.2)":"transparent";
+                                      const wRevDate = isRevW ? getWordReviseDate(ld, wi) : null;
+                                      const timeColor = isRevW ? getReviseTimeColor(wRevDate) : null;
+
+                                      const wColor  = isUnk ? "#ff7eb3" : isHl ? "#ffd166" : isRevW ? timeColor.hex : undefined;
+                                      const wShadow = isUnk ? "0 0 8px rgba(255,126,179,.5)" : isHl ? "0 0 8px rgba(255,209,102,.6)" : isRevW ? timeColor.rgbaGlow : "none";
+                                      const wDecor  = isUnk ? "underline dotted #ff7eb3" : isRevW && !wRevChars?.length ? `underline wavy ${timeColor.hex}` : "none";
+                                      const wBg     = isUnk ? "rgba(255,126,179,.15)" : isHl ? "rgba(255,209,102,.12)" : isRevW && !wRevChars?.length ? timeColor.rgbaBg : "transparent";
                                       const renderCh = (ch,ci,arr2) => {
                                         if(isUnk||isHl) return <span key={ci}>{ch}</span>;
                                         const tajStyle = hasAnyTajweed ? getTajweedStyleForChar(arr2, ci, { showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone }) : null;
                                         return <span key={ci} style={tajStyle || undefined}>{ch}</span>;
                                       };
                                       return (
-                                        <span key={wii} style={{
+                                        <span key={wii}
+                                          title={isRevW ? `À réviser depuis : ${timeColor.timeLabel} (${timeColor.days}j)` : undefined}
+                                          style={{
                                           color:wColor, textShadow:wShadow,
                                           textDecoration:wDecor,
                                           background: wBg,
                                           borderRadius: (isUnk||isHl||isRevW)?3:0,
-                                          padding: (isUnk||isHl||isRevW)?"0 1px":0,
-                                          borderBottom: isRevW&&!wRevChars?.length ? '2px solid rgba(201,168,76,.5)' : 'none',
+                                          padding: (isUnk||isHl||isRevW)?"0 2px":0,
+                                          borderBottom: isRevW&&!wRevChars?.length ? `2px solid ${timeColor.rgbaBorder}` : 'none',
                                         }}>
                                           {hasAnyTajweed
                                             ? (() => { const arr2=[...w]; return arr2.map((ch,ci)=>renderCh(ch,ci,arr2)); })()
@@ -3440,33 +3467,37 @@ function AppInner({ currentUser, onSignOut }) {
                                 const isRevWord = revWordSet === 'all' || (revWordSet && revWordSet.has(wi));
                                 const wordChars = isRevWord ? revChars[wi] : null; // selected char indices
                                 const clusters  = isRevWord ? splitArabicClusters(w) : null;
+                                const wRevDate  = isRevWord ? getWordReviseDate(ld, wi) : null;
+                                const timeColor = isRevWord ? getReviseTimeColor(wRevDate) : null;
 
                                 const baseStyle = {
-                                  color: unk ? '#ff7eb3' : hit ? '#ffd166' : isRevWord ? 'var(--text1)' : undefined,
-                                  textShadow: unk ? '0 0 8px rgba(255,126,179,.5)' : hit ? '0 0 8px rgba(255,209,102,.6)' : 'none',
-                                  background: unk ? 'rgba(255,126,179,.12)' : hit ? 'rgba(255,209,102,.13)' : isRevWord && !wordChars?.length ? 'rgba(201,168,76,.12)' : 'transparent',
-                                  textDecoration: unk ? 'underline dotted #ff7eb3' : isRevWord && !wordChars?.length ? 'underline wavy var(--gold)' : 'none',
+                                  color: unk ? '#ff7eb3' : hit ? '#ffd166' : isRevWord ? timeColor.hex : undefined,
+                                  textShadow: unk ? '0 0 8px rgba(255,126,179,.5)' : hit ? '0 0 8px rgba(255,209,102,.6)' : isRevWord ? timeColor.rgbaGlow : 'none',
+                                  background: unk ? 'rgba(255,126,179,.12)' : hit ? 'rgba(255,209,102,.13)' : isRevWord && !wordChars?.length ? timeColor.rgbaBg : 'transparent',
+                                  textDecoration: unk ? 'underline dotted #ff7eb3' : isRevWord && !wordChars?.length ? `underline wavy ${timeColor.hex}` : 'none',
                                   borderRadius: (hit||unk||isRevWord) ? 4 : 0,
                                   padding: (hit||unk||isRevWord) ? '0 2px' : 0,
-                                  border: isRevWord && !wordChars?.length ? '1px solid rgba(201,168,76,.35)' : 'none',
+                                  border: isRevWord && !wordChars?.length ? `1px solid ${timeColor.rgbaBorder}` : 'none',
                                   display: 'inline',
                                 };
 
                                 if (isRevWord && wordChars?.length && clusters) {
                                   // Highlight whole word (Arabic shaping can't split mid-ligature)
-                                  // show char selection as badge count
+                                  // show char selection as badge count with time elapsed color
                                   return (
-                                    <span key={wi} style={{
+                                    <span key={wi}
+                                      title={`À réviser depuis : ${timeColor.timeLabel} (${timeColor.days}j) · ${wordChars.length} lettre(s)`}
+                                      style={{
                                       display:'inline', padding:'0 2px',
-                                      background:'rgba(91,200,245,.15)',
-                                      borderBottom:'2px solid #5bc8f5',
+                                      background: timeColor.rgbaBg,
+                                      borderBottom:`2px solid ${timeColor.hex}`,
                                       borderRadius:3,
-                                      color:'#5bc8f5',
-                                      textShadow:'0 0 6px rgba(91,200,245,.5)',
+                                      color: timeColor.hex,
+                                      textShadow: timeColor.rgbaGlow,
                                       position:'relative',
                                     }}>
                                       {w}
-                                      <sup style={{ fontSize:'0.4em', color:'#5bc8f5', marginRight:1, verticalAlign:'super' }}>{wordChars.length}</sup>
+                                      <sup style={{ fontSize:'0.4em', color: timeColor.hex, marginRight:1, verticalAlign:'super', fontWeight:700 }}>{wordChars.length}</sup>
                                       {wi < ayatWords.length - 1 ? ' ' : ''}
                                     </span>
                                   );
@@ -3481,7 +3512,9 @@ function AppInner({ currentUser, onSignOut }) {
                                   : w;
 
                                 return (
-                                  <span key={wi} style={baseStyle}>
+                                  <span key={wi}
+                                    title={isRevWord ? `À réviser depuis : ${timeColor.timeLabel} (${timeColor.days}j)` : undefined}
+                                    style={baseStyle}>
                                     {tajContent}{wi < ayatWords.length - 1 ? ' ' : ''}
                                   </span>
                                 );
@@ -3525,6 +3558,11 @@ function AppInner({ currentUser, onSignOut }) {
                                     <span className="hizb-cross-surah-range">
                                       Versets {fromA}–{toA} / {totalA}
                                     </span>
+                                    {ayat.page != null && (
+                                      <span className="hizb-cross-surah-range" style={{ color: '#c878ff', fontWeight: 600 }}>
+                                        📖 Page {ayat.page}
+                                      </span>
+                                    )}
                                     <span style={{
                                       fontSize: 7.5, letterSpacing: 1, padding: '2px 7px', borderRadius: 10,
                                       border: `1px solid ${masteryColor(segMastery.masteryPct)}`,
@@ -3591,14 +3629,14 @@ function AppInner({ currentUser, onSignOut }) {
                                   <div
                                     className="hizb-edge-pill start"
                                     style={{ cursor: 'pointer' }}
-                                    title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — cliquer pour afficher tout le Hizb` : `Hizb ${ayatHizb}`}
+                                    title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — ${hizbBoundsForPill?.pageLabel || ''} — cliquer pour afficher tout le Hizb` : `Hizb ${ayatHizb} (${hizbBoundsForPill?.pageLabel || ''})`}
                                     onClick={e => {
                                       e.stopPropagation();
                                       setActiveHizbCoran(ayatHizb);
                                       if (!hizbMode) setHizbMode(true);
                                     }}
                                   >
-                                    ◆ HIZB {ayatHizb}{isHizbCrossSurah ? ` · S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount})
+                                    ◆ HIZB {ayatHizb}{hizbBoundsForPill?.pageShort ? ` · ${hizbBoundsForPill.pageShort}` : ''}{isHizbCrossSurah ? ` · S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount})
                                   </div>
                                 )}
                                 {isJuzStart && (
@@ -3644,9 +3682,17 @@ function AppInner({ currentUser, onSignOut }) {
                                 </span>
                               )}
                               <div className="ayat-number-badge"
-                                title={isOtherSurah ? `Sourate ${ayatSurahNum} · Verset ${ayat.numberInSurah}` : "Ouvrir le verset"}
+                                title={isOtherSurah ? `Sourate ${ayatSurahNum} · Verset ${ayat.numberInSurah}${ayat.page != null ? ` · Page ${ayat.page}` : ''}` : `Verset ${ayat.numberInSurah}${ayat.page != null ? ` · Page ${ayat.page}` : ''}`}
                                 style={{cursor:'pointer'}}
                               >{ayat.numberInSurah}</div>
+                              {ayat.page != null && (
+                                <span
+                                  className="ayat-page-badge"
+                                  title={`Page Mushaf : ${ayat.page} (Verset ${ayat.numberInSurah})`}
+                                >
+                                  P.{ayat.page}
+                                </span>
+                              )}
                               <button
                                 title="Lire depuis ce verset"
                                 onClick={e => {
@@ -3866,14 +3912,14 @@ function AppInner({ currentUser, onSignOut }) {
                                   <div
                                     className="hizb-edge-pill end"
                                     style={{ cursor: 'pointer' }}
-                                    title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — cliquer pour afficher tout le Hizb` : `Fin Hizb ${ayatHizb}`}
+                                    title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — ${hizbBoundsForPill?.pageLabel || ''} — cliquer pour afficher tout le Hizb` : `Fin Hizb ${ayatHizb} (${hizbBoundsForPill?.pageLabel || ''})`}
                                     onClick={e => {
                                       e.stopPropagation();
                                       setActiveHizbCoran(ayatHizb);
                                       if (!hizbMode) setHizbMode(true);
                                     }}
                                   >
-                                    FIN · HIZB {ayatHizb}{isHizbCrossSurah ? ` (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah})` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount}) ◆
+                                    FIN · HIZB {ayatHizb}{hizbBoundsForPill?.pageShort ? ` · ${hizbBoundsForPill.pageShort}` : ''}{isHizbCrossSurah ? ` (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah})` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount}) ◆
                                   </div>
                                 )}
                                 {isJuzEnd  && (

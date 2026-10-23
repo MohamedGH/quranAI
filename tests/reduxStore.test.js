@@ -101,9 +101,12 @@ describe("Redux Store & Production Slice Integration", () => {
       expect(sel.openAyatNum(store.getState())).toBe(5);
     });
 
-    it("persists last read ayat per surah", () => {
+    it("persists last read ayat per surah via setLastAyatForSurah and setLastAyat", () => {
       store.dispatch(quranActions.setLastAyatForSurah({ surahNum: 1, ayatNum: 4 }));
       expect(sel.lastAyatBySurah(store.getState())[1]).toBe(4);
+
+      store.dispatch(quranActions.setLastAyat({ surahNum: 2, ayatNum: 255 }));
+      expect(sel.lastAyatBySurah(store.getState())[2]).toBe(255);
     });
   });
 

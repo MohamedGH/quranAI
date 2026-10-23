@@ -103,6 +103,13 @@ import {
   findActiveSilenceInterval,
   calculateNextPlaybackTime,
 } from "./utils/audioSilenceManager.js";
+import {
+  detectSwipeGesture,
+  isInteractiveElement,
+  resolveActiveAyatNumber,
+  computeSurahSwipeNavigation,
+  computeSurahNavigationByDirection,
+} from "./utils/swipeNavigation.js";
 
 function AppInner({ currentUser, onSignOut }) {
   const dispatch = useDispatch();
@@ -494,6 +501,11 @@ function AppInner({ currentUser, onSignOut }) {
   const toastTimerRef  = useRef(null);
 
   const ayatRefs     = useRef({});
+  const ayatScrollRef = useRef(null);
+  const touchStartRef = useRef(null);
+  const pendingSwipeScrollRef = useRef(null);
+  const swipeHudTimerRef = useRef(null);
+  const [swipeHud, setSwipeHud] = useState(null);
   const mainAudioRef = useRef(null);
   const tsLoadGenRef = useRef(0); // incremented on each surah change to cancel stale ts loads
 
@@ -526,6 +538,8 @@ function AppInner({ currentUser, onSignOut }) {
   const [crossPlayingAyat, setCrossPlayingAyat] = useState(null);
   const currentMainAyat = crossPlayingAyat || ayats[mainAyatIdx];
   const [surahMeta,   setSurahMeta]   = useState(null); // { hizb, juz, page, wordCount }
+  const prevSurah = useMemo(() => surahs?.find(s => s.number === (selectedSurah?.number ?? 1) - 1), [surahs, selectedSurah?.number]);
+  const nextSurah = useMemo(() => surahs?.find(s => s.number === (selectedSurah?.number ?? 1) + 1), [surahs, selectedSurah?.number]);
   const [pageMeta,    setPageMeta]    = useState(null); // { hizb, juz, ayatCount, wordCount } for current page
   const getAyatHizb = useCallback((a) => {
     if (!a) return null;
@@ -1348,12 +1362,12 @@ function AppInner({ currentUser, onSignOut }) {
         return a;
       });
       dispatch(quranActions.setCrossSurahAyats({ surahNum: selectedSurah.number, ayahs: ayahList }));
-      const savedAyatNum = lastAyatBySurah[selectedSurah.number] ?? null;
+      const savedAyatNum = pendingSwipeScrollRef.current ?? lastAyatBySurah[selectedSurah.number] ?? null;
       const restoredIdx = savedAyatNum != null
         ? Math.max(0, ayahList.findIndex(a => a.numberInSurah === savedAyatNum))
         : 0;
       // Start render window around the active ayat so it's visible immediately
-      const initialLimit = Math.max(35, restoredIdx + 15);
+      const initialLimit = Math.max(35, restoredIdx + 25);
       setRenderLimit(initialLimit);
       setAyats(ayahList); setLoadingAyats(false);
       setMainAyatIdx(restoredIdx);
@@ -1361,7 +1375,13 @@ function AppInner({ currentUser, onSignOut }) {
       setactivePageCoran(null); // reset; will be derived from mainAyatIdx
       if (!keepHizb) setActiveHizbCoran(null);
       setActiveJuzCoran(null);
-      if (savedAyatNum != null) setOpenAyatNum(savedAyatNum);
+      if (savedAyatNum != null) {
+        setOpenAyatNum(savedAyatNum);
+        const activeAyatObj = ayahList.find(a => a.numberInSurah === savedAyatNum);
+        if (pageMode && activeAyatObj?.page != null) setactivePageCoran(activeAyatObj.page);
+        if (hizbMode && activeAyatObj && getAyatHizb(activeAyatObj) != null) setActiveHizbCoran(getAyatHizb(activeAyatObj));
+        if (juzMode && activeAyatObj && getAyatJuz(activeAyatObj) != null) setActiveJuzCoran(getAyatJuz(activeAyatObj));
+      }
       // Restore loop
       const savedLoop = loopBySurah[selectedSurah.number];
       if (savedLoop) {
@@ -1381,8 +1401,11 @@ function AppInner({ currentUser, onSignOut }) {
         const tryScroll = () => {
           const el = ayatRefs.current[savedAyatNum];
           if (el) {
-            el.scrollIntoView({ behavior: "instant", block: "center" });
-          } else if (attempts++ < 20) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            if (pendingSwipeScrollRef.current === savedAyatNum) {
+              pendingSwipeScrollRef.current = null;
+            }
+          } else if (attempts++ < 30) {
             requestAnimationFrame(tryScroll);
           }
         };
@@ -1536,6 +1559,127 @@ function AppInner({ currentUser, onSignOut }) {
     if (juzMode && getAyatJuz(target) != null) setActiveJuzCoran(getAyatJuz(target));
     setTimeout(() => { ayatRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, (pageMode || hizbMode || juzMode) ? 250 : 50);
   };
+
+  // ── Swipe navigation entre sourates avec conservation du même numéro de verset ──
+  const handleAyatTouchStart = useCallback((e) => {
+    if (!e.touches || e.touches.length !== 1) {
+      touchStartRef.current = null;
+      return;
+    }
+    const t = e.touches[0];
+    const isInteractive = isInteractiveElement(e.target);
+    touchStartRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      time: Date.now(),
+      isInteractive,
+    };
+  }, []);
+
+  const handleAyatTouchCancel = useCallback(() => {
+    touchStartRef.current = null;
+  }, []);
+
+  // ── Navigation entre sourates (swipe ou bouton) avec conservation du même numéro de verset ──
+  const handleNavigateSurah = useCallback((direction) => {
+    if (!selectedSurah) return;
+
+    // Détermine le verset actuellement affiché ou sélectionné
+    const activeAyatNum = resolveActiveAyatNumber({
+      openAyatNum,
+      playingAyatNum: playingAyatNumRef.current,
+      mainAyatIdx: mainAyatIdxRef.current,
+      ayats,
+      scrollContainerEl: ayatScrollRef.current,
+      ayatRefs: ayatRefs.current,
+    });
+
+    const navResult = computeSurahNavigationByDirection({
+      direction,
+      currentSurah: selectedSurah,
+      currentAyatNum: activeAyatNum,
+      surahs,
+    });
+
+    if (!navResult.canNavigate) {
+      if (navResult.feedbackMessage) {
+        showToast(navResult.feedbackMessage, 'info');
+      }
+      return;
+    }
+
+    // Affichage HUD visuel + toast
+    if (swipeHudTimerRef.current) clearTimeout(swipeHudTimerRef.current);
+    setSwipeHud({
+      direction: navResult.direction,
+      title: `${navResult.targetSurah.englishName} (${navResult.targetSurah.number})`,
+      subtitle: `Verset ${navResult.targetAyatNum}${navResult.wasClamped ? ` (ajusté de v.${navResult.originalAyatNum})` : ''}`,
+    });
+    swipeHudTimerRef.current = setTimeout(() => setSwipeHud(null), 1200);
+
+    if (navResult.feedbackMessage) {
+      showToast(navResult.feedbackMessage, 'success');
+    }
+
+    const targetAyat = navResult.targetAyatNum;
+    pendingSwipeScrollRef.current = targetAyat;
+
+    // Mise à jour de l'état Redux
+    if (typeof quranActions?.setLastAyat === 'function') {
+      dispatch(quranActions.setLastAyat({ surahNum: navResult.targetSurahNum, ayatNum: targetAyat }));
+    } else if (typeof quranActions?.setLastAyatForSurah === 'function') {
+      dispatch(quranActions.setLastAyatForSurah({ surahNum: navResult.targetSurahNum, ayatNum: targetAyat }));
+    }
+    setRenderLimit(prev => Math.max(prev, targetAyat + 35));
+    setSelectedSurah(navResult.targetSurah);
+    setOpenAyatNum(targetAyat);
+
+    // Mise à jour de la route
+    const newRoute = buildQuranRoute({
+      activePage: 'quran',
+      surahNum: navResult.targetSurahNum,
+      ayatNum: targetAyat,
+    });
+    navigate(newRoute);
+
+    // Scroll doux vers le même numéro de verset
+    let attempts = 0;
+    const tryScrollToTarget = () => {
+      const el = ayatRefs.current[targetAyat];
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        pendingSwipeScrollRef.current = null;
+      } else if (attempts++ < 30) {
+        requestAnimationFrame(tryScrollToTarget);
+      }
+    };
+    requestAnimationFrame(tryScrollToTarget);
+  }, [selectedSurah, openAyatNum, ayats, surahs, navigate, dispatch, showToast]);
+
+  const handleAyatTouchEnd = useCallback((e) => {
+    if (!touchStartRef.current || touchStartRef.current.isInteractive) {
+      touchStartRef.current = null;
+      return;
+    }
+    const t = e.changedTouches?.[0];
+    if (!t || !selectedSurah) {
+      touchStartRef.current = null;
+      return;
+    }
+
+    const gesture = detectSwipeGesture({
+      startX: touchStartRef.current.x,
+      startY: touchStartRef.current.y,
+      endX: t.clientX,
+      endY: t.clientY,
+      startTime: touchStartRef.current.time,
+      endTime: Date.now(),
+    });
+    touchStartRef.current = null;
+
+    if (!gesture.isStrongSwipe) return;
+    handleNavigateSurah(gesture.direction);
+  }, [selectedSurah, handleNavigateSurah]);
 
   // ── Voice command execution ──
   const executeCommand = useCallback((cmd) => {
@@ -2533,6 +2677,7 @@ function AppInner({ currentUser, onSignOut }) {
                   timestampsMap={timestampsMap}
                   setTimestampsMap={setTimestampsMap}
                   navigate={navigate}
+                  onNavigateSurah={handleNavigateSurah}
                 /> 
 
                 {/* ── Page mode navigator bar ── */}
@@ -3007,7 +3152,49 @@ function AppInner({ currentUser, onSignOut }) {
                   );
                 })()}
 
-                <div className="ayat-scroll" onContextMenu={handleAyatContextMenu} onScroll={handleAyatScroll}>
+                {swipeHud && (
+                  <div
+                    className="swipe-hud-toast"
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      position: "fixed",
+                      top: "38%",
+                      left: "50%",
+                      transform: "translate(-50%, -50%)",
+                      zIndex: 9999,
+                      background: "rgba(15, 23, 42, 0.94)",
+                      backdropFilter: "blur(14px)",
+                      WebkitBackdropFilter: "blur(14px)",
+                      border: "1px solid var(--border2)",
+                      boxShadow: "0 14px 36px rgba(0,0,0,0.7), 0 0 24px rgba(201,168,76,0.3)",
+                      borderRadius: 16,
+                      padding: "14px 24px",
+                      color: "#fff",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 6,
+                      pointerEvents: "none",
+                      textAlign: "center",
+                      minWidth: 200,
+                    }}
+                  >
+                    <div style={{ fontSize: 26, lineHeight: 1 }}>{swipeHud.direction === "left" ? "➡️" : "⬅️"}</div>
+                    <div style={{ fontWeight: 700, fontSize: 16, color: "var(--gold)", letterSpacing: 0.4 }}>{swipeHud.title}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--text2)", fontWeight: 500 }}>{swipeHud.subtitle}</div>
+                  </div>
+                )}
+
+                <div
+                  ref={ayatScrollRef}
+                  className="ayat-scroll"
+                  onTouchStart={handleAyatTouchStart}
+                  onTouchEnd={handleAyatTouchEnd}
+                  onTouchCancel={handleAyatTouchCancel}
+                  onContextMenu={handleAyatContextMenu}
+                  onScroll={handleAyatScroll}
+                >
                   <audio
                     ref={el => {
                       partAudioRef.current = el;
@@ -3954,7 +4141,64 @@ function AppInner({ currentUser, onSignOut }) {
                     })}
                         </>
                       ); })()}</>}
+
+                  {/* Inter-surah navigation footer buttons */}
+                  {selectedSurah && ayats && ayats.length > 0 && !loadingAyats && (
+                    <div className="surah-footer-nav-bar">
+                      <button
+                        type="button"
+                        className="surah-footer-nav-btn prev"
+                        disabled={!prevSurah}
+                        onClick={() => handleNavigateSurah('prev')}
+                        title={prevSurah ? `Sourate précédente : ${prevSurah.englishName} (même verset)` : "Première sourate"}
+                      >
+                        ‹ {prevSurah ? `Sourate ${prevSurah.number} (${prevSurah.englishName})` : "1ʳᵉ sourate"}
+                      </button>
+
+                      <span style={{ fontSize: 10, color: 'var(--text3)', letterSpacing: 1, fontFamily: "'Cinzel',serif" }}>
+                        № {selectedSurah.number} · {selectedSurah.englishName}
+                      </span>
+
+                      <button
+                        type="button"
+                        className="surah-footer-nav-btn next"
+                        disabled={!nextSurah}
+                        onClick={() => handleNavigateSurah('next')}
+                        title={nextSurah ? `Sourate suivante : ${nextSurah.englishName} (même verset)` : "114ᵉ sourate"}
+                      >
+                        {nextSurah ? `Sourate ${nextSurah.number} (${nextSurah.englishName})` : "114ᵉ sourate"} ›
+                      </button>
+                    </div>
+                  )}
                 </div>
+
+                {/* Floating quick surah navigation buttons */}
+                {selectedSurah && (
+                  <aside className="surah-floating-nav" aria-label="Changer de sourate">
+                    <button
+                      type="button"
+                      className="surah-floating-btn prev"
+                      disabled={!prevSurah}
+                      onClick={() => handleNavigateSurah("prev")}
+                      title={prevSurah ? `Sourate précédente : ${prevSurah.englishName} (même verset)` : "Première sourate"}
+                      aria-label="Sourate précédente"
+                    >
+                      <span>‹</span>
+                      <span className="btn-text">{prevSurah ? `S.${prevSurah.number}` : "Début"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="surah-floating-btn next"
+                      disabled={!nextSurah}
+                      onClick={() => handleNavigateSurah("next")}
+                      title={nextSurah ? `Sourate suivante : ${nextSurah.englishName} (même verset)` : "Dernière sourate"}
+                      aria-label="Sourate suivante"
+                    >
+                      <span className="btn-text">{nextSurah ? `S.${nextSurah.number}` : "Fin"}</span>
+                      <span>›</span>
+                    </button>
+                  </aside>
+                )}
               </>
             )}
           </main></AnimatedPage>

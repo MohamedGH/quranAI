@@ -76,6 +76,7 @@ export function SurahHeader({
   timestampsMap,
   setTimestampsMap,
   navigate,
+  onNavigateSurah,
 }) {
   const [showSurahInfo, setShowSurahInfo] = useState(false);
   const [showAyatJump, setShowAyatJump] = useState(false);
@@ -243,8 +244,11 @@ export function SurahHeader({
           <button
             className={`m-compact-nav-btn ${!prevSurah ? 'disabled' : ''}`}
             disabled={!prevSurah}
-            onClick={() => prevSurah && setSelectedSurah(prevSurah)}
-            title={prevSurah ? `Sourate précédente : ${prevSurah.englishName}` : "Première sourate"}
+            onClick={() => {
+              if (onNavigateSurah) onNavigateSurah('prev');
+              else if (prevSurah) setSelectedSurah(prevSurah);
+            }}
+            title={prevSurah ? `Sourate précédente : ${prevSurah.englishName} (même verset)` : "Première sourate"}
           >
             ‹
           </button>
@@ -292,8 +296,11 @@ export function SurahHeader({
             <button
               className={`m-compact-nav-btn ${!nextSurah ? 'disabled' : ''}`}
               disabled={!nextSurah}
-              onClick={() => nextSurah && setSelectedSurah(nextSurah)}
-              title={nextSurah ? `Sourate suivante : ${nextSurah.englishName}` : "Dernière sourate"}
+              onClick={() => {
+                if (onNavigateSurah) onNavigateSurah('next');
+                else if (nextSurah) setSelectedSurah(nextSurah);
+              }}
+              title={nextSurah ? `Sourate suivante : ${nextSurah.englishName} (même verset)` : "Dernière sourate"}
             >
               ›
             </button>

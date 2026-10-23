@@ -255,8 +255,18 @@ const quranSlice = createSlice({
     setOpenCrossAyatKey: (s, a) => { s.openCrossAyatKey = a.payload; if (a.payload != null) s.openAyatNum = null; },
     setSubmenuMode:   (s, a) => { s.submenuMode   = a.payload; },
     setLastAyatForSurah: (s, a) => {
-      s.lastAyatBySurah = { ...s.lastAyatBySurah, [a.payload.surahNum]: a.payload.ayatNum };
-      save("quran_lastAyatBySurah", s.lastAyatBySurah);
+      const { surahNum, ayatNum } = a.payload || {};
+      if (surahNum != null && ayatNum != null) {
+        s.lastAyatBySurah = { ...s.lastAyatBySurah, [surahNum]: ayatNum };
+        save("quran_lastAyatBySurah", s.lastAyatBySurah);
+      }
+    },
+    setLastAyat: (s, a) => {
+      const { surahNum, ayatNum } = a.payload || {};
+      if (surahNum != null && ayatNum != null) {
+        s.lastAyatBySurah = { ...s.lastAyatBySurah, [surahNum]: ayatNum };
+        save("quran_lastAyatBySurah", s.lastAyatBySurah);
+      }
     },
     restoreLastAyatFromCloud: (s, a) => { s.lastAyatBySurah = a.payload; },
     setCrossSurahAyats: (s, a) => {

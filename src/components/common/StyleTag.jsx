@@ -1117,7 +1117,23 @@ export const CSS = `
   .ts-status.loaded{border-color:var(--teal);color:var(--teal);}
 
   /* ── AYAT LIST ────────────────────────────────────────────────────── */
-  .ayat-scroll{flex:1;overflow-y:auto;padding:6px 0 calc(var(--player-h) + var(--player-loop-h) + 20px);will-change:transform;}
+  .ayat-scroll{flex:1;overflow-y:auto;padding:6px 0 calc(var(--player-h) + var(--player-loop-h) + 20px);will-change:transform;touch-action:pan-y;}
+  /* ── INTER-SURAH BUTTON NAVIGATION ── */
+  .surah-floating-nav{position:fixed;bottom:calc(var(--player-h) + var(--player-loop-h) + 16px);right:12px;display:flex;align-items:center;gap:6px;z-index:88;pointer-events:auto;}
+  .surah-floating-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:34px;padding:0 11px;border-radius:18px;background:rgba(15,20,32,0.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--border2);color:var(--text);font-size:11px;font-family:'Cinzel',serif;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.45);transition:all .2s ease;}
+  .surah-floating-btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold);transform:translateY(-1px);}
+  .surah-floating-btn:active:not(:disabled){transform:scale(0.96);}
+  .surah-floating-btn:disabled{opacity:0.35;cursor:default;}
+  .surah-footer-nav-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 18px;margin:24px 14px 32px;background:rgba(255,255,255,0.02);border:1px solid var(--border2);border-radius:12px;}
+  .surah-footer-nav-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid var(--border2);background:rgba(255,255,255,0.04);color:var(--text);cursor:pointer;font-size:11px;font-family:'Cinzel',serif;transition:all .2s;}
+  .surah-footer-nav-btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,0.08);}
+  .surah-footer-nav-btn:disabled{opacity:0.35;cursor:default;}
+  @media(max-width:640px){
+    .surah-floating-btn .btn-text{display:none;}
+    .surah-floating-btn{padding:0 10px;height:32px;}
+    .surah-footer-nav-bar{flex-direction:column;gap:8px;text-align:center;}
+    .surah-footer-nav-btn{width:100%;justify-content:center;}
+  }
   .ayat-row{border-bottom:1px solid rgba(42,47,64,.4);transition:background var(--transition);content-visibility:auto;contain-intrinsic-size:0 80px;}
   .ayat-row.playing{background:var(--highlight);}
   .ayat-row.playing .ayat-main{background:var(--highlight);}

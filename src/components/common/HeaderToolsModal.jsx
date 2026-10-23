@@ -72,7 +72,8 @@ export function HeaderToolsModal({
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          maxHeight: '90vh'
+          maxHeight: 'calc(90dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
+          boxSizing: 'border-box'
         }}
       >
         {/* ── Modal Header ────────────────────────────────────────────── */}
@@ -132,9 +133,13 @@ export function HeaderToolsModal({
         <div
           style={{
             display: 'flex',
-            padding: '8px 18px 0',
-            gap: 8,
-            borderBottom: '1px solid rgba(255, 255, 255, 0.06)'
+            padding: '8px 14px 0',
+            gap: 6,
+            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            maxWidth: '100%',
+            scrollbarWidth: 'none',
           }}
         >
           {[
@@ -150,7 +155,7 @@ export function HeaderToolsModal({
                 id={`modal-tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
                 style={{
-                  padding: '8px 14px',
+                  padding: '8px 12px',
                   fontFamily: "'Cinzel', serif",
                   fontSize: 9,
                   fontWeight: isActive ? 700 : 500,
@@ -161,7 +166,9 @@ export function HeaderToolsModal({
                   borderRadius: '6px 6px 0 0',
                   color: isActive ? 'var(--gold2)' : 'var(--text3)',
                   cursor: 'pointer',
-                  transition: 'all .15s'
+                  transition: 'all .15s',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {tab.label}

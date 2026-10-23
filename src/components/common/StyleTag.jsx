@@ -2262,16 +2262,54 @@ export const CSS = `
     .show-mobile{ display:inline-flex !important; }
     .fs-float-nav{ display:none !important; }
 
-    #ayat-fullscreen-modal .fs-header{ padding: max(env(safe-area-inset-top, 0px), 6px) 10px 6px 10px !important; }
-    #ayat-fullscreen-modal .fs-body{ padding: 12px 10px calc(86px + env(safe-area-inset-bottom, 0px)) !important; }
-    #ayat-fullscreen-modal .fs-footer{ padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)) !important; }
-    #ayat-fullscreen-modal .fs-arabic-text{ padding: 0 4px !important; line-height: 2.1 !important; }
-    #ayat-fullscreen-modal .fs-reciter-dialog{
-      max-height: 80vh !important;
+    #ayat-fullscreen-modal {
+      width: 100vw !important;
+      max-width: 100vw !important;
+      height: 100% !important;
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+    }
+    #ayat-fullscreen-modal .fs-header {
+      width: 100% !important;
+      max-width: 100vw !important;
+      box-sizing: border-box !important;
+      padding: max(env(safe-area-inset-top, 0px), 6px) 8px 6px 8px !important;
+    }
+    #ayat-fullscreen-modal .fs-header-row-1,
+    #ayat-fullscreen-modal .fs-header-row-2 {
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    #ayat-fullscreen-modal .fs-body {
+      padding: 10px 8px calc(86px + env(safe-area-inset-bottom, 0px)) !important;
+      box-sizing: border-box !important;
+      max-width: 100vw !important;
+      overflow-x: hidden !important;
+    }
+    #ayat-fullscreen-modal .fs-footer {
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+      max-width: 100vw !important;
+      box-sizing: border-box !important;
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+    }
+    #ayat-fullscreen-modal .fs-footer::-webkit-scrollbar { display: none; }
+    #ayat-fullscreen-modal .fs-arabic-text { padding: 0 4px !important; line-height: 2.1 !important; word-break: break-word !important; }
+    #ayat-fullscreen-modal .fs-reciter-dialog {
+      max-height: 80dvh !important;
       border-radius: 16px 16px 0 0 !important;
       align-self: flex-end !important;
       margin: 0 !important;
       width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    #ayat-fullscreen-modal #btn-fs-return-normal,
+    #ayat-fullscreen-modal #btn-fs-mobile-close,
+    #ayat-fullscreen-modal #btn-fs-footer-exit {
+      flex-shrink: 0 !important;
     }
   }
 

@@ -4300,13 +4300,31 @@ function AppInner({ currentUser, onSignOut }) {
             }
           };
 
+          const handleExitToNormalMode = () => {
+            if (fullScreenSelectedAyat) {
+              dispatch(uiActions.setFullScreenSelectedAyat(false));
+            }
+            setExplicitFullScreen(false);
+            const targetAyat = openAyatNum;
+            if (targetAyat != null) {
+              requestAnimationFrame(() => {
+                ayatRefs.current[targetAyat]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              });
+            }
+            showToast("Mode de lecture normal rétabli", "info");
+          };
+
           return (
             <AyatFullScreenModal
               isOpen={true}
               onClose={() => {
+                if (fullScreenSelectedAyat) {
+                  dispatch(uiActions.setFullScreenSelectedAyat(false));
+                }
                 setOpenAyatNum(null);
                 setExplicitFullScreen(false);
               }}
+              onExitToNormalMode={handleExitToNormalMode}
               ayat={currentAyat}
               selectedSurah={selectedSurah}
               ayats={ayats}

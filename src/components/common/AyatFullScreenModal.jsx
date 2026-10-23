@@ -24,6 +24,7 @@ const PART_BORDERS = ["var(--gold)","var(--teal)","var(--green)","var(--red)","#
 export function AyatFullScreenModal({
   isOpen,
   onClose,
+  onExitToNormalMode,
   ayat,
   selectedSurah,
   ayats = [],
@@ -221,8 +222,13 @@ export function AyatFullScreenModal({
           setShowQuickSettings(false);
         } else if (showReciterModal) {
           setShowReciterModal(false);
+        } else if (showTajweedGuide) {
+          setShowTajweedGuide(false);
+        } else if (showColorPickerModal) {
+          setShowColorPickerModal(false);
         } else {
-          onClose();
+          if (onExitToNormalMode) onExitToNormalMode();
+          else onClose();
         }
       } else if (e.key === "ArrowRight") {
         if (ayat && ayat.numberInSurah < ayats.length) {
@@ -245,7 +251,7 @@ export function AyatFullScreenModal({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, ayat, ayats.length, onClose, onSelectAyat, onTogglePlay, toggleNativeFullscreen, showReciterModal, showQuickSettings]);
+  }, [isOpen, ayat, ayats.length, onClose, onExitToNormalMode, onSelectAyat, onTogglePlay, toggleNativeFullscreen, showReciterModal, showQuickSettings, showTajweedGuide, showColorPickerModal]);
 
   // Scroll to top when ayat changes
   useEffect(() => {
@@ -744,44 +750,84 @@ export function AyatFullScreenModal({
         className="fs-header"
         style={{
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: isMobile ? "max(env(safe-area-inset-top, 0px), 8px) 10px 8px" : "10px 16px",
+          flexDirection: "column",
+          padding: isMobile ? "max(env(safe-area-inset-top, 0px), 6px) 10px 8px" : "10px 16px",
           borderBottom: "1px solid rgba(201,168,76,0.18)",
-          background: "rgba(12,15,22,0.92)",
+          background: "rgba(12,15,22,0.95)",
           backdropFilter: "blur(14px)",
           WebkitBackdropFilter: "blur(14px)",
           zIndex: 20,
           flexShrink: 0,
-          gap: isMobile ? 6 : 10,
-          flexWrap: isMobile ? "wrap" : "nowrap",
+          gap: isMobile ? 6 : 8,
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
-        {/* Top Row: Surah Info + Ayat Stepper + Controls */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flex: isMobile ? "1 1 100%" : "auto", justifyContent: "space-between" }}>
-          {/* Left: Surah Title Badge */}
+        {/* ROW 1: Return to Normal Mode + Surah Info + Quick Controls */}
+        <div
+          className="fs-header-row-1"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: "100%",
+            gap: 6,
+            flexShrink: 0,
+          }}
+        >
+          {/* Left: Prominent Back to Normal Mode Button */}
+          <button
+            id="btn-fs-return-normal"
+            onClick={onExitToNormalMode || onClose}
+            title="Revenir au mode normal du Coran (Échap)"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: isMobile ? "5px 10px" : "6px 12px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid rgba(201,168,76,0.55)",
+              background: "linear-gradient(135deg, rgba(201,168,76,0.22) 0%, rgba(201,168,76,0.08) 100%)",
+              color: "var(--gold2)",
+              fontFamily: "'Cinzel',serif",
+              fontSize: isMobile ? 11 : 11,
+              fontWeight: 700,
+              letterSpacing: 0.6,
+              cursor: "pointer",
+              flexShrink: 0,
+              minHeight: isMobile ? 34 : 32,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+              transition: "all .15s ease",
+            }}
+          >
+            <span style={{ fontSize: 13, lineHeight: 1 }}>←</span>
+            <span>{isMobile ? "Normal" : "MODE NORMAL"}</span>
+          </button>
+
+          {/* Center: Surah Title Badge */}
           <div
+            className="fs-header-title-badge"
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 6,
+              gap: 5,
               background: "rgba(201,168,76,0.1)",
-              border: "1px solid rgba(201,168,76,0.3)",
+              border: "1px solid rgba(201,168,76,0.28)",
               padding: "4px 8px",
               borderRadius: "var(--radius-sm)",
-              maxWidth: isMobile ? "150px" : "240px",
+              minWidth: 0,
+              flex: "1 1 auto",
+              justifyContent: "center",
               overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
             }}
           >
-            <span style={{ fontSize: 11, color: "var(--gold)" }}>⛶</span>
+            <span style={{ fontSize: 11, color: "var(--gold)", flexShrink: 0 }}>⛶</span>
             <span
               style={{
                 fontFamily: "'Cinzel',serif",
                 fontWeight: 700,
-                fontSize: isMobile ? 10 : 11,
-                letterSpacing: 1,
+                fontSize: isMobile ? 10.5 : 11.5,
+                letterSpacing: 0.8,
                 color: "var(--gold2)",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -790,10 +836,113 @@ export function AyatFullScreenModal({
             >
               {selectedSurah.number}. {selectedSurah.englishName}
             </span>
+            <span
+              style={{
+                fontFamily: "'Cinzel',serif",
+                fontWeight: 700,
+                fontSize: isMobile ? 9.5 : 10.5,
+                color: "#ffd166",
+                flexShrink: 0,
+              }}
+            >
+              · V.{currentAyatNum}
+            </span>
           </div>
 
-          {/* Center: Ayat Stepper with Direct Select */}
-          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {/* Right Action Buttons */}
+          <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+            {/* Tajweed Toggle Button */}
+            <button
+              id={isMobile ? "btn-fs-mobile-tajweed" : "btn-fs-tajweed"}
+              onClick={() => setShowTajweedBar((v) => !v)}
+              title="Options Tajweed (Graves/Aiguës, Qalqala, Madd, Idh-har, Idgham)"
+              style={{
+                height: isMobile ? 34 : 32,
+                padding: "0 8px",
+                borderRadius: 6,
+                border: `1px solid ${anyTajweedActive ? "var(--gold)" : "rgba(255,255,255,0.15)"}`,
+                background: anyTajweedActive ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.05)",
+                color: anyTajweedActive ? "var(--gold2)" : "var(--text2)",
+                fontSize: 11,
+                fontFamily: "'Cinzel',serif",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                flexShrink: 0,
+              }}
+            >
+              <span>🎨</span>
+              <span className="hide-mobile">TAJWEED</span>
+              {activeTajweedCount > 0 && <span style={{ fontSize: 10, fontWeight: 700 }}>{activeTajweedCount}</span>}
+            </button>
+
+            {/* Quick Settings Gear (Mobile) */}
+            {isMobile && (
+              <button
+                id="btn-fs-mobile-settings"
+                onClick={() => setShowQuickSettings((v) => !v)}
+                title="Options d'affichage et mode normal"
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 6,
+                  border: `1px solid ${showQuickSettings ? "var(--gold)" : "rgba(255,255,255,0.15)"}`,
+                  background: showQuickSettings ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.05)",
+                  color: showQuickSettings ? "var(--gold2)" : "var(--text2)",
+                  fontSize: 14,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                ⚙
+              </button>
+            )}
+
+            {/* Close / Return Button */}
+            <button
+              id={isMobile ? "btn-fs-mobile-close" : "btn-fs-close"}
+              onClick={onClose}
+              title="Fermer la vue agrandie (Échap)"
+              style={{
+                width: isMobile ? 34 : 32,
+                height: isMobile ? 34 : 32,
+                borderRadius: 6,
+                border: "1px solid rgba(224,90,90,0.45)",
+                background: "rgba(224,90,90,0.18)",
+                color: "#ff8282",
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                lineHeight: 1,
+                flexShrink: 0,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* ROW 2: Ayat Stepper + Reciter Selector + Desktop Options */}
+        <div
+          className="fs-header-row-2"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: "100%",
+            gap: 6,
+            flexWrap: isMobile ? "nowrap" : "wrap",
+          }}
+        >
+          {/* Ayat Stepper with Direct Select */}
+          <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0, flex: "1 1 auto" }}>
             <button
               id="btn-fs-prev-ayat"
               disabled={!hasPrev}
@@ -804,15 +953,16 @@ export function AyatFullScreenModal({
                 border: `1px solid ${hasPrev ? "rgba(201,168,76,0.35)" : "rgba(255,255,255,0.06)"}`,
                 color: hasPrev ? "var(--gold2)" : "rgba(255,255,255,0.2)",
                 borderRadius: 4,
-                padding: isMobile ? "5px 9px" : "4px 8px",
+                padding: isMobile ? "5px 8px" : "4px 8px",
                 cursor: hasPrev ? "pointer" : "default",
                 fontSize: 11,
                 transition: "all .15s",
-                minWidth: 30,
-                minHeight: 30,
+                minWidth: 28,
+                minHeight: 28,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                flexShrink: 0,
               }}
             >
               ◀
@@ -827,6 +977,7 @@ export function AyatFullScreenModal({
                 border: "1px solid rgba(201,168,76,0.35)",
                 borderRadius: "var(--radius-sm)",
                 padding: "2px 6px",
+                minWidth: 0,
               }}
             >
               <select
@@ -844,7 +995,7 @@ export function AyatFullScreenModal({
                   fontWeight: 700,
                   cursor: "pointer",
                   outline: "none",
-                  maxWidth: isMobile ? 84 : 110,
+                  maxWidth: isMobile ? 86 : 110,
                 }}
                 title="Sélectionner directement le numéro de verset"
               >
@@ -854,7 +1005,9 @@ export function AyatFullScreenModal({
                   </option>
                 ))}
               </select>
-              <span style={{ fontSize: 9, fontFamily: "'Cinzel',serif", color: "var(--text3)" }}>/ {totalAyats}</span>
+              <span style={{ fontSize: 9, fontFamily: "'Cinzel',serif", color: "var(--text3)", flexShrink: 0 }}>
+                / {totalAyats}
+              </span>
               {ayat.page != null && (
                 <span
                   style={{
@@ -862,11 +1015,12 @@ export function AyatFullScreenModal({
                     fontFamily: "'Cinzel',serif",
                     color: "#c878ff",
                     fontWeight: 700,
-                    padding: "1px 6px",
+                    padding: "1px 5px",
                     borderRadius: 4,
                     background: "rgba(200,120,255,.14)",
                     border: "1px solid rgba(200,120,255,.35)",
                     whiteSpace: "nowrap",
+                    flexShrink: 0,
                   }}
                   title={`Mushaf : Page ${ayat.page}`}
                 >
@@ -885,104 +1039,22 @@ export function AyatFullScreenModal({
                 border: `1px solid ${hasNext ? "rgba(201,168,76,0.35)" : "rgba(255,255,255,0.06)"}`,
                 color: hasNext ? "var(--gold2)" : "rgba(255,255,255,0.2)",
                 borderRadius: 4,
-                padding: isMobile ? "5px 9px" : "4px 8px",
+                padding: isMobile ? "5px 8px" : "4px 8px",
                 cursor: hasNext ? "pointer" : "default",
                 fontSize: 11,
                 transition: "all .15s",
-                minWidth: 30,
-                minHeight: 30,
+                minWidth: 28,
+                minHeight: 28,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                flexShrink: 0,
               }}
             >
               ▶
             </button>
           </div>
 
-          {/* Right on Mobile: Tajweed + Quick Settings Gear + Close Button */}
-          {isMobile ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button
-                id="btn-fs-mobile-tajweed"
-                onClick={() => setShowTajweedBar((v) => !v)}
-                title="Options Tajweed (Graves/Aiguës, Qalqala, Madd, Idh-har, Idgham)"
-                style={{
-                  height: 34,
-                  padding: "0 8px",
-                  borderRadius: 6,
-                  border: `1px solid ${anyTajweedActive ? "var(--gold)" : "rgba(255,255,255,0.15)"}`,
-                  background: anyTajweedActive ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.05)",
-                  color: anyTajweedActive ? "var(--gold2)" : "var(--text2)",
-                  fontSize: 11,
-                  fontFamily: "'Cinzel',serif",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <span>🎨</span>
-                {activeTajweedCount > 0 && <span style={{ fontSize: 10, fontWeight: 700 }}>{activeTajweedCount}</span>}
-              </button>
-
-              <button
-                id="btn-fs-mobile-settings"
-                onClick={() => setShowQuickSettings((v) => !v)}
-                title="Options d'affichage"
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 6,
-                  border: `1px solid ${showQuickSettings ? "var(--gold)" : "rgba(255,255,255,0.15)"}`,
-                  background: showQuickSettings ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.05)",
-                  color: showQuickSettings ? "var(--gold2)" : "var(--text2)",
-                  fontSize: 14,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                ⚙
-              </button>
-
-              <button
-                id="btn-fs-mobile-close"
-                onClick={onClose}
-                title="Fermer (Échap)"
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 6,
-                  border: "1px solid rgba(224,90,90,0.4)",
-                  background: "rgba(224,90,90,0.15)",
-                  color: "#ff8282",
-                  fontSize: 15,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  lineHeight: 1,
-                }}
-              >
-                ✕
-              </button>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Second Row on Mobile / Right Controls on Desktop */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            flexWrap: "wrap",
-            justifyContent: isMobile ? "space-between" : "flex-end",
-            width: isMobile ? "100%" : "auto",
-          }}
-        >
           {/* Reciter Selector Button */}
           <button
             id="btn-fs-reciter"
@@ -1005,7 +1077,8 @@ export function AyatFullScreenModal({
               letterSpacing: 0.5,
               cursor: "pointer",
               transition: "all .15s",
-              maxWidth: isMobile ? 180 : 160,
+              maxWidth: isMobile ? 150 : 160,
+              flexShrink: 0,
             }}
           >
             <span>{activeReciterObj?.flag || "🎙️"}</span>
@@ -1015,7 +1088,7 @@ export function AyatFullScreenModal({
             <span style={{ fontSize: 8, opacity: 0.7 }}>▼</span>
           </button>
 
-          {/* Desktop-only Quick Controls (On mobile they live in ⚙ Settings) */}
+          {/* Desktop-only Quick Controls */}
           <div className="hide-mobile" style={{ alignItems: "center", gap: 6 }}>
             {/* Font Size Adjusters */}
             <div
@@ -1093,46 +1166,6 @@ export function AyatFullScreenModal({
               </button>
             )}
 
-            {/* Interactive Tajweed Toolbar Button */}
-            <button
-              id="btn-fs-tajweed"
-              onClick={() => setShowTajweedBar((v) => !v)}
-              title="Options Tajweed (Graves/Aiguës, Qalqala, Madd, Idh-har, Idgham)"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "4px 9px",
-                borderRadius: "var(--radius-sm)",
-                border: `1px solid ${anyTajweedActive ? "var(--gold)" : "rgba(255,255,255,0.12)"}`,
-                background: anyTajweedActive ? "rgba(201,168,76,0.18)" : "rgba(255,255,255,0.04)",
-                fontSize: 10,
-                fontFamily: "'Cinzel',serif",
-                color: anyTajweedActive ? "var(--gold2)" : "var(--text3)",
-                cursor: "pointer",
-                letterSpacing: 0.5,
-                transition: "all .15s",
-              }}
-            >
-              <span>🎨</span>
-              <span>TAJWEED</span>
-              {activeTajweedCount > 0 && (
-                <span
-                  style={{
-                    background: "var(--gold)",
-                    color: "#0c0f16",
-                    fontSize: 9,
-                    fontWeight: 800,
-                    borderRadius: "10px",
-                    padding: "0 4px",
-                    marginLeft: 2,
-                  }}
-                >
-                  {activeTajweedCount}
-                </span>
-              )}
-            </button>
-
             {/* Auto Open Fullscreen Preference */}
             {onToggleFullScreenOption && (
               <button
@@ -1175,29 +1208,6 @@ export function AyatFullScreenModal({
             >
               {isNativeFs ? "⤓" : "⛶"}
             </button>
-
-            {/* Desktop Close Button */}
-            <button
-              id="btn-fs-close"
-              onClick={onClose}
-              title="Fermer la vue agrandie (Échap)"
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: "var(--radius-sm)",
-                border: "1px solid rgba(224,90,90,0.35)",
-                background: "rgba(224,90,90,0.1)",
-                color: "#ff7b7b",
-                fontSize: 15,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                lineHeight: 1,
-              }}
-            >
-              ✕
-            </button>
           </div>
         </div>
       </header>
@@ -1233,7 +1243,7 @@ export function AyatFullScreenModal({
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontFamily: "'Cinzel',serif", fontSize: 12, fontWeight: 700, letterSpacing: 1.2, color: "var(--gold2)" }}>
-                ⚙ OPTIONS D'AFFICHAGE
+                ⚙ OPTIONS D'AFFICHAGE & NAVIGATION
               </span>
               <button
                 onClick={() => setShowQuickSettings(false)}
@@ -1242,6 +1252,37 @@ export function AyatFullScreenModal({
                 ✕
               </button>
             </div>
+
+            {/* Action Directe: Retour au Mode Normal */}
+            <button
+              id="btn-fs-settings-exit-normal"
+              onClick={() => {
+                setShowQuickSettings(false);
+                if (onExitToNormalMode) onExitToNormalMode();
+                else onClose();
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                padding: "10px 14px",
+                borderRadius: 8,
+                border: "1px solid rgba(201,168,76,0.65)",
+                background: "linear-gradient(135deg, rgba(201,168,76,0.25) 0%, rgba(201,168,76,0.08) 100%)",
+                color: "var(--gold2)",
+                fontFamily: "'Cinzel',serif",
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 1,
+                cursor: "pointer",
+                width: "100%",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+              }}
+            >
+              <span>←</span>
+              <span>RETOURNER AU MODE DE LECTURE NORMAL</span>
+            </button>
 
             {/* Font Size Row */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
@@ -2735,26 +2776,67 @@ export function AyatFullScreenModal({
 
           <button
             id="btn-fs-footer-exit"
-            onClick={onClose}
+            onClick={onExitToNormalMode || onClose}
+            title="Revenir au mode normal du Coran (Échap)"
             style={{
               padding: isMobile ? "8px 10px" : "7px 14px",
               borderRadius: "var(--radius-sm)",
-              border: "1px solid rgba(201,168,76,0.4)",
-              background: "rgba(201,168,76,0.1)",
+              border: "1px solid rgba(201,168,76,0.55)",
+              background: "linear-gradient(135deg, rgba(201,168,76,0.2) 0%, rgba(201,168,76,0.08) 100%)",
               color: "var(--gold2)",
-              fontSize: isMobile ? 9 : 10,
+              fontSize: isMobile ? 10 : 10,
               fontFamily: "'Cinzel',serif",
               letterSpacing: 0.5,
               cursor: "pointer",
-              fontWeight: 600,
+              fontWeight: 700,
               transition: "all .15s",
               minHeight: isMobile ? 40 : 34,
+              flexShrink: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
             }}
           >
-            {isMobile ? "✕" : "QUITTER"}
+            <span style={{ fontSize: 11 }}>←</span>
+            <span>{isMobile ? "Normal" : "MODE NORMAL"}</span>
           </button>
         </div>
       </footer>
+
+      {/* ── Mobile Floating Pill: Always visible exit to normal mode ── */}
+      {isMobile && (
+        <button
+          id="btn-fs-floating-back-normal"
+          onClick={onExitToNormalMode || onClose}
+          className="fs-floating-back-btn"
+          title="Retour au mode de lecture normal"
+          style={{
+            position: "fixed",
+            bottom: "calc(64px + env(safe-area-inset-bottom, 0px))",
+            left: 10,
+            zIndex: 35,
+            background: "rgba(16, 20, 30, 0.95)",
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+            border: "1px solid rgba(201, 168, 76, 0.6)",
+            borderRadius: 20,
+            padding: "6px 12px",
+            color: "var(--gold2)",
+            fontSize: 11,
+            fontFamily: "'Cinzel', serif",
+            fontWeight: 700,
+            letterSpacing: 0.6,
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            boxShadow: "0 6px 18px rgba(0,0,0,0.6)",
+          }}
+        >
+          <span style={{ fontSize: 13, lineHeight: 1 }}>←</span>
+          <span>Mode Normal</span>
+        </button>
+      )}
 
       {/* ── Tajweed Color Customizer Modal ── */}
       <TajweedColorPickerModal

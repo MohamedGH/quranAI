@@ -53,7 +53,7 @@ export function OptionsModal({ onClose, onOpenReminders }) {
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         background:"var(--surface)", borderRadius:"18px 18px 0 0",
-        width:"100%", maxHeight:"85vh", overflowY:"auto",
+        width:"100%", maxHeight:"calc(85dvh - env(safe-area-inset-bottom, 0px))", overflowY:"auto",
         boxShadow:"0 -4px 32px rgba(0,0,0,.5)",
       }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -62,7 +62,7 @@ export function OptionsModal({ onClose, onOpenReminders }) {
           <span style={{ fontSize:10, letterSpacing:3, color:"var(--gold2)", fontFamily:"'Cinzel',serif" }}>⚙ OPTIONS</span>
           <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--text3)", fontSize:18, cursor:"pointer" }}>✕</button>
         </div>
-        <div style={{ padding:"0 20px 32px" }}>
+        <div style={{ padding:"0 20px calc(32px + env(safe-area-inset-bottom, 0px))" }}>
           <Section title="PERFORMANCE" />
           <Row label="TIMESTAMPS" desc="Synchronisation audio — désactiver accélère le chargement" on={enableTimestamps} onToggle={() => dispatch(uiActions.toggleEnableTimestamps())} color="var(--teal2)" />
           <Row label="LETTRE PAR LETTRE" desc="Surlignage animé pendant la lecture audio" on={enableLetterByLetter} onToggle={() => dispatch(uiActions.toggleEnableLetterByLetter())} color="#5bc8f5" />

@@ -592,3 +592,54 @@ export const collapseAllGroups = (groups = []) => {
  * Pure state manager helper: Expands all groups (clears collapsed map).
  */
 export const expandAllGroups = () => Object.freeze({});
+
+/**
+ * Pure functional helper: Computes horizontal scroll delta for categories.
+ */
+export const computeCategoryScrollDelta = (direction = "right", step = 180) => {
+  const normalizedStep = Math.max(1, Math.abs(Number(step) || 180));
+  return direction === "left" ? -normalizedStep : normalizedStep;
+};
+
+/**
+ * Pure functional helper: Clamps target scroll position within [0, maxScroll].
+ */
+export const clampScrollOffset = (targetScroll = 0, maxScroll = 0) => {
+  const safeTarget = Number(targetScroll) || 0;
+  const safeMax = Math.max(0, Number(maxScroll) || 0);
+  return Math.max(0, Math.min(safeTarget, safeMax));
+};
+
+/**
+ * Pure functional helper: Checks if horizontal scrolling is possible in the given direction.
+ */
+export const canScrollDirection = (
+  { scrollLeft = 0, scrollWidth = 0, clientWidth = 0 } = {},
+  direction = "right",
+  threshold = 2
+) => {
+  const sLeft = Math.max(0, Number(scrollLeft) || 0);
+  const sWidth = Math.max(0, Number(scrollWidth) || 0);
+  const cWidth = Math.max(0, Number(clientWidth) || 0);
+  const maxScroll = Math.max(0, sWidth - cWidth);
+
+  if (maxScroll <= threshold) return false;
+
+  if (direction === "left") {
+    return sLeft > threshold;
+  }
+  return sLeft < maxScroll - threshold;
+};
+
+/**
+ * Pure functional helper: Converts mouse wheel event deltas to appropriate horizontal delta.
+ * On desktop mice without horizontal tilt, vertical deltaY is converted into horizontal movement.
+ */
+export const resolveWheelHorizontalDelta = ({ deltaX = 0, deltaY = 0 } = {}) => {
+  const dx = Number(deltaX) || 0;
+  const dy = Number(deltaY) || 0;
+  if (dy !== 0 && Math.abs(dy) >= Math.abs(dx)) {
+    return dy;
+  }
+  return dx;
+};

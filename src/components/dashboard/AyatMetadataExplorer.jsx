@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { sel, uiActions } from "../../store.js";
 import { buildQuranRoute } from "../../utils/routeManager.js";
@@ -12,6 +12,10 @@ import {
   collapseAllGroups,
   expandAllGroups,
   formatShortDateFr,
+  computeCategoryScrollDelta,
+  clampScrollOffset,
+  canScrollDirection,
+  resolveWheelHorizontalDelta,
 } from "../../utils/dashboardRevisionGrouping.js";
 import { extractAyatHistoricalMetadata, computeRevisionQueue, computeQuranAggregations } from "../../utils/quranHistoryAnalytics.js";
 import { masteryColor } from "../common/Mastery.jsx";
@@ -423,6 +427,87 @@ export function AyatMetadataExplorer({
   const [selectedAyatKey, setSelectedAyatKey] = useState(null); // "surahNum:ayatNum"
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState("date_asc"); // "date_asc" | "date_desc" | "surah"
+  const [categoryWrapMode, setCategoryWrapMode] = useState(false);
+  const [fullListHeight, setFullListHeight] = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [isDraggingCategory, setIsDraggingCategory] = useState(false);
+
+  const categoryScrollRef = useRef(null);
+  const dragStartXRef = useRef(0);
+  const dragScrollLeftRef = useRef(0);
+
+  const checkCategoryScroll = useCallback(() => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(canScrollDirection(el, "left"));
+    setCanScrollRight(canScrollDirection(el, "right"));
+  }, []);
+
+  useEffect(() => {
+    checkCategoryScroll();
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", checkCategoryScroll, { passive: true });
+    window.addEventListener("resize", checkCategoryScroll);
+    return () => {
+      el.removeEventListener("scroll", checkCategoryScroll);
+      window.removeEventListener("resize", checkCategoryScroll);
+    };
+  }, [checkCategoryScroll, categoryWrapMode, reduxGroupBy]);
+
+  // Support smooth mouse wheel horizontal scroll on category bar
+  useEffect(() => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const handleWheel = (e) => {
+      if (categoryWrapMode) return;
+      const delta = resolveWheelHorizontalDelta({ deltaX: e.deltaX, deltaY: e.deltaY });
+      if (delta !== 0) {
+        const maxScroll = el.scrollWidth - el.clientWidth;
+        if (maxScroll > 0) {
+          if ((delta > 0 && el.scrollLeft < maxScroll) || (delta < 0 && el.scrollLeft > 0)) {
+            e.preventDefault();
+            el.scrollLeft = clampScrollOffset(el.scrollLeft + delta, maxScroll);
+            checkCategoryScroll();
+          }
+        }
+      }
+    };
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [categoryWrapMode, checkCategoryScroll]);
+
+  const handleScrollCategory = (direction) => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const delta = computeCategoryScrollDelta(direction, 180);
+    el.scrollBy({ left: delta, behavior: "smooth" });
+    setTimeout(checkCategoryScroll, 200);
+  };
+
+  const handleCategoryPointerDown = (e) => {
+    if (categoryWrapMode) return;
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    setIsDraggingCategory(true);
+    dragStartXRef.current = e.pageX - el.offsetLeft;
+    dragScrollLeftRef.current = el.scrollLeft;
+  };
+
+  const handleCategoryPointerMove = (e) => {
+    if (!isDraggingCategory || categoryWrapMode) return;
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - dragStartXRef.current) * 1.35;
+    el.scrollLeft = dragScrollLeftRef.current - walk;
+    checkCategoryScroll();
+  };
+
+  const handleCategoryPointerUp = () => {
+    setIsDraggingCategory(false);
+  };
 
   const groupBy = reduxGroupBy || REVISION_GROUP_MODES.SURAH;
   const collapsedGroups = reduxCollapsedGroups || {};
@@ -627,7 +712,7 @@ export function AyatMetadataExplorer({
 
       {/* ──────────────── TAB 1: REVISIONS CHRONOLOGIQUES ET PAR GROUPES ──────────────── */}
       {activeTab === "revisions" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0, maxWidth: "100%", width: "100%" }}>
           {/* Top Bar: Selector for Grouping Criteria + Summary */}
           <div style={{
             display: "flex",
@@ -637,6 +722,10 @@ export function AyatMetadataExplorer({
             border: "1px solid var(--border)",
             borderRadius: 10,
             padding: "10px 14px",
+            minWidth: 0,
+            maxWidth: "100%",
+            width: "100%",
+            boxSizing: "border-box",
           }}>
             <div style={{
               display: "flex",
@@ -644,8 +733,9 @@ export function AyatMetadataExplorer({
               justifyContent: "space-between",
               flexWrap: "wrap",
               gap: 8,
+              minWidth: 0,
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 9, fontFamily: "'Cinzel',serif", letterSpacing: 1.5, color: "#ff9f43", fontWeight: 700 }}>
                   🔖 REGROUPER LES RÉVISIONS PAR :
                 </span>
@@ -661,84 +751,220 @@ export function AyatMetadataExplorer({
                 </span>
               </div>
 
-              {/* Expand / Collapse All Controls */}
-              {revisionGroups.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <button
-                    onClick={handleExpandAll}
-                    style={{
-                      fontSize: 8,
-                      fontFamily: "'Cinzel',serif",
-                      padding: "3px 8px",
-                      borderRadius: 4,
-                      background: "var(--surface3)",
-                      border: "1px solid var(--border2)",
-                      color: "var(--text2)",
-                      cursor: "pointer",
-                    }}
-                    title="Déplier tous les groupes"
-                  >
-                    ▼ Tout déplier
-                  </button>
-                  <button
-                    onClick={() => handleCollapseAll(revisionGroups)}
-                    style={{
-                      fontSize: 8,
-                      fontFamily: "'Cinzel',serif",
-                      padding: "3px 8px",
-                      borderRadius: 4,
-                      background: "var(--surface3)",
-                      border: "1px solid var(--border2)",
-                      color: "var(--text3)",
-                      cursor: "pointer",
-                    }}
-                    title="Replier tous les groupes"
-                  >
-                    ▶ Tout replier
-                  </button>
-                </div>
-              )}
+              {/* View mode toggle & Expand / Collapse All Controls */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => setCategoryWrapMode((v) => !v)}
+                  style={{
+                    fontSize: 8,
+                    fontFamily: "'Cinzel',serif",
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    background: categoryWrapMode ? "rgba(255,159,67,0.22)" : "var(--surface3)",
+                    border: `1px solid ${categoryWrapMode ? "#ff9f43" : "var(--border2)"}`,
+                    color: categoryWrapMode ? "#ff9f43" : "var(--text2)",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                  title={categoryWrapMode ? "Activer la barre défilante fluide" : "Afficher toutes les catégories sans défilement"}
+                >
+                  {categoryWrapMode ? "↔ Défilement" : "⊞ Toutes catégories"}
+                </button>
+
+                {revisionGroups.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setFullListHeight((v) => !v)}
+                      style={{
+                        fontSize: 8,
+                        fontFamily: "'Cinzel',serif",
+                        padding: "3px 8px",
+                        borderRadius: 4,
+                        background: fullListHeight ? "rgba(62,184,160,0.2)" : "var(--surface3)",
+                        border: `1px solid ${fullListHeight ? "var(--teal)" : "var(--border2)"}`,
+                        color: fullListHeight ? "var(--teal2)" : "var(--text3)",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={fullListHeight ? "Revenir à la vue scrollable compacte (540px)" : "Déplier la hauteur pour afficher tous les groupes"}
+                    >
+                      {fullListHeight ? "⊡ Hauteur max" : "↕ Pleine hauteur"}
+                    </button>
+                    <button
+                      onClick={handleExpandAll}
+                      style={{
+                        fontSize: 8,
+                        fontFamily: "'Cinzel',serif",
+                        padding: "3px 8px",
+                        borderRadius: 4,
+                        background: "var(--surface3)",
+                        border: "1px solid var(--border2)",
+                        color: "var(--text2)",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                      title="Déplier tous les groupes"
+                    >
+                      ▼ Déplier
+                    </button>
+                    <button
+                      onClick={() => handleCollapseAll(revisionGroups)}
+                      style={{
+                        fontSize: 8,
+                        fontFamily: "'Cinzel',serif",
+                        padding: "3px 8px",
+                        borderRadius: 4,
+                        background: "var(--surface3)",
+                        border: "1px solid var(--border2)",
+                        color: "var(--text3)",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                      title="Replier tous les groupes"
+                    >
+                      ▶ Replier
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
-            {/* Mobile-first horizontally scrollable grouping chips */}
+            {/* Horizontally scrollable grouping chips with navigation arrows and drag-to-scroll */}
             <div style={{
+              position: "relative",
               display: "flex",
               alignItems: "center",
-              gap: 6,
-              overflowX: "auto",
-              paddingBottom: 2,
-              WebkitOverflowScrolling: "touch",
+              width: "100%",
+              minWidth: 0,
+              maxWidth: "100%",
             }}>
-              {Object.values(GROUP_MODE_LABELS).map((gm) => {
-                const isSelected = groupBy === gm.id;
-                return (
-                  <button
-                    key={gm.id}
-                    onClick={() => handleSetGroupBy(gm.id)}
-                    style={{
-                      fontSize: 8.5,
-                      fontFamily: "'Cinzel',serif",
-                      letterSpacing: 1,
-                      padding: "6px 12px",
-                      borderRadius: 20,
-                      border: `1px solid ${isSelected ? "#ff9f43" : "var(--border2)"}`,
-                      background: isSelected ? "rgba(255,159,67,0.2)" : "var(--surface3)",
-                      color: isSelected ? "#ff9f43" : "var(--text3)",
-                      fontWeight: isSelected ? 700 : 500,
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 5,
-                      transition: "all .15s",
-                      minHeight: 32,
-                    }}
-                  >
-                    <span>{gm.icon}</span>
-                    <span>{gm.label}</span>
-                  </button>
-                );
-              })}
+              {/* Left Scroll Arrow */}
+              {!categoryWrapMode && (
+                <button
+                  type="button"
+                  onClick={() => handleScrollCategory("left")}
+                  disabled={!canScrollLeft}
+                  aria-label="Faire défiler les catégories à gauche"
+                  title="Catégories précédentes"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    background: canScrollLeft ? "var(--surface3)" : "rgba(255,255,255,0.02)",
+                    border: `1px solid ${canScrollLeft ? "#ff9f43" : "var(--border2)"}`,
+                    color: canScrollLeft ? "#ff9f43" : "var(--text3)",
+                    cursor: canScrollLeft ? "pointer" : "default",
+                    opacity: canScrollLeft ? 1 : 0.25,
+                    flexShrink: 0,
+                    marginRight: 6,
+                    transition: "all .15s",
+                    fontSize: 15,
+                    fontWeight: 700,
+                    zIndex: 2,
+                    userSelect: "none",
+                  }}
+                >
+                  ‹
+                </button>
+              )}
+
+              {/* Scrollable Container */}
+              <div
+                ref={categoryScrollRef}
+                onPointerDown={handleCategoryPointerDown}
+                onPointerMove={handleCategoryPointerMove}
+                onPointerUp={handleCategoryPointerUp}
+                onPointerLeave={handleCategoryPointerUp}
+                className="revision-category-scroll-container"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  overflowX: categoryWrapMode ? "visible" : "auto",
+                  flexWrap: categoryWrapMode ? "wrap" : "nowrap",
+                  paddingBottom: 4,
+                  paddingTop: 2,
+                  flex: 1,
+                  minWidth: 0,
+                  maxWidth: "100%",
+                  width: "100%",
+                  WebkitOverflowScrolling: "touch",
+                  touchAction: categoryWrapMode ? "auto" : "pan-x",
+                  overscrollBehaviorX: "contain",
+                  scrollbarWidth: "thin",
+                  cursor: isDraggingCategory ? "grabbing" : "grab",
+                  userSelect: "none",
+                }}
+              >
+                {Object.values(GROUP_MODE_LABELS).map((gm) => {
+                  const isSelected = groupBy === gm.id;
+                  return (
+                    <button
+                      key={gm.id}
+                      onClick={() => handleSetGroupBy(gm.id)}
+                      style={{
+                        fontSize: 8.5,
+                        fontFamily: "'Cinzel',serif",
+                        letterSpacing: 1,
+                        padding: "6px 12px",
+                        borderRadius: 20,
+                        border: `1px solid ${isSelected ? "#ff9f43" : "var(--border2)"}`,
+                        background: isSelected ? "rgba(255,159,67,0.2)" : "var(--surface3)",
+                        color: isSelected ? "#ff9f43" : "var(--text3)",
+                        fontWeight: isSelected ? 700 : 500,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        transition: "all .15s",
+                        minHeight: 32,
+                        touchAction: "manipulation",
+                      }}
+                    >
+                      <span>{gm.icon}</span>
+                      <span>{gm.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Scroll Arrow */}
+              {!categoryWrapMode && (
+                <button
+                  type="button"
+                  onClick={() => handleScrollCategory("right")}
+                  disabled={!canScrollRight}
+                  aria-label="Faire défiler les catégories à droite"
+                  title="Catégories suivantes"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    background: canScrollRight ? "var(--surface3)" : "rgba(255,255,255,0.02)",
+                    border: `1px solid ${canScrollRight ? "#ff9f43" : "var(--border2)"}`,
+                    color: canScrollRight ? "#ff9f43" : "var(--text3)",
+                    cursor: canScrollRight ? "pointer" : "default",
+                    opacity: canScrollRight ? 1 : 0.25,
+                    flexShrink: 0,
+                    marginLeft: 6,
+                    transition: "all .15s",
+                    fontSize: 15,
+                    fontWeight: 700,
+                    zIndex: 2,
+                    userSelect: "none",
+                  }}
+                >
+                  ›
+                </button>
+              )}
             </div>
           </div>
 
@@ -796,7 +1022,23 @@ export function AyatMetadataExplorer({
               ✨ AUCUN VERSET N'EST ACTUELLEMENT MARQUÉ À RÉVISER
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 520, overflowY: "auto", paddingRight: 4 }}>
+            <div
+              className="revision-groups-container"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                maxHeight: fullListHeight ? "none" : 540,
+                overflowY: fullListHeight ? "visible" : "auto",
+                paddingRight: 4,
+                minWidth: 0,
+                maxWidth: "100%",
+                width: "100%",
+                WebkitOverflowScrolling: "touch",
+                overscrollBehaviorY: "contain",
+                scrollbarWidth: "thin",
+              }}
+            >
               {revisionGroups.map((group) => {
                 const collapsed = isGroupCollapsed(collapsedGroups, group.id);
                 return (

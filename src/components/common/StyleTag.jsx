@@ -1719,6 +1719,50 @@ export const CSS = `
   .dash-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
   .dash-ring-label{font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;color:var(--text3);text-align:center;margin-top:4px;}
   .dash-empty-hint{font-size:10px;color:var(--text3);letter-spacing:1px;text-align:center;padding:20px 0;}
+
+  /* Dashboard Revision Category Bar and Group Scrolling */
+  .revision-category-scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 159, 67, 0.45) rgba(255, 159, 67, 0.06);
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  .revision-category-scroll-container::-webkit-scrollbar {
+    height: 5px;
+  }
+  .revision-category-scroll-container::-webkit-scrollbar-track {
+    background: rgba(255, 159, 67, 0.06);
+    border-radius: 4px;
+  }
+  .revision-category-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 159, 67, 0.45);
+    border-radius: 4px;
+  }
+  .revision-category-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 159, 67, 0.75);
+  }
+
+  .revision-groups-container {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 159, 67, 0.35) rgba(255, 159, 67, 0.05);
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  .revision-groups-container::-webkit-scrollbar {
+    width: 6px;
+  }
+  .revision-groups-container::-webkit-scrollbar-track {
+    background: rgba(255, 159, 67, 0.05);
+    border-radius: 4px;
+  }
+  .revision-groups-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 159, 67, 0.35);
+    border-radius: 4px;
+  }
+  .revision-groups-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 159, 67, 0.65);
+  }
+
   @media(max-width:700px){
     .dash-two-col{grid-template-columns:1fr;}
     .dash-page{padding:12px 8px 60px;}

@@ -17,6 +17,10 @@ import {
   expandAllGroups,
   safeParseDateMs,
   formatShortDateFr,
+  computeCategoryScrollDelta,
+  clampScrollOffset,
+  canScrollDirection,
+  resolveWheelHorizontalDelta,
 } from "../src/utils/dashboardRevisionGrouping.js";
 
 describe("Dashboard Revision Grouping Engine", () => {
@@ -298,6 +302,53 @@ describe("Dashboard Revision Grouping Engine", () => {
       const expandedAll = expandAllGroups();
       expect(expandedAll).toEqual({});
       expect(isGroupCollapsed(expandedAll, "g1")).toBe(false);
+    });
+  });
+
+  describe("Category Scroll Calculation Utilities", () => {
+    it("computes horizontal scroll delta correctly", () => {
+      expect(computeCategoryScrollDelta("left", 180)).toBe(-180);
+      expect(computeCategoryScrollDelta("right", 180)).toBe(180);
+      expect(computeCategoryScrollDelta("left", -100)).toBe(-100);
+      expect(computeCategoryScrollDelta("right")).toBe(180);
+    });
+
+    it("clamps scroll offset correctly within bounds", () => {
+      expect(clampScrollOffset(50, 200)).toBe(50);
+      expect(clampScrollOffset(-20, 200)).toBe(0);
+      expect(clampScrollOffset(250, 200)).toBe(200);
+      expect(clampScrollOffset(100, 0)).toBe(0);
+    });
+
+    it("checks scrollability in left and right directions accurately", () => {
+      const containerNoOverflow = { scrollLeft: 0, scrollWidth: 300, clientWidth: 300 };
+      expect(canScrollDirection(containerNoOverflow, "left")).toBe(false);
+      expect(canScrollDirection(containerNoOverflow, "right")).toBe(false);
+
+      const containerAtStart = { scrollLeft: 0, scrollWidth: 600, clientWidth: 300 };
+      expect(canScrollDirection(containerAtStart, "left")).toBe(false);
+      expect(canScrollDirection(containerAtStart, "right")).toBe(true);
+
+      const containerInMiddle = { scrollLeft: 150, scrollWidth: 600, clientWidth: 300 };
+      expect(canScrollDirection(containerInMiddle, "left")).toBe(true);
+      expect(canScrollDirection(containerInMiddle, "right")).toBe(true);
+
+      const containerAtEnd = { scrollLeft: 300, scrollWidth: 600, clientWidth: 300 };
+      expect(canScrollDirection(containerAtEnd, "left")).toBe(true);
+      expect(canScrollDirection(containerAtEnd, "right")).toBe(false);
+    });
+
+    it("resolves wheel horizontal delta from vertical mouse wheel", () => {
+      // Standard vertical wheel on desktop
+      expect(resolveWheelHorizontalDelta({ deltaX: 0, deltaY: 100 })).toBe(100);
+      expect(resolveWheelHorizontalDelta({ deltaX: 0, deltaY: -80 })).toBe(-80);
+
+      // Horizontal trackpad gesture
+      expect(resolveWheelHorizontalDelta({ deltaX: 120, deltaY: 10 })).toBe(120);
+      expect(resolveWheelHorizontalDelta({ deltaX: -120, deltaY: 0 })).toBe(-120);
+
+      // Empty fallback
+      expect(resolveWheelHorizontalDelta()).toBe(0);
     });
   });
 });

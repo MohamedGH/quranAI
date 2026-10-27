@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import { sel } from "../../store.js";
 import { PlayingArabicHighlighted } from "../common/ArabicHighlighted.jsx";
 import { VoiceRecorder } from "../audio/VoiceRecorder.jsx";
+import { safePlayAudio, safePauseAudio } from "../../utils/safeAudioPlayer.js";
 
 export function LectureMode({ ayat, surahNum, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay }) {
   const audioRef  = useRef(null);
@@ -100,8 +101,8 @@ export function LectureMode({ ayat, surahNum, audioUrl, isMainPlaying, timestamp
 
   const togglePlay = () => {
     if (!audioRef.current) return;
-    if (audioRef.current.paused) audioRef.current.play();
-    else audioRef.current.pause();
+    if (audioRef.current.paused) safePlayAudio(audioRef.current);
+    else safePauseAudio(audioRef.current);
   };
 
   const seek = (e) => {

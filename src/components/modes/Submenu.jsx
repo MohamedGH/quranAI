@@ -14,10 +14,12 @@ import { AyatMemorisationWorkflow } from "../memorisation/AyatMemorisationWorkfl
 import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 import { computeMastery, masteryColor } from "../common/Mastery.jsx";
 import { scanAyatTajweed } from "../../utils/tajweedRules.js";
+import { SubmenuSelectorModal } from "../common/SubmenuSelectorModal.jsx";
 
 export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuMode, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay, partSelectAyat, partSelectStep, onStartPartCreate, collections, ayatInCollections, onOpenCollModal, aideMemoireClickMode, setAideMemoireClickMode, spellCheck, onSetLoop, ayatLoopActive, translationLang, ayatTranslation, wbwWords, onFullScreen }) {
   const [copied, setCopied] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showSelectorModal, setShowSelectorModal] = useState(false);
   const scrollRef = useRef(null);
   const moreMenuRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -240,78 +242,42 @@ export function Submenu({ ayat, surahNum, ld, setLData, submenuMode, setSubmenuM
           </div>
         )}
 
-        {/* Compact "Plus d'outils & modes" trigger */}
-        <div className="submenu-more-wrap" ref={moreMenuRef}>
+        {/* Improved UX Mode Selector Modal Trigger */}
+        <div className="submenu-more-wrap">
           <button
             type="button"
-            className={`submenu-more-btn${showMoreMenu || activeSecondaryMode ? " active" : ""}`}
-            onClick={() => setShowMoreMenu(v => !v)}
-            title="Plus de modes et d'actions pour ce verset"
-            aria-expanded={showMoreMenu}
+            className={`submenu-more-btn${activeSecondaryMode ? " active" : ""}`}
+            onClick={() => setShowSelectorModal(true)}
+            title="Ouvrir le sélecteur de mode d'étude"
+            style={{
+              borderColor: "var(--gold)",
+              background: "rgba(201, 168, 76, 0.12)",
+              color: "var(--gold2)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+            }}
           >
-            <span>⋯ PLUS</span>
+            <span>📚 MODES ▾</span>
             {hasSecondaryBadge && <span className="submenu-more-dot" />}
           </button>
-
-          {showMoreMenu && (
-            <div className="submenu-more-popover">
-              <div className="submenu-more-section-label">AUTRES MODES D'ÉTUDE</div>
-              {SECONDARY_MODES.map(m => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`submenu-more-item${submenuMode === m.id ? " active" : ""}`}
-                  onClick={() => {
-                    setSubmenuMode(m.id);
-                    setShowMoreMenu(false);
-                  }}
-                >
-                  <span className="submenu-more-item-title">{m.label}</span>
-                  <span className="submenu-more-item-desc">{m.desc}</span>
-                </button>
-              ))}
-
-              <div className="submenu-more-divider" />
-              <div className="submenu-more-section-label">ACTIONS DU VERSET</div>
-              <div className="submenu-more-actions-row">
-                <button
-                  type="button"
-                  className={`submenu-quick-action${ayatLoopActive ? " active" : ""}`}
-                  onClick={() => { onSetLoop?.(); setShowMoreMenu(false); }}
-                >
-                  <span>↺</span>
-                  <span>{ayatLoopActive ? "Boucle active" : "Boucler"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`submenu-quick-action${copied ? " active" : ""}`}
-                  onClick={() => {
-                    const textToCopy = `${ayat.text || ''}\n[Sourate ${surahNum}:${ayat.numberInSurah}]`;
-                    try { navigator.clipboard.writeText(textToCopy); } catch {}
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1600);
-                  }}
-                >
-                  <span>{copied ? "✓" : "📋"}</span>
-                  <span>{copied ? "Copié" : "Copier"}</span>
-                </button>
-
-                {onFullScreen && (
-                  <button
-                    type="button"
-                    className="submenu-quick-action"
-                    onClick={() => { onFullScreen(); setShowMoreMenu(false); }}
-                  >
-                    <span>⛶</span>
-                    <span>Focus</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Submenu Selector Modal */}
+      <SubmenuSelectorModal
+        isOpen={showSelectorModal}
+        onClose={() => setShowSelectorModal(false)}
+        currentModeId={submenuMode}
+        onSelectMode={(modeId) => setSubmenuMode(modeId)}
+        ayat={ayat}
+        surahNum={surahNum}
+        ld={ld}
+        ayatInCollections={ayatInCollections}
+        ayatLoopActive={ayatLoopActive}
+        onSetLoop={onSetLoop}
+        onFullScreen={onFullScreen}
+      />
       <div className="submenu-content">
         <ErrorBoundary>
           {submenuMode === "lecture"

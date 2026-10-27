@@ -44,6 +44,8 @@ const uiSlice = createSlice({
     masteryFilterPreset: load("quran_masteryFilterPreset", "all"),
     ayatFilterRange:     null, // null | [fromAyatNum, toAyatNum]
     ayatFilterActive:    false,
+    dashboardRevisionGroupBy: load("quran_dashboardRevisionGroupBy", "surah"),
+    dashboardRevisionCollapsedGroups: load("quran_dashboardRevisionCollapsedGroups", {}),
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -218,6 +220,24 @@ const uiSlice = createSlice({
       save("quran_masteryFilterRange", [0, 100]);
       save("quran_masteryFilterActive", false);
       save("quran_masteryFilterPreset", "all");
+    },
+    setDashboardRevisionGroupBy: (s, a) => {
+      s.dashboardRevisionGroupBy = a.payload;
+      save("quran_dashboardRevisionGroupBy", a.payload);
+    },
+    toggleDashboardRevisionGroup: (s, a) => {
+      const gid = a.payload;
+      if (!gid) return;
+      const current = s.dashboardRevisionCollapsedGroups || {};
+      s.dashboardRevisionCollapsedGroups = {
+        ...current,
+        [gid]: !current[gid],
+      };
+      save("quran_dashboardRevisionCollapsedGroups", s.dashboardRevisionCollapsedGroups);
+    },
+    setDashboardRevisionAllGroupsCollapsed: (s, a) => {
+      s.dashboardRevisionCollapsedGroups = a.payload || {};
+      save("quran_dashboardRevisionCollapsedGroups", s.dashboardRevisionCollapsedGroups);
     },
   },
   extraReducers: (builder) => {
@@ -729,6 +749,8 @@ export const sel = {
   ayatFilterRange:     (s) => s.ui.ayatFilterRange || null,
   ayatFilterActive:    (s) => !!s.ui.ayatFilterActive,
   isAnyFilterActive:   (s) => !!s.ui.masteryFilterActive || !!s.ui.ayatFilterActive,
+  dashboardRevisionGroupBy: (s) => s.ui.dashboardRevisionGroupBy || "surah",
+  dashboardRevisionCollapsedGroups: (s) => s.ui.dashboardRevisionCollapsedGroups || {},
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

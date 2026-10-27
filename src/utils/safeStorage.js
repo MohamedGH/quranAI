@@ -204,7 +204,12 @@ if (typeof window !== "undefined") {
       msg.includes("iframe.send") ||
       msg.includes("send is not a function") ||
       msg.includes("Script error.") ||
-      msg === "Script error"
+      msg === "Script error" ||
+      msg.includes("interrupted by a new load request") ||
+      msg.includes("interrupted by a call to pause") ||
+      msg.includes("The play() request was interrupted") ||
+      msg.includes("play() request was interrupted") ||
+      msg.includes("AbortError")
     );
   };
 
@@ -219,7 +224,7 @@ if (typeof window !== "undefined") {
   }, true);
 
   window.addEventListener("unhandledrejection", (event) => {
-    const reason = event.reason?.message || (typeof event.reason === "string" ? event.reason : "");
+    const reason = event.reason?.message || (typeof event.reason === "string" ? event.reason : "") || event.reason?.name || "";
     if (isIgnorableError(reason)) {
       console.warn("Global safety handler caught and handled unhandled rejection:", reason);
       event.preventDefault();

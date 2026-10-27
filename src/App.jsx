@@ -66,6 +66,7 @@ import { normalizeArabic, diffRecitation } from "./utils/recitationDiff.js";
 import { splitArabicWords, splitArabicChars, splitArabicClusters, stripDiacritics, stripBasmalaFromAyah, wordTranslit, calcDifficulty, calcPhase, arabicRoot, ARABIC_ROOTS, SURAH_INFO } from "./utils/arabicUtils.js";
 import { segmentAyatTranslation } from "./utils/translationUtils.js";
 import { ERROR_CODES, withErrorRecovery } from "./utils/errorManager.js";
+import { safePlayAudio, safePauseAudio, safeLoadAudio, playWhenAudioReady, isAudioAbortError } from "./utils/safeAudioPlayer.js";
 import { parseQuranRoute, buildQuranRoute } from "./utils/routeManager.js";
 import {
   clampHizbNumber,
@@ -900,7 +901,7 @@ function AppInner({ currentUser, onSignOut }) {
     setIsTajweedSpeaking(false);
     isTajweedPausedRef.current = false;
     if (mainAudioRef.current && isPlayingRef.current) {
-      mainAudioRef.current.play().catch(() => {});
+      safePlayAudio(mainAudioRef.current);
     }
   }, []);
 
@@ -933,7 +934,7 @@ function AppInner({ currentUser, onSignOut }) {
       if (mainAudioRef.current) {
         // Enforce pause if Tajweed coach is active and speaking
         if (isTajweedPausedRef.current && !mainAudioRef.current.paused) {
-          mainAudioRef.current.pause();
+          safePauseAudio(mainAudioRef.current);
         }
 
         const ms = mainAudioRef.current.currentTime * 1000;
@@ -962,9 +963,7 @@ function AppInner({ currentUser, onSignOut }) {
           if (upcoming) {
             isTajweedPausedRef.current = true;
             announcedTajweedRuleIdsRef.current.add(upcoming.id);
-            if (mainAudioRef.current) {
-              mainAudioRef.current.pause();
-            }
+            safePauseAudio(mainAudioRef.current);
             setActiveTajweedAnnouncement(upcoming);
             setIsTajweedSpeaking(true);
 
@@ -1025,17 +1024,11 @@ function AppInner({ currentUser, onSignOut }) {
   }, []);
 
   // Robust "resume playback" helper — tries immediately, and again as soon as the
-  // audio element signals it's actually ready (more reliable in background than a
-  // blind setTimeout, which Android can throttle/delay well past the media's own timing).
+  // audio element signals it's actually ready, safely preventing race-condition AbortErrors.
   const playWhenReady = useCallback(() => {
     const a = mainAudioRef.current;
     if (!a) return;
-    const tryNow = () => a.play().catch(() => {});
-    tryNow();
-    if (a.readyState < 2) {
-      const onReady = () => { tryNow(); a.removeEventListener('canplay', onReady); };
-      a.addEventListener('canplay', onReady, { once: true });
-    }
+    playWhenAudioReady(a);
   }, []);
 
   const playMainAyat = useCallback((idx) => {
@@ -1096,7 +1089,7 @@ function AppInner({ currentUser, onSignOut }) {
       } else if (mainAyatIdx > (loopActive ? loopStart : 0)) {
         const prevIdx = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
         playMainAyat(prevIdx);
-        if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play().catch(() => {}), 100);
+        if (isMainPlaying) playWhenReady();
       } else {
         mainAudioRef.current.currentTime = 0;
       }
@@ -1142,9 +1135,9 @@ function AppInner({ currentUser, onSignOut }) {
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     const handlers = {
-      play:         () => { setIsMainPlaying(true); mainAudioRef.current?.play().catch(()=>{}); },
-      pause:        () => { setIsMainPlaying(false); mainAudioRef.current?.pause(); },
-      stop:         () => { setIsMainPlaying(false); mainAudioRef.current?.pause(); },
+      play:         () => { setIsMainPlaying(true); playWhenReady(); },
+      pause:        () => { setIsMainPlaying(false); safePauseAudio(mainAudioRef.current); },
+      stop:         () => { setIsMainPlaying(false); safePauseAudio(mainAudioRef.current); },
       nexttrack:    () => {
         const a = ayats_ref.current;
         const idx = Math.min((a.findIndex(x => x.numberInSurah === (mainAudioRef.current?._ayatNum)) || 0) + 1, a.length - 1);
@@ -1494,18 +1487,18 @@ function AppInner({ currentUser, onSignOut }) {
       const num = ayats[mainAyatIdx]?.numberInSurah;
       if (ayatChanged) {
         loadedAyatIdxRef.current = mainAyatIdx;
-        audioEl.load(); // new ayat → (re)load its audio source from the start
+        safeLoadAudio(audioEl); // new ayat → safely reload its audio source from start
         if (announceNumRef.current && num) {
-          audioEl.pause();
-          speakAyatNum(num).then(() => { mainAudioRef.current?.play().catch(() => {}); });
+          safePauseAudio(audioEl);
+          speakAyatNum(num).then(() => { if (isMainPlaying) playWhenAudioReady(mainAudioRef.current); });
         } else {
-          audioEl.play().catch(() => {});
+          playWhenAudioReady(audioEl);
         }
       } else {
-        audioEl.play().catch(() => {}); // resume: same ayat, same audio element → keeps its currentTime
+        safePlayAudio(audioEl); // resume: same ayat, same audio element → keeps its currentTime
       }
     } else {
-      audioEl.pause(); // pausing never touches currentTime, so resuming continues from here
+      safePauseAudio(audioEl); // pausing never touches currentTime, so resuming continues from here
     }
   }, [mainAyatIdx, isMainPlaying]);
 
@@ -1694,23 +1687,23 @@ function AppInner({ currentUser, onSignOut }) {
       showToast('▶ Lecture', 'success'); return true;
     }
     if (cmd.action === 'pause') {
-      setIsMainPlaying(false); mainAudioRef.current?.pause();
+      setIsMainPlaying(false); safePauseAudio(mainAudioRef.current);
       showToast('⏸ Pause', 'success'); return true;
     }
     if (cmd.action === 'stop') {
       setIsMainPlaying(false); setPlayingAyatNum(null);
       setLoopActive(false); setLoopCount(0);
-      mainAudioRef.current?.pause();
+      safePauseAudio(mainAudioRef.current);
       showToast('⏹ Stop', 'success'); return true;
     }
     if (cmd.action === 'next') {
       const i = Math.min(a.length - 1, mainAyatIdx + 1);
-      playMainAyat(i); if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play(), 100);
+      playMainAyat(i); if (isMainPlaying) playWhenReady();
       showToast(`→ Ayat ${a[i]?.numberInSurah}`, 'success'); return true;
     }
     if (cmd.action === 'prev') {
       const i = Math.max(0, mainAyatIdx - 1);
-      playMainAyat(i); if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play(), 100);
+      playMainAyat(i); if (isMainPlaying) playWhenReady();
       showToast(`← Ayat ${a[i]?.numberInSurah}`, 'success'); return true;
     }
     if (cmd.action === 'surah') {
@@ -1722,7 +1715,7 @@ function AppInner({ currentUser, onSignOut }) {
       if (idx >= 0) {
         playMainAyat(idx);
         if (!isMainPlaying) { setIsMainPlaying(true); }
-        else setTimeout(() => mainAudioRef.current?.play(), 100);
+        else playWhenReady();
         showToast(`→ Ayat ${cmd.number}`, 'success'); return true;
       }
       showToast(`Ayat ${cmd.number} introuvable`, 'error'); return true;
@@ -2759,7 +2752,8 @@ function AppInner({ currentUser, onSignOut }) {
                                 setLoopEndInput(pageAyats[pageAyats.length-1].numberInSurah);
                                 setLoopActive(true); setLoopCount(0);
                                 playMainAyat(firstIdx);
-                                setTimeout(() => mainAudioRef.current?.play(), 80);
+                                setIsMainPlaying(true);
+                                playWhenReady();
                               }
                             };
                             return (
@@ -2944,7 +2938,8 @@ function AppInner({ currentUser, onSignOut }) {
                                 setLoopEndInput(localHizbAyats[localHizbAyats.length-1].numberInSurah);
                                 setLoopActive(true); setLoopCount(0);
                                 playMainAyat(firstIdx);
-                                setTimeout(() => mainAudioRef.current?.play(), 80);
+                                setIsMainPlaying(true);
+                                playWhenReady();
                               }
                             };
                             return (
@@ -3115,7 +3110,8 @@ function AppInner({ currentUser, onSignOut }) {
                                 setLoopEndInput(juzAyats[juzAyats.length-1].numberInSurah);
                                 setLoopActive(true); setLoopCount(0);
                                 playMainAyat(firstIdx);
-                                setTimeout(() => mainAudioRef.current?.play(), 80);
+                                setIsMainPlaying(true);
+                                playWhenReady();
                               }
                             };
                             return (
@@ -3891,8 +3887,8 @@ function AppInner({ currentUser, onSignOut }) {
                                     setIsMainPlaying(true);
                                     requestAnimationFrame(() => {
                                       if (mainAudioRef.current) {
-                                        mainAudioRef.current.load();
-                                        mainAudioRef.current.play().catch(() => {});
+                                        safeLoadAudio(mainAudioRef.current);
+                                        playWhenReady();
                                       }
                                     });
                                     return;
@@ -4364,8 +4360,8 @@ function AppInner({ currentUser, onSignOut }) {
                 if (changed && mainAudioRef.current) {
                   loadedAyatIdxRef.current = null;
                   if (isMainPlaying) {
-                    mainAudioRef.current.load();
-                    mainAudioRef.current.play().catch(() => {});
+                    safeLoadAudio(mainAudioRef.current);
+                    playWhenReady();
                     loadedAyatIdxRef.current = mainAyatIdx;
                   }
                 }
@@ -4482,7 +4478,7 @@ function AppInner({ currentUser, onSignOut }) {
             if (isPlayingRef.current && mainAudioRef.current) {
               // Try gentle reload if stalled
               if (mainAudioRef.current.readyState < 2) {
-                mainAudioRef.current.load();
+                safeLoadAudio(mainAudioRef.current);
                 if (isPlayingRef.current) playWhenReady();
               }
             }
@@ -4493,7 +4489,7 @@ function AppInner({ currentUser, onSignOut }) {
             const offlineUrl = await getPlayableAudioUrl(url);
             if (offlineUrl && offlineUrl !== url && mainAudioRef.current) {
               mainAudioRef.current.src = offlineUrl;
-              mainAudioRef.current.load();
+              safeLoadAudio(mainAudioRef.current);
               if (isPlayingRef.current) playWhenReady();
               return;
             }
@@ -4506,7 +4502,7 @@ function AppInner({ currentUser, onSignOut }) {
               requestAnimationFrame(() => {
                 const a = mainAudioRef.current;
                 if (!a) return;
-                a.load();
+                safeLoadAudio(a);
                 loadedAyatIdxRef.current = mainAyatIdx;
                 if (isMainPlaying) playWhenReady();
               });
@@ -4534,19 +4530,19 @@ function AppInner({ currentUser, onSignOut }) {
               <div className="player-controls">
                 <button className="ctrl-btn" title="Verset précédent" onClick={() => {
                   const i = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
-                  playMainAyat(i); if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play(), 100);
+                  playMainAyat(i); if (isMainPlaying) playWhenReady();
                 }}>⏮</button>
                 <button
                   className="ctrl-btn"
                   title="Reculer de 5 secondes (Retour rapide / Fast backward)"
                   onClick={handleFastBackward}>⏪</button>
                 <button className="ctrl-btn play-btn" title={isMainPlaying ? "Pause" : "Lecture"} onClick={() => {
-                  if (!isMainPlaying) { playMainAyat(loopActive ? loopStart : mainAyatIdx); setIsMainPlaying(true); }
-                  else { setIsMainPlaying(false); setPlayingAyatNum(null); mainAudioRef.current?.pause(); }
+                  if (!isMainPlaying) { playMainAyat(loopActive ? loopStart : mainAyatIdx); setIsMainPlaying(true); playWhenReady(); }
+                  else { setIsMainPlaying(false); setPlayingAyatNum(null); safePauseAudio(mainAudioRef.current); }
                 }}>{isMainPlaying ? "⏸" : "▶"}</button>
                 <button className="ctrl-btn" title="Verset suivant" onClick={() => {
                   const i = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
-                  playMainAyat(i); if (isMainPlaying) setTimeout(() => mainAudioRef.current?.play(), 100);
+                  playMainAyat(i); if (isMainPlaying) playWhenReady();
                 }}>⏭</button>
                 <button
                   className={`ctrl-btn${loopActive || showLoopBar ? " loop-on" : ""}`}
@@ -4625,8 +4621,8 @@ function AppInner({ currentUser, onSignOut }) {
                           if (changed && mainAudioRef.current) {
                             loadedAyatIdxRef.current = null;
                             if (isMainPlaying) {
-                              mainAudioRef.current.load();
-                              mainAudioRef.current.play().catch(() => {});
+                              safeLoadAudio(mainAudioRef.current);
+                              playWhenReady();
                               loadedAyatIdxRef.current = mainAyatIdx;
                             }
                           }
@@ -4645,7 +4641,7 @@ function AppInner({ currentUser, onSignOut }) {
                         setBitrateVersion(v => v + 1);
                         loadedAyatIdxRef.current = null;
                         if (mainAudioRef.current) {
-                          mainAudioRef.current.load();
+                          safeLoadAudio(mainAudioRef.current);
                           loadedAyatIdxRef.current = mainAyatIdx;
                           if (isMainPlaying) playWhenReady();
                         }
@@ -4707,7 +4703,7 @@ function AppInner({ currentUser, onSignOut }) {
                             setTimeout(() => {
                               if (mainAudioRef.current) {
                                 mainAudioRef.current.currentTime = aStart/1000 + (targetMs-acc)/1000;
-                                if (isMainPlaying) mainAudioRef.current.play().catch(()=>{});
+                                if (isMainPlaying) safePlayAudio(mainAudioRef.current);
                               }
                             }, 80);
                             break;

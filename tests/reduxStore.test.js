@@ -258,5 +258,29 @@ describe("Redux Store & Production Slice Integration", () => {
       expect(activity.partsLearned).toBe(2);
       expect(activity.ayatsLearned).toBe(1);
     });
+
+    it("manages dashboard revision grouping mode and toggleable collapsed groups in UI slice", () => {
+      // Grouping mode
+      store.dispatch(uiActions.setDashboardRevisionGroupBy("date_revised"));
+      expect(sel.dashboardRevisionGroupBy(store.getState())).toBe("date_revised");
+
+      store.dispatch(uiActions.setDashboardRevisionGroupBy("first_read"));
+      expect(sel.dashboardRevisionGroupBy(store.getState())).toBe("first_read");
+
+      // Collapsed groups toggle
+      store.dispatch(uiActions.toggleDashboardRevisionGroup("surah-1"));
+      expect(sel.dashboardRevisionCollapsedGroups(store.getState())["surah-1"]).toBe(true);
+
+      store.dispatch(uiActions.toggleDashboardRevisionGroup("surah-1"));
+      expect(sel.dashboardRevisionCollapsedGroups(store.getState())["surah-1"]).toBe(false);
+
+      // Batch collapse all / expand all
+      store.dispatch(uiActions.setDashboardRevisionAllGroupsCollapsed({ "surah-1": true, "surah-2": true }));
+      expect(sel.dashboardRevisionCollapsedGroups(store.getState())).toEqual({ "surah-1": true, "surah-2": true });
+
+      store.dispatch(uiActions.setDashboardRevisionAllGroupsCollapsed({}));
+      expect(sel.dashboardRevisionCollapsedGroups(store.getState())).toEqual({});
+    });
   });
 });
+

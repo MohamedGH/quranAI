@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { safePlayAudio, safePauseAudio } from "../../utils/safeAudioPlayer.js";
 
 export function MiniAudioPlayer({ src, color = "var(--gold2)", label = null }) {
   const ref  = useRef(null);
@@ -14,8 +15,16 @@ export function MiniAudioPlayer({ src, color = "var(--gold2)", label = null }) {
 
   const toggle = () => {
     if (!ref.current) return;
-    if (ref.current.paused) { ref.current.play(); setPlaying(true); rafRef.current = requestAnimationFrame(tick); }
-    else { ref.current.pause(); setPlaying(false); cancelAnimationFrame(rafRef.current); }
+    if (ref.current.paused) {
+      safePlayAudio(ref.current, () => {
+        setPlaying(true);
+        rafRef.current = requestAnimationFrame(tick);
+      });
+    } else {
+      safePauseAudio(ref.current);
+      setPlaying(false);
+      cancelAnimationFrame(rafRef.current);
+    }
   };
 
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);

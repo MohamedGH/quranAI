@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getAllRecordings, deleteRecording } from "../../utils/recordingsDb.js";
 import { SURAH_NAMES } from "../../utils/voiceCommand.js";
+import { safePlayAudio, safePauseAudio } from "../../utils/safeAudioPlayer.js";
 
 export function RecordingsPage({ onNavigate, showQalqala, showMadd, showIzhar, showIdgham }) {
   const [recordings, setRecordings] = useState([]);
@@ -44,17 +45,15 @@ export function RecordingsPage({ onNavigate, showQalqala, showMadd, showIzhar, s
     const audio = audioRefs.current[id];
     if (!audio) return;
     if (playingId === id) {
-      audio.pause();
+      safePauseAudio(audio);
       setPlayingId(null);
     } else {
       // Pause any currently playing
       Object.entries(audioRefs.current).forEach(([k, el]) => {
-        if (el && k !== id) el.pause();
+        if (el && k !== id) safePauseAudio(el);
       });
-      audio.play().then(() => {
+      safePlayAudio(audio, () => {
         setPlayingId(id);
-      }).catch(err => {
-        console.error("Playback error:", err);
       });
     }
   };

@@ -1,4 +1,18 @@
 import React, { useState, useMemo } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { sel, uiActions } from "../../store.js";
+import { buildQuranRoute } from "../../utils/routeManager.js";
+import { trySync, ERROR_CODES } from "../../utils/errorManager.js";
+import {
+  REVISION_GROUP_MODES,
+  GROUP_MODE_LABELS,
+  groupRevisionQueue,
+  toggleGroupCollapse,
+  isGroupCollapsed,
+  collapseAllGroups,
+  expandAllGroups,
+  formatShortDateFr,
+} from "../../utils/dashboardRevisionGrouping.js";
 import { extractAyatHistoricalMetadata, computeRevisionQueue, computeQuranAggregations } from "../../utils/quranHistoryAnalytics.js";
 import { masteryColor } from "../common/Mastery.jsx";
 import { SURAH_INFO } from "../../utils/arabicUtils.js";
@@ -400,14 +414,59 @@ export function AyatMetadataExplorer({
   surahTextCache = {},
   onNavigate,
 }) {
+  const dispatch = useDispatch();
+  const reduxGroupBy = useSelector(sel.dashboardRevisionGroupBy);
+  const reduxCollapsedGroups = useSelector(sel.dashboardRevisionCollapsedGroups);
+
   const [activeTab, setActiveTab] = useState("revisions"); // "revisions" | "search" | "aggregations"
   const [aggLevel, setAggLevel] = useState("surahs"); // "surahs" | "hizbs" | "juzs"
   const [selectedAyatKey, setSelectedAyatKey] = useState(null); // "surahNum:ayatNum"
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState("date_asc"); // "date_asc" | "date_desc" | "surah"
 
-  // 1. Revision queue
+  const groupBy = reduxGroupBy || REVISION_GROUP_MODES.SURAH;
+  const collapsedGroups = reduxCollapsedGroups || {};
+
+  const handleSetGroupBy = (mode) => {
+    trySync(() => {
+      dispatch(uiActions.setDashboardRevisionGroupBy(mode));
+    }, null, { code: ERROR_CODES.UNKNOWN_ERROR, feature: "setDashboardRevisionGroupBy", mode });
+  };
+
+  const handleToggleGroup = (groupId) => {
+    trySync(() => {
+      dispatch(uiActions.toggleDashboardRevisionGroup(groupId));
+    }, null, { code: ERROR_CODES.UNKNOWN_ERROR, feature: "toggleDashboardRevisionGroup", groupId });
+  };
+
+  const handleCollapseAll = (groups) => {
+    trySync(() => {
+      dispatch(uiActions.setDashboardRevisionAllGroupsCollapsed(collapseAllGroups(groups)));
+    }, null, { code: ERROR_CODES.UNKNOWN_ERROR, feature: "collapseAllGroups" });
+  };
+
+  const handleExpandAll = () => {
+    trySync(() => {
+      dispatch(uiActions.setDashboardRevisionAllGroupsCollapsed(expandAllGroups()));
+    }, null, { code: ERROR_CODES.UNKNOWN_ERROR, feature: "expandAllGroups" });
+  };
+
+  const handleNavigateToAyat = (surahNum, ayatNum) => {
+    trySync(() => {
+      onNavigate?.(surahNum, ayatNum);
+    }, null, { code: ERROR_CODES.ROUTE_PARSE_ERROR, surahNum, ayatNum });
+  };
+
+  // 1. Revision queue & grouped collections
   const rawRevQueue = useMemo(() => computeRevisionQueue(learnData, surahs, surahTextCache), [learnData, surahs, surahTextCache]);
+  const revisionGroups = useMemo(() => {
+    return trySync(
+      () => groupRevisionQueue(rawRevQueue, groupBy, { surahs, referenceDate: new Date() }),
+      [],
+      { code: ERROR_CODES.UNKNOWN_ERROR, feature: "groupRevisionQueue", groupBy }
+    ).value;
+  }, [rawRevQueue, groupBy, surahs]);
+
   const revisionQueue = useMemo(() => {
     const list = [...rawRevQueue];
     if (sortOrder === "date_asc") {
@@ -566,38 +625,120 @@ export function AyatMetadataExplorer({
         </div>
       </div>
 
-      {/* ──────────────── TAB 1: REVISIONS CHRONOLOGIQUES ──────────────── */}
+      {/* ──────────────── TAB 1: REVISIONS CHRONOLOGIQUES ET PAR GROUPES ──────────────── */}
       {activeTab === "revisions" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Top Bar: Selector for Grouping Criteria + Summary */}
           <div style={{
             display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 8,
+            flexDirection: "column",
+            gap: 10,
+            background: "var(--surface2)",
+            border: "1px solid var(--border)",
+            borderRadius: 10,
+            padding: "10px 14px",
           }}>
-            <div style={{ fontSize: 9, letterSpacing: 1, color: "var(--text3)" }}>
-              LISTE CHRONOLOGIQUE DES VERSETS À RÉVISER SELON LEUR DATE D'AJOUT ET DÉTAILS DES MOTS
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 8,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 9, fontFamily: "'Cinzel',serif", letterSpacing: 1.5, color: "#ff9f43", fontWeight: 700 }}>
+                  🔖 REGROUPER LES RÉVISIONS PAR :
+                </span>
+                <span style={{
+                  fontSize: 8,
+                  padding: "2px 7px",
+                  borderRadius: 10,
+                  background: "rgba(255,159,67,0.12)",
+                  color: "#ff9f43",
+                  border: "1px solid rgba(255,159,67,0.3)",
+                }}>
+                  {rawRevQueue.length} verset(s) · {revisionGroups.length} groupe(s)
+                </span>
+              </div>
+
+              {/* Expand / Collapse All Controls */}
+              {revisionGroups.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <button
+                    onClick={handleExpandAll}
+                    style={{
+                      fontSize: 8,
+                      fontFamily: "'Cinzel',serif",
+                      padding: "3px 8px",
+                      borderRadius: 4,
+                      background: "var(--surface3)",
+                      border: "1px solid var(--border2)",
+                      color: "var(--text2)",
+                      cursor: "pointer",
+                    }}
+                    title="Déplier tous les groupes"
+                  >
+                    ▼ Tout déplier
+                  </button>
+                  <button
+                    onClick={() => handleCollapseAll(revisionGroups)}
+                    style={{
+                      fontSize: 8,
+                      fontFamily: "'Cinzel',serif",
+                      padding: "3px 8px",
+                      borderRadius: 4,
+                      background: "var(--surface3)",
+                      border: "1px solid var(--border2)",
+                      color: "var(--text3)",
+                      cursor: "pointer",
+                    }}
+                    title="Replier tous les groupes"
+                  >
+                    ▶ Tout replier
+                  </button>
+                </div>
+              )}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 8, color: "var(--text3)", letterSpacing: 1 }}>TRI :</span>
-              <select
-                value={sortOrder}
-                onChange={e => setSortOrder(e.target.value)}
-                style={{
-                  fontSize: 8.5,
-                  padding: "3px 8px",
-                  borderRadius: 4,
-                  background: "var(--surface3)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text2)",
-                  cursor: "pointer",
-                }}
-              >
-                <option value="date_asc">Plus ancien d'abord (Prioritaires)</option>
-                <option value="date_desc">Plus récent d'abord</option>
-                <option value="surah">Ordre du Coran (Sourate / Ayat)</option>
-              </select>
+
+            {/* Mobile-first horizontally scrollable grouping chips */}
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              overflowX: "auto",
+              paddingBottom: 2,
+              WebkitOverflowScrolling: "touch",
+            }}>
+              {Object.values(GROUP_MODE_LABELS).map((gm) => {
+                const isSelected = groupBy === gm.id;
+                return (
+                  <button
+                    key={gm.id}
+                    onClick={() => handleSetGroupBy(gm.id)}
+                    style={{
+                      fontSize: 8.5,
+                      fontFamily: "'Cinzel',serif",
+                      letterSpacing: 1,
+                      padding: "6px 12px",
+                      borderRadius: 20,
+                      border: `1px solid ${isSelected ? "#ff9f43" : "var(--border2)"}`,
+                      background: isSelected ? "rgba(255,159,67,0.2)" : "var(--surface3)",
+                      color: isSelected ? "#ff9f43" : "var(--text3)",
+                      fontWeight: isSelected ? 700 : 500,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 5,
+                      transition: "all .15s",
+                      minHeight: 32,
+                    }}
+                  >
+                    <span>{gm.icon}</span>
+                    <span>{gm.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -640,7 +781,8 @@ export function AyatMetadataExplorer({
             </div>
           </div>
 
-          {revisionQueue.length === 0 ? (
+          {/* Empty state */}
+          {rawRevQueue.length === 0 ? (
             <div style={{
               padding: "24px 16px",
               background: "rgba(201,168,76,.04)",
@@ -654,152 +796,271 @@ export function AyatMetadataExplorer({
               ✨ AUCUN VERSET N'EST ACTUELLEMENT MARQUÉ À RÉVISER
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 420, overflowY: "auto", paddingRight: 4 }}>
-              {revisionQueue.map((item, idx) => (
-                <div
-                  key={item.key}
-                  style={{
-                    background: "var(--surface3)",
-                    border: "1px solid rgba(255,159,67,.25)",
-                    borderRadius: 8,
-                    padding: "10px 14px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                    transition: "border-color .15s",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: "50%",
-                        background: "rgba(255,159,67,.15)",
-                        border: "1px solid #ff9f43",
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 520, overflowY: "auto", paddingRight: 4 }}>
+              {revisionGroups.map((group) => {
+                const collapsed = isGroupCollapsed(collapsedGroups, group.id);
+                return (
+                  <div
+                    key={group.id}
+                    style={{
+                      background: "var(--surface2)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      overflow: "hidden",
+                      transition: "border-color .15s",
+                    }}
+                  >
+                    {/* Toggleable Group Header */}
+                    <div
+                      onClick={() => handleToggleGroup(group.id)}
+                      style={{
+                        padding: "10px 14px",
+                        background: collapsed ? "var(--surface2)" : "rgba(255,159,67,0.06)",
+                        borderBottom: collapsed ? "none" : "1px solid var(--border)",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 8,
-                        color: "#ff9f43",
-                        fontFamily: "'Cinzel',serif",
-                        fontWeight: 700,
-                      }}>{idx + 1}</span>
-                      <span style={{
-                        fontFamily: "'Cinzel',serif",
-                        fontSize: 10,
-                        color: "var(--gold2)",
-                        fontWeight: 700,
-                        letterSpacing: 1,
-                      }}>
-                        {item.surahNameEn.toUpperCase()} ({item.surahNum}:{item.ayatNum})
-                      </span>
-                      <span style={{ fontSize: 8, color: "var(--text3)" }}>
-                        Hizb {item.hizb} · Juz {item.juz}
-                      </span>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{
-                        fontSize: 8,
-                        color: "#ff9f43",
-                        background: "rgba(255,159,67,.1)",
-                        border: "1px solid rgba(255,159,67,.3)",
-                        padding: "2px 8px",
-                        borderRadius: 12,
-                      }}>
-                        À réviser depuis : {fmtDateShort(item.reviseDate)}
-                      </span>
-                      <button
-                        onClick={() => setSelectedAyatKey(item.key)}
-                        style={{
-                          fontSize: 8,
-                          letterSpacing: 1,
-                          padding: "3px 8px",
-                          borderRadius: 4,
-                          background: "transparent",
-                          border: "1px solid var(--border2)",
-                          color: "var(--text2)",
-                          cursor: "pointer",
-                        }}
-                      >
-                        🔍 DÉTAILS HISTORIQUES
-                      </button>
-                      <button
-                        onClick={() => onNavigate?.(item.surahNum, item.ayatNum)}
-                        style={{
-                          fontSize: 8,
-                          letterSpacing: 1,
-                          padding: "3px 8px",
-                          borderRadius: 4,
-                          background: "rgba(201,168,76,.15)",
-                          border: "1px solid var(--gold)",
+                        justifyContent: "space-between",
+                        cursor: "pointer",
+                        userSelect: "none",
+                        minHeight: 44, // Touch target friendly
+                        gap: 10,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{
+                          fontSize: 10,
                           color: "var(--gold2)",
-                          cursor: "pointer",
-                        }}
-                      >
-                        📖 CORAN
-                      </button>
-                    </div>
-                  </div>
+                          width: 14,
+                          display: "inline-block",
+                          transition: "transform .2s",
+                        }}>
+                          {collapsed ? "▶" : "▼"}
+                        </span>
+                        <span style={{ fontSize: 13 }}>{group.icon}</span>
+                        <div>
+                          <div style={{
+                            fontFamily: "'Cinzel',serif",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                            color: group.color || "var(--gold2)",
+                          }}>
+                            {group.title}
+                          </div>
+                          {(group.arabicTitle || group.subtitle) && (
+                            <div style={{ fontSize: 8.5, color: "var(--text3)", letterSpacing: 0.5, marginTop: 1 }}>
+                              {group.arabicTitle && <span style={{ fontFamily: "'Amiri Quran',serif", fontSize: 12, marginRight: 8 }}>{group.arabicTitle}</span>}
+                              {group.subtitle}
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
-                  {/* Ayat text snippet */}
-                  {item.ayatText && (
-                    <div style={{
-                      direction: "rtl",
-                      fontFamily: "'Amiri Quran',serif",
-                      fontSize: 16,
-                      color: "var(--text1)",
-                      lineHeight: 1.7,
-                      textAlign: "right",
-                      opacity: 0.9,
-                    }}>
-                      {item.ayatText}
-                    </div>
-                  )}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{
+                          fontSize: 8.5,
+                          padding: "2px 8px",
+                          borderRadius: 12,
+                          background: group.badgeBg || "rgba(255,159,67,0.15)",
+                          color: group.color || "#ff9f43",
+                          border: `1px solid ${group.color || "#ff9f43"}40`,
+                          fontWeight: 700,
+                          letterSpacing: 0.5,
+                        }}>
+                          {group.count} verset{group.count > 1 ? "s" : ""}
+                        </span>
 
-                  {/* Details of Words to Revise */}
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    background: "rgba(0,0,0,0.2)",
-                    borderRadius: 6,
-                    padding: "6px 10px",
-                    flexWrap: "wrap",
-                  }}>
-                    <span style={{ fontSize: 8, color: "var(--text3)", letterSpacing: 1 }}>
-                      {item.reviseScope === "all" ? "🎯 PORTÉE : AYAT ENTIER" : `🎯 PORTÉE : ${item.reviseWordList.length} MOT(S) CIBLÉ(S)`}
-                    </span>
-                    {item.reviseScope !== "all" && item.reviseWordList.length > 0 && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, direction: "rtl", marginRight: "auto" }}>
-                        {item.reviseWordList.map((w, wi) => {
-                          const origWi = item.reviseWordIndices[wi];
-                          const wDate = getWordReviseDate(learnData[item.key], origWi) || item.reviseDate;
-                          const timeColor = getReviseTimeColor(wDate);
-                          return (
-                            <span key={wi}
-                              title={`Marqué depuis : ${timeColor.timeLabel} (${timeColor.days}j)`}
-                              style={{
-                              fontFamily: "'Amiri Quran',serif",
-                              fontSize: 14,
-                              padding: "2px 7px",
-                              background: timeColor.rgbaBg,
-                              border: `1px solid ${timeColor.rgbaBorder}`,
+                        {group.meta?.surahNum && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleNavigateToAyat(group.meta.surahNum, 1);
+                            }}
+                            style={{
+                              fontSize: 8,
+                              letterSpacing: 1,
+                              padding: "4px 8px",
                               borderRadius: 4,
-                              color: timeColor.hex,
-                              boxShadow: timeColor.rgbaGlow,
-                            }}>{w} <span style={{ fontSize: 8, opacity: 0.8, marginRight: 3, fontFamily: "'Cinzel',serif" }}>({timeColor.timeLabel})</span></span>
-                          );
-                        })}
+                              background: "rgba(201,168,76,.15)",
+                              border: "1px solid var(--gold)",
+                              color: "var(--gold2)",
+                              cursor: "pointer",
+                              fontFamily: "'Cinzel',serif",
+                            }}
+                            title="Ouvrir cette sourate dans le Coran"
+                          >
+                            📖 OUVRIR SOURATE
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Group Items (Visible when not collapsed) */}
+                    {!collapsed && (
+                      <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, background: "rgba(0,0,0,0.15)" }}>
+                        {group.items.map((item, idx) => (
+                          <div
+                            key={item.key}
+                            style={{
+                              background: "var(--surface3)",
+                              border: "1px solid rgba(255,159,67,.25)",
+                              borderRadius: 8,
+                              padding: "10px 12px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 6,
+                              transition: "border-color .15s",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{
+                                  width: 20,
+                                  height: 20,
+                                  borderRadius: "50%",
+                                  background: "rgba(255,159,67,.15)",
+                                  border: "1px solid #ff9f43",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: 8,
+                                  color: "#ff9f43",
+                                  fontFamily: "'Cinzel',serif",
+                                  fontWeight: 700,
+                                }}>{idx + 1}</span>
+                                <span style={{
+                                  fontFamily: "'Cinzel',serif",
+                                  fontSize: 10,
+                                  color: "var(--gold2)",
+                                  fontWeight: 700,
+                                  letterSpacing: 1,
+                                }}>
+                                  {item.surahNameEn?.toUpperCase()} ({item.surahNum}:{item.ayatNum})
+                                </span>
+                                <span style={{ fontSize: 8, color: "var(--text3)" }}>
+                                  Hizb {item.hizb} · Juz {item.juz}
+                                </span>
+                                {item.isLearned && (
+                                  <span style={{
+                                    fontSize: 7.5,
+                                    padding: "1px 6px",
+                                    borderRadius: 8,
+                                    background: "rgba(76,175,129,.15)",
+                                    color: "var(--green)",
+                                    border: "1px solid var(--green)",
+                                  }}>
+                                    ✓ Appris
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <span style={{
+                                  fontSize: 8,
+                                  color: "#ff9f43",
+                                  background: "rgba(255,159,67,.1)",
+                                  border: "1px solid rgba(255,159,67,.3)",
+                                  padding: "2px 8px",
+                                  borderRadius: 12,
+                                }}>
+                                  À réviser : {formatShortDateFr(item.reviseDate)}
+                                </span>
+                                <button
+                                  onClick={() => setSelectedAyatKey(item.key)}
+                                  style={{
+                                    fontSize: 8,
+                                    letterSpacing: 1,
+                                    padding: "3px 8px",
+                                    borderRadius: 4,
+                                    background: "transparent",
+                                    border: "1px solid var(--border2)",
+                                    color: "var(--text2)",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  🔍 DÉTAILS
+                                </button>
+                                <button
+                                  onClick={() => handleNavigateToAyat(item.surahNum, item.ayatNum)}
+                                  style={{
+                                    fontSize: 8,
+                                    letterSpacing: 1,
+                                    padding: "3px 8px",
+                                    borderRadius: 4,
+                                    background: "rgba(201,168,76,.15)",
+                                    border: "1px solid var(--gold)",
+                                    color: "var(--gold2)",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  📖 CORAN
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Ayat text snippet */}
+                            {item.ayatText && (
+                              <div style={{
+                                direction: "rtl",
+                                fontFamily: "'Amiri Quran',serif",
+                                fontSize: 16,
+                                color: "var(--text1)",
+                                lineHeight: 1.7,
+                                textAlign: "right",
+                                opacity: 0.9,
+                              }}>
+                                {item.ayatText}
+                              </div>
+                            )}
+
+                            {/* Details of Words to Revise */}
+                            <div style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                              background: "rgba(0,0,0,0.2)",
+                              borderRadius: 6,
+                              padding: "6px 10px",
+                              flexWrap: "wrap",
+                            }}>
+                              <span style={{ fontSize: 8, color: "var(--text3)", letterSpacing: 1 }}>
+                                {item.reviseScope === "all" ? "🎯 PORTÉE : AYAT ENTIER" : `🎯 PORTÉE : ${item.reviseWordList.length} MOT(S) CIBLÉ(S)`}
+                              </span>
+                              {item.reviseScope !== "all" && item.reviseWordList.length > 0 && (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, direction: "rtl", marginRight: "auto" }}>
+                                  {item.reviseWordList.map((w, wi) => {
+                                    const origWi = item.reviseWordIndices[wi];
+                                    const wDate = getWordReviseDate(learnData[item.key], origWi) || item.reviseDate;
+                                    const timeColor = getReviseTimeColor(wDate);
+                                    return (
+                                      <span key={wi}
+                                        title={`Marqué depuis : ${timeColor.timeLabel} (${timeColor.days}j)`}
+                                        style={{
+                                        fontFamily: "'Amiri Quran',serif",
+                                        fontSize: 14,
+                                        padding: "2px 7px",
+                                        background: timeColor.rgbaBg,
+                                        border: `1px solid ${timeColor.rgbaBorder}`,
+                                        borderRadius: 4,
+                                        color: timeColor.hex,
+                                        boxShadow: timeColor.rgbaGlow,
+                                      }}>{w} <span style={{ fontSize: 8, opacity: 0.8, marginRight: 3, fontFamily: "'Cinzel',serif" }}>({timeColor.timeLabel})</span></span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              <span style={{ fontSize: 8, color: "var(--text3)", marginLeft: "auto" }}>
+                                Lect: <strong>{item.readCount}×</strong> · 1ère: {formatShortDateFr(item.firstReadAt)} · Dern: {formatShortDateFr(item.lastReadAt)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    <span style={{ fontSize: 8, color: "var(--text3)", marginLeft: "auto" }}>
-                      Lectures: <strong>{item.readCount}×</strong> · 1ère lect: {fmtDateShort(item.firstReadAt)} · 1er découpage: {fmtDateShort(item.firstCutAt)}
-                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

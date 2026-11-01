@@ -917,9 +917,9 @@ export function getTajweedStyleForChar(fullChars, fullIdx, options = {}) {
     const c = activeColors.ikhfa || DEFAULT_TAJWEED_COLORS.ikhfa;
     return { color: c, textShadow: `0 0 6px ${c}88`, fontWeight: 600 };
   }
-  if (ghunnahOn && (showIzhar || showIdgham)) {
+  if (ghunnahOn) {
     const c = activeColors.ghunnah || DEFAULT_TAJWEED_COLORS.ghunnah;
-    return { color: c, textShadow: `0 0 6px ${c}88` };
+    return { color: c, textShadow: `0 0 6px ${c}88`, fontWeight: 600 };
   }
   if (tafkhimOn) {
     const c = activeColors.tafkhim || DEFAULT_TAJWEED_COLORS.tafkhim;

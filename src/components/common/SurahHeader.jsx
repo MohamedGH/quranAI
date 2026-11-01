@@ -94,6 +94,33 @@ export function SurahHeader({
   const activeTjColors = getActiveTajweedColors(tajweedPalette, tajweedCustomColors);
   const isCoachEnabled = useSelector(sel.tajweedCoachEnabled);
 
+  // Redux Tajweed selectors with fallback for robust activation
+  const storeShowQalqala     = useSelector(sel.showQalqala);
+  const storeShowMadd        = useSelector(sel.showMadd);
+  const storeShowIzhar       = useSelector(sel.showIzhar);
+  const storeShowIdgham      = useSelector(sel.showIdgham);
+  const storeShowIkhfa       = useSelector(sel.showIkhfa);
+  const storeShowIqlab       = useSelector(sel.showIqlab);
+  const storeShowGhunnah     = useSelector(sel.showGhunnah);
+  const storeShowTajweedTone = useSelector(sel.showTajweedTone);
+
+  const tjQalqala     = showQalqala !== undefined ? showQalqala : storeShowQalqala;
+  const tjToggleQalqala = toggleQalqala || (() => dispatch(uiActions.toggleQalqala()));
+  const tjMadd        = showMadd !== undefined ? showMadd : storeShowMadd;
+  const tjToggleMadd  = toggleMadd || (() => dispatch(uiActions.toggleMadd()));
+  const tjIzhar       = showIzhar !== undefined ? showIzhar : storeShowIzhar;
+  const tjToggleIzhar = toggleIzhar || (() => dispatch(uiActions.toggleIzhar()));
+  const tjIdgham      = showIdgham !== undefined ? showIdgham : storeShowIdgham;
+  const tjToggleIdgham = toggleIdgham || (() => dispatch(uiActions.toggleIdgham()));
+  const tjIkhfa       = showIkhfa !== undefined ? showIkhfa : storeShowIkhfa;
+  const tjToggleIkhfa = toggleIkhfa || (() => dispatch(uiActions.toggleIkhfa()));
+  const tjIqlab       = showIqlab !== undefined ? showIqlab : storeShowIqlab;
+  const tjToggleIqlab = toggleIqlab || (() => dispatch(uiActions.toggleIqlab()));
+  const tjGhunnah     = showGhunnah !== undefined ? showGhunnah : storeShowGhunnah;
+  const tjToggleGhunnah = toggleGhunnah || (() => dispatch(uiActions.toggleGhunnah()));
+  const tjTajweedTone = showTajweedTone !== undefined ? showTajweedTone : storeShowTajweedTone;
+  const tjToggleTajweedTone = toggleTajweedTone || (() => dispatch(uiActions.toggleTajweedTone()));
+
   const masteryFilterRange  = useSelector(sel.masteryFilterRange);
   const masteryFilterActive = useSelector(sel.masteryFilterActive);
   const masteryFilterPreset = useSelector(sel.masteryFilterPreset);
@@ -195,8 +222,8 @@ export function SurahHeader({
   }, 0);
   const meta = pageMode && pageMeta ? pageMeta : surahMeta;
 
-  const anyTj = showQalqala || showMadd || showIzhar || showIdgham || showIkhfa || showIqlab || showGhunnah || showTajweedTone;
-  const activeTjCount = [showQalqala, showMadd, showIzhar, showIdgham, showIkhfa, showIqlab, showGhunnah, showTajweedTone].filter(Boolean).length;
+  const anyTj = tjQalqala || tjMadd || tjIzhar || tjIdgham || tjIkhfa || tjIqlab || tjGhunnah || tjTajweedTone;
+  const activeTjCount = [tjQalqala, tjMadd, tjIzhar, tjIdgham, tjIkhfa, tjIqlab, tjGhunnah, tjTajweedTone].filter(Boolean).length;
   const anyOpt = announceNum || spellCheck || showParts || pageMode || hizbMode || juzMode || fullScreenSelectedAyat;
   const activeOptCount = [announceNum, spellCheck, showParts, pageMode, hizbMode, juzMode, fullScreenSelectedAyat].filter(Boolean).length;
   const langLabel = translationLang ? (TRANS_LABELS[translationLang] || translationLang.toUpperCase()) : "OFF";
@@ -938,14 +965,14 @@ export function SurahHeader({
 
           <div className="m-tajweed-rules-list">
             {[
-              { toggle: toggleTajweedTone, on: showTajweedTone, label: "تفخيم / ترقيق", sub: "Graves & Aiguës (Tafkhīm / Tarqīq)", color: activeTjColors.tafkhim || "#06b6d4", bg: `${activeTjColors.tafkhim || "#06b6d4"}2e` },
-              { toggle: toggleQalqala, on: showQalqala, label: "قلقلة", sub: "Qalqala (Rebond)", color: activeTjColors.qalqala || "#38bdf8", bg: `${activeTjColors.qalqala || "#38bdf8"}2e` },
-              { toggle: toggleMadd,    on: showMadd,    label: "مَدّ",   sub: "Madd (Prolongation)", color: activeTjColors.madd_munfasil || "#fb923c", bg: `${activeTjColors.madd_munfasil || "#fb923c"}2e` },
-              { toggle: toggleIzhar,   on: showIzhar,   label: "إظهار", sub: "Idh-har (Clarté)",   color: activeTjColors.izhar || "#34d399", bg: `${activeTjColors.izhar || "#34d399"}2e` },
-              { toggle: toggleIdgham,  on: showIdgham,  label: "إدغام", sub: "Idgham (Assimilation)", color: activeTjColors.idgham || "#fbbf24", bg: `${activeTjColors.idgham || "#fbbf24"}2e` },
-              { toggle: toggleIkhfa,   on: showIkhfa,   label: "إخفاء", sub: "Ikhfâ (Dissimulation)", color: activeTjColors.ikhfa || "#c084fc", bg: `${activeTjColors.ikhfa || "#c084fc"}2e` },
-              { toggle: toggleIqlab,   on: showIqlab,   label: "إقلاب", sub: "Iqlâb (Transformation)", color: activeTjColors.iqlab || "#2dd4bf", bg: `${activeTjColors.iqlab || "#2dd4bf"}2e` },
-              { toggle: toggleGhunnah, on: showGhunnah, label: "غنة",   sub: "Ghunnah (Nasalisation)", color: activeTjColors.ghunnah || "#10b981", bg: `${activeTjColors.ghunnah || "#10b981"}2e` },
+              { toggle: tjToggleTajweedTone, on: tjTajweedTone, label: "تفخيم / ترقيق", sub: "Graves & Aiguës (Tafkhīm / Tarqīq)", color: activeTjColors.tafkhim || "#06b6d4", bg: `${activeTjColors.tafkhim || "#06b6d4"}2e` },
+              { toggle: tjToggleQalqala, on: tjQalqala, label: "قلقلة", sub: "Qalqala (Rebond)", color: activeTjColors.qalqala || "#38bdf8", bg: `${activeTjColors.qalqala || "#38bdf8"}2e` },
+              { toggle: tjToggleMadd,    on: tjMadd,    label: "مَدّ",   sub: "Madd (Prolongation)", color: activeTjColors.madd_munfasil || "#fb923c", bg: `${activeTjColors.madd_munfasil || "#fb923c"}2e` },
+              { toggle: tjToggleIzhar,   on: tjIzhar,   label: "إظهار", sub: "Idh-har (Clarté)",   color: activeTjColors.izhar || "#34d399", bg: `${activeTjColors.izhar || "#34d399"}2e` },
+              { toggle: tjToggleIdgham,  on: tjIdgham,  label: "إدغام", sub: "Idgham (Assimilation)", color: activeTjColors.idgham || "#fbbf24", bg: `${activeTjColors.idgham || "#fbbf24"}2e` },
+              { toggle: tjToggleIkhfa,   on: tjIkhfa,   label: "إخفاء", sub: "Ikhfâ (Dissimulation)", color: activeTjColors.ikhfa || "#c084fc", bg: `${activeTjColors.ikhfa || "#c084fc"}2e` },
+              { toggle: tjToggleIqlab,   on: tjIqlab,   label: "إقلاب", sub: "Iqlâb (Transformation)", color: activeTjColors.iqlab || "#2dd4bf", bg: `${activeTjColors.iqlab || "#2dd4bf"}2e` },
+              { toggle: tjToggleGhunnah, on: tjGhunnah, label: "غنة",   sub: "Ghunnah (Nasalisation)", color: activeTjColors.ghunnah || "#10b981", bg: `${activeTjColors.ghunnah || "#10b981"}2e` },
             ].map(({ toggle, on, label, sub, color, bg }) => (
               <button
                 key={label}
@@ -1020,23 +1047,23 @@ export function SurahHeader({
               className="m-btn-toggle-all"
               onClick={() => {
                 if (anyTj) {
-                  if (showTajweedTone) toggleTajweedTone?.();
-                  if (showQalqala) toggleQalqala?.();
-                  if (showMadd) toggleMadd?.();
-                  if (showIzhar) toggleIzhar?.();
-                  if (showIdgham) toggleIdgham?.();
-                  if (showIkhfa) toggleIkhfa?.();
-                  if (showIqlab) toggleIqlab?.();
-                  if (showGhunnah) toggleGhunnah?.();
+                  if (tjTajweedTone) tjToggleTajweedTone?.();
+                  if (tjQalqala) tjToggleQalqala?.();
+                  if (tjMadd) tjToggleMadd?.();
+                  if (tjIzhar) tjToggleIzhar?.();
+                  if (tjIdgham) tjToggleIdgham?.();
+                  if (tjIkhfa) tjToggleIkhfa?.();
+                  if (tjIqlab) tjToggleIqlab?.();
+                  if (tjGhunnah) tjToggleGhunnah?.();
                 } else {
-                  if (!showTajweedTone) toggleTajweedTone?.();
-                  if (!showQalqala) toggleQalqala?.();
-                  if (!showMadd) toggleMadd?.();
-                  if (!showIzhar) toggleIzhar?.();
-                  if (!showIdgham) toggleIdgham?.();
-                  if (!showIkhfa) toggleIkhfa?.();
-                  if (!showIqlab) toggleIqlab?.();
-                  if (!showGhunnah) toggleGhunnah?.();
+                  if (!tjTajweedTone) tjToggleTajweedTone?.();
+                  if (!tjQalqala) tjToggleQalqala?.();
+                  if (!tjMadd) tjToggleMadd?.();
+                  if (!tjIzhar) tjToggleIzhar?.();
+                  if (!tjIdgham) tjToggleIdgham?.();
+                  if (!tjIkhfa) tjToggleIkhfa?.();
+                  if (!tjIqlab) tjToggleIqlab?.();
+                  if (!tjGhunnah) tjToggleGhunnah?.();
                 }
               }}
             >

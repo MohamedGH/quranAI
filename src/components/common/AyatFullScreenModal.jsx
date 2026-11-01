@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { ArabicHighlighted, PlayingArabicHighlighted } from "./ArabicHighlighted.jsx";
 import { Submenu } from "../modes/Submenu.jsx";
 import { isQalqala, getMaddType, isIzhar, isIdgham, isTafkhim, isTarqiq, getTajweedStyleForChar } from "../../utils/tajweedRules.js";
+import { uiActions, sel } from "../../store.js";
 import { arabicRoot } from "../../utils/arabicUtils.js";
 import { segmentAyatTranslation } from "../../utils/translationUtils.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
@@ -37,11 +39,17 @@ export function AyatFullScreenModal({
   showMadd = false,
   showIzhar = false,
   showIdgham = false,
+  showIkhfa = false,
+  showIqlab = false,
+  showGhunnah = false,
   showTajweedTone = false,
   toggleQalqala,
   toggleMadd,
   toggleIzhar,
   toggleIdgham,
+  toggleIkhfa,
+  toggleIqlab,
+  toggleGhunnah,
   toggleTajweedTone,
   isPlaying = false,
   onTogglePlay,
@@ -118,7 +126,35 @@ export function AyatFullScreenModal({
   const [reciterSearch, setReciterSearch] = useState("");
   const scrollContainerRef = useRef(null);
 
-  const activeTajweedCount = [showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone].filter(Boolean).length;
+  const dispatch = useDispatch();
+  const storeShowIkhfa = useSelector(sel.showIkhfa);
+  const storeShowIqlab = useSelector(sel.showIqlab);
+  const storeShowGhunnah = useSelector(sel.showGhunnah);
+  const storeShowQalqala = useSelector(sel.showQalqala);
+  const storeShowMadd = useSelector(sel.showMadd);
+  const storeShowIzhar = useSelector(sel.showIzhar);
+  const storeShowIdgham = useSelector(sel.showIdgham);
+  const storeShowTajweedTone = useSelector(sel.showTajweedTone);
+
+  const tjQalqala = showQalqala !== undefined ? showQalqala : storeShowQalqala;
+  const tjMadd = showMadd !== undefined ? showMadd : storeShowMadd;
+  const tjIzhar = showIzhar !== undefined ? showIzhar : storeShowIzhar;
+  const tjIdgham = showIdgham !== undefined ? showIdgham : storeShowIdgham;
+  const tjIkhfa = showIkhfa !== undefined ? showIkhfa : storeShowIkhfa;
+  const tjIqlab = showIqlab !== undefined ? showIqlab : storeShowIqlab;
+  const tjGhunnah = showGhunnah !== undefined ? showGhunnah : storeShowGhunnah;
+  const tjTone = showTajweedTone !== undefined ? showTajweedTone : storeShowTajweedTone;
+
+  const tjToggleQalqala = toggleQalqala || (() => dispatch(uiActions.toggleQalqala()));
+  const tjToggleMadd = toggleMadd || (() => dispatch(uiActions.toggleMadd()));
+  const tjToggleIzhar = toggleIzhar || (() => dispatch(uiActions.toggleIzhar()));
+  const tjToggleIdgham = toggleIdgham || (() => dispatch(uiActions.toggleIdgham()));
+  const tjToggleIkhfa = toggleIkhfa || (() => dispatch(uiActions.toggleIkhfa()));
+  const tjToggleIqlab = toggleIqlab || (() => dispatch(uiActions.toggleIqlab()));
+  const tjToggleGhunnah = toggleGhunnah || (() => dispatch(uiActions.toggleGhunnah()));
+  const tjToggleTone = toggleTajweedTone || (() => dispatch(uiActions.toggleTajweedTone()));
+
+  const activeTajweedCount = [tjQalqala, tjMadd, tjIzhar, tjIdgham, tjIkhfa, tjIqlab, tjGhunnah, tjTone].filter(Boolean).length;
   const anyTajweedActive = activeTajweedCount > 0;
 
   // Touch swipe handling for mobile
@@ -381,8 +417,17 @@ export function AyatFullScreenModal({
 
   // Tajweed character rendering helper
   const renderTajweedChar = (ch, ci, arr2) => {
-    const tajStyle = (showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone)
-      ? getTajweedStyleForChar(arr2, ci, { showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone })
+    const tajStyle = anyTajweedActive
+      ? getTajweedStyleForChar(arr2, ci, {
+          showQalqala: tjQalqala,
+          showMadd: tjMadd,
+          showIzhar: tjIzhar,
+          showIdgham: tjIdgham,
+          showIkhfa: tjIkhfa,
+          showIqlab: tjIqlab,
+          showGhunnah: tjGhunnah,
+          showTajweedTone: tjTone,
+        })
       : null;
     return <span key={ci} style={tajStyle || undefined}>{ch}</span>;
   };
@@ -395,11 +440,14 @@ export function AyatFullScreenModal({
           text={ayat.text}
           timestamps={timestamps}
           mode="main"
-          showQalqala={showQalqala}
-          showMadd={showMadd}
-          showIzhar={showIzhar}
-          showIdgham={showIdgham}
-          showTajweedTone={showTajweedTone}
+          showQalqala={tjQalqala}
+          showMadd={tjMadd}
+          showIzhar={tjIzhar}
+          showIdgham={tjIdgham}
+          showIkhfa={tjIkhfa}
+          showIqlab={tjIqlab}
+          showGhunnah={tjGhunnah}
+          showTajweedTone={tjTone}
         />
       );
     }
@@ -412,11 +460,14 @@ export function AyatFullScreenModal({
           mode="part"
           playingPart={playingPart}
           ld={ld}
-          showQalqala={showQalqala}
-          showMadd={showMadd}
-          showIzhar={showIzhar}
-          showIdgham={showIdgham}
-          showTajweedTone={showTajweedTone}
+          showQalqala={tjQalqala}
+          showMadd={tjMadd}
+          showIzhar={tjIzhar}
+          showIdgham={tjIdgham}
+          showIkhfa={tjIkhfa}
+          showIqlab={tjIqlab}
+          showGhunnah={tjGhunnah}
+          showTajweedTone={tjTone}
         />
       );
     }
@@ -619,7 +670,7 @@ export function AyatFullScreenModal({
                         borderBottom: isRevW && !wRevChars?.length ? "2px solid rgba(201,168,76,.6)" : "none",
                       }}
                     >
-                      {(showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone)
+                      {anyTajweedActive
                         ? (() => { const arr2 = [...w]; return arr2.map((ch, ci) => renderTajweedChar(ch, ci, arr2)); })()
                         : w}
                       {wii < seg.words.length - 1 ? " " : ""}
@@ -692,7 +743,7 @@ export function AyatFullScreenModal({
 
             return (
               <span key={wi} style={baseStyle}>
-                {(showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone) && !hit && !unk
+                {anyTajweedActive && !hit && !unk
                   ? (() => { const arr2 = [...w]; return arr2.map((ch, ci) => renderTajweedChar(ch, ci, arr2)); })()
                   : w}
                 {wi < ayatWords.length - 1 ? ' ' : ''}
@@ -709,16 +760,19 @@ export function AyatFullScreenModal({
           text={ayat.text}
           timestamps={timestamps}
           currentMs={-1}
-          showQalqala={showQalqala}
-          showMadd={showMadd}
-          showIzhar={showIzhar}
-          showIdgham={showIdgham}
-          showTajweedTone={showTajweedTone}
+          showQalqala={tjQalqala}
+          showMadd={tjMadd}
+          showIzhar={tjIzhar}
+          showIdgham={tjIdgham}
+          showIkhfa={tjIkhfa}
+          showIqlab={tjIqlab}
+          showGhunnah={tjGhunnah}
+          showTajweedTone={tjTone}
         />
       );
     }
 
-    if (showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone) {
+    if (anyTajweedActive) {
       const arr = [...ayat.text];
       return <span>{arr.map((ch, i) => renderTajweedChar(ch, i, arr))}</span>;
     }
@@ -1374,7 +1428,7 @@ export function AyatFullScreenModal({
             <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 11, fontFamily: "'Cinzel',serif", fontWeight: 700, color: "var(--gold2)", letterSpacing: 0.8 }}>
-                  🎨 RÈGLES TAJWEED ({activeTajweedCount}/5)
+                  🎨 RÈGLES TAJWEED ({activeTajweedCount}/8)
                 </span>
                 <button
                   onClick={() => setShowTajweedGuide(true)}
@@ -1386,89 +1440,139 @@ export function AyatFullScreenModal({
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                 <button
-                  onClick={toggleTajweedTone}
+                  onClick={tjToggleTone}
                   style={{
                     padding: "6px 8px",
                     borderRadius: 8,
-                    border: `1px solid ${showTajweedTone ? "#06b6d4" : "rgba(255,255,255,0.12)"}`,
-                    background: showTajweedTone ? "rgba(6,182,212,0.2)" : "rgba(255,255,255,0.04)",
-                    color: showTajweedTone ? "#22d3ee" : "var(--text2)",
+                    border: `1px solid ${tjTone ? "#06b6d4" : "rgba(255,255,255,0.12)"}`,
+                    background: tjTone ? "rgba(6,182,212,0.2)" : "rgba(255,255,255,0.04)",
+                    color: tjTone ? "#22d3ee" : "var(--text2)",
                     fontSize: 10,
                     fontWeight: 600,
                     cursor: "pointer",
                     textAlign: "center",
                   }}
                 >
-                  Graves / Aiguës {showTajweedTone ? "✓" : ""}
+                  Graves / Aiguës {tjTone ? "✓" : ""}
                 </button>
 
                 <button
-                  onClick={toggleQalqala}
+                  onClick={tjToggleQalqala}
                   style={{
                     padding: "6px 8px",
                     borderRadius: 8,
-                    border: `1px solid ${showQalqala ? "#38bdf8" : "rgba(255,255,255,0.12)"}`,
-                    background: showQalqala ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.04)",
-                    color: showQalqala ? "#7dd3fc" : "var(--text2)",
+                    border: `1px solid ${tjQalqala ? "#38bdf8" : "rgba(255,255,255,0.12)"}`,
+                    background: tjQalqala ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.04)",
+                    color: tjQalqala ? "#7dd3fc" : "var(--text2)",
                     fontSize: 10,
                     fontWeight: 600,
                     cursor: "pointer",
                     textAlign: "center",
                   }}
                 >
-                  Qalqala {showQalqala ? "✓" : ""}
+                  Qalqala {tjQalqala ? "✓" : ""}
                 </button>
 
                 <button
-                  onClick={toggleMadd}
+                  onClick={tjToggleMadd}
                   style={{
                     padding: "6px 8px",
                     borderRadius: 8,
-                    border: `1px solid ${showMadd ? "#fb923c" : "rgba(255,255,255,0.12)"}`,
-                    background: showMadd ? "rgba(251,146,60,0.2)" : "rgba(255,255,255,0.04)",
-                    color: showMadd ? "#fdba74" : "var(--text2)",
+                    border: `1px solid ${tjMadd ? "#fb923c" : "rgba(255,255,255,0.12)"}`,
+                    background: tjMadd ? "rgba(251,146,60,0.2)" : "rgba(255,255,255,0.04)",
+                    color: tjMadd ? "#fdba74" : "var(--text2)",
                     fontSize: 10,
                     fontWeight: 600,
                     cursor: "pointer",
                     textAlign: "center",
                   }}
                 >
-                  Madd {showMadd ? "✓" : ""}
+                  Madd {tjMadd ? "✓" : ""}
                 </button>
 
                 <button
-                  onClick={toggleIzhar}
+                  onClick={tjToggleIzhar}
                   style={{
                     padding: "6px 8px",
                     borderRadius: 8,
-                    border: `1px solid ${showIzhar ? "#34d399" : "rgba(255,255,255,0.12)"}`,
-                    background: showIzhar ? "rgba(52,211,153,0.2)" : "rgba(255,255,255,0.04)",
-                    color: showIzhar ? "#6ee7b7" : "var(--text2)",
+                    border: `1px solid ${tjIzhar ? "#34d399" : "rgba(255,255,255,0.12)"}`,
+                    background: tjIzhar ? "rgba(52,211,153,0.2)" : "rgba(255,255,255,0.04)",
+                    color: tjIzhar ? "#6ee7b7" : "var(--text2)",
                     fontSize: 10,
                     fontWeight: 600,
                     cursor: "pointer",
                     textAlign: "center",
                   }}
                 >
-                  Idh-hâr {showIzhar ? "✓" : ""}
+                  Idh-hâr {tjIzhar ? "✓" : ""}
                 </button>
 
                 <button
-                  onClick={toggleIdgham}
+                  onClick={tjToggleIdgham}
                   style={{
-                    gridColumn: "span 2",
                     padding: "6px 8px",
                     borderRadius: 8,
-                    border: `1px solid ${showIdgham ? "#fbbf24" : "rgba(255,255,255,0.12)"}`,
-                    background: showIdgham ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.04)",
-                    color: showIdgham ? "#fde68a" : "var(--text2)",
+                    border: `1px solid ${tjIdgham ? "#fbbf24" : "rgba(255,255,255,0.12)"}`,
+                    background: tjIdgham ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.04)",
+                    color: tjIdgham ? "#fde68a" : "var(--text2)",
                     fontSize: 10,
                     fontWeight: 600,
                     cursor: "pointer",
                     textAlign: "center",
                   }}
                 >
-                  Idghâm (Assimilation) {showIdgham ? "✓" : ""}
+                  Idghâm {tjIdgham ? "✓" : ""}
+                </button>
+
+                <button
+                  onClick={tjToggleIkhfa}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: `1px solid ${tjIkhfa ? "#22d3ee" : "rgba(255,255,255,0.12)"}`,
+                    background: tjIkhfa ? "rgba(34,211,238,0.2)" : "rgba(255,255,255,0.04)",
+                    color: tjIkhfa ? "#67e8f9" : "var(--text2)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  Ikhfâ {tjIkhfa ? "✓" : ""}
+                </button>
+
+                <button
+                  onClick={tjToggleIqlab}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: `1px solid ${tjIqlab ? "#f472b6" : "rgba(255,255,255,0.12)"}`,
+                    background: tjIqlab ? "rgba(244,114,182,0.2)" : "rgba(255,255,255,0.04)",
+                    color: tjIqlab ? "#f9a8d4" : "var(--text2)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  Iqlâb {tjIqlab ? "✓" : ""}
+                </button>
+
+                <button
+                  onClick={tjToggleGhunnah}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: 8,
+                    border: `1px solid ${tjGhunnah ? "#4ade80" : "rgba(255,255,255,0.12)"}`,
+                    background: tjGhunnah ? "rgba(74,222,128,0.2)" : "rgba(255,255,255,0.04)",
+                    color: tjGhunnah ? "#86efac" : "var(--text2)",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  Ghunnah {tjGhunnah ? "✓" : ""}
                 </button>
               </div>
             </div>
@@ -1501,7 +1605,7 @@ export function AyatFullScreenModal({
             {/* Graves & Aiguës (Tafkhim / Tarqiq) */}
             <button
               id="btn-fs-tajweed-tone"
-              onClick={toggleTajweedTone}
+              onClick={tjToggleTone}
               title="Colorer selon le son Grave (Cyan) ou Aigu (Rose)"
               style={{
                 display: "inline-flex",
@@ -1509,9 +1613,9 @@ export function AyatFullScreenModal({
                 gap: 5,
                 padding: "4px 9px",
                 borderRadius: 6,
-                border: `1px solid ${showTajweedTone ? "#06b6d4" : "rgba(255,255,255,0.12)"}`,
-                background: showTajweedTone ? "rgba(6,182,212,0.18)" : "rgba(255,255,255,0.04)",
-                color: showTajweedTone ? "#22d3ee" : "var(--text2)",
+                border: `1px solid ${tjTone ? "#06b6d4" : "rgba(255,255,255,0.12)"}`,
+                background: tjTone ? "rgba(6,182,212,0.18)" : "rgba(255,255,255,0.04)",
+                color: tjTone ? "#22d3ee" : "var(--text2)",
                 fontSize: 11,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -1520,13 +1624,13 @@ export function AyatFullScreenModal({
             >
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#06b6d4", display: "inline-block" }} />
               <span>Graves / Aiguës (Tafkhīm/Tarqīq)</span>
-              {showTajweedTone && <span style={{ fontSize: 10 }}>✓</span>}
+              {tjTone && <span style={{ fontSize: 10 }}>✓</span>}
             </button>
 
             {/* Qalqala */}
             <button
               id="btn-fs-tajweed-qalqala"
-              onClick={toggleQalqala}
+              onClick={tjToggleQalqala}
               title="Qalqala (Rebond sur قطبجد)"
               style={{
                 display: "inline-flex",
@@ -1534,9 +1638,9 @@ export function AyatFullScreenModal({
                 gap: 5,
                 padding: "4px 9px",
                 borderRadius: 6,
-                border: `1px solid ${showQalqala ? "#38bdf8" : "rgba(255,255,255,0.12)"}`,
-                background: showQalqala ? "rgba(56,189,248,0.18)" : "rgba(255,255,255,0.04)",
-                color: showQalqala ? "#7dd3fc" : "var(--text2)",
+                border: `1px solid ${tjQalqala ? "#38bdf8" : "rgba(255,255,255,0.12)"}`,
+                background: tjQalqala ? "rgba(56,189,248,0.18)" : "rgba(255,255,255,0.04)",
+                color: tjQalqala ? "#7dd3fc" : "var(--text2)",
                 fontSize: 11,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -1545,13 +1649,13 @@ export function AyatFullScreenModal({
             >
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#38bdf8", display: "inline-block" }} />
               <span>Qalqala</span>
-              {showQalqala && <span style={{ fontSize: 10 }}>✓</span>}
+              {tjQalqala && <span style={{ fontSize: 10 }}>✓</span>}
             </button>
 
             {/* Madd */}
             <button
               id="btn-fs-tajweed-madd"
-              onClick={toggleMadd}
+              onClick={tjToggleMadd}
               title="Madd (Allongements)"
               style={{
                 display: "inline-flex",
@@ -1559,9 +1663,9 @@ export function AyatFullScreenModal({
                 gap: 5,
                 padding: "4px 9px",
                 borderRadius: 6,
-                border: `1px solid ${showMadd ? "#fb923c" : "rgba(255,255,255,0.12)"}`,
-                background: showMadd ? "rgba(251,146,60,0.18)" : "rgba(255,255,255,0.04)",
-                color: showMadd ? "#fdba74" : "var(--text2)",
+                border: `1px solid ${tjMadd ? "#fb923c" : "rgba(255,255,255,0.12)"}`,
+                background: tjMadd ? "rgba(251,146,60,0.18)" : "rgba(255,255,255,0.04)",
+                color: tjMadd ? "#fdba74" : "var(--text2)",
                 fontSize: 11,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -1570,13 +1674,13 @@ export function AyatFullScreenModal({
             >
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fb923c", display: "inline-block" }} />
               <span>Madd</span>
-              {showMadd && <span style={{ fontSize: 10 }}>✓</span>}
+              {tjMadd && <span style={{ fontSize: 10 }}>✓</span>}
             </button>
 
             {/* Idh-har */}
             <button
               id="btn-fs-tajweed-izhar"
-              onClick={toggleIzhar}
+              onClick={tjToggleIzhar}
               title="Idh-hâr (Clarté)"
               style={{
                 display: "inline-flex",
@@ -1584,9 +1688,9 @@ export function AyatFullScreenModal({
                 gap: 5,
                 padding: "4px 9px",
                 borderRadius: 6,
-                border: `1px solid ${showIzhar ? "#34d399" : "rgba(255,255,255,0.12)"}`,
-                background: showIzhar ? "rgba(52,211,153,0.18)" : "rgba(255,255,255,0.04)",
-                color: showIzhar ? "#6ee7b7" : "var(--text2)",
+                border: `1px solid ${tjIzhar ? "#34d399" : "rgba(255,255,255,0.12)"}`,
+                background: tjIzhar ? "rgba(52,211,153,0.18)" : "rgba(255,255,255,0.04)",
+                color: tjIzhar ? "#6ee7b7" : "var(--text2)",
                 fontSize: 11,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -1595,13 +1699,13 @@ export function AyatFullScreenModal({
             >
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#34d399", display: "inline-block" }} />
               <span>Idh-hâr</span>
-              {showIzhar && <span style={{ fontSize: 10 }}>✓</span>}
+              {tjIzhar && <span style={{ fontSize: 10 }}>✓</span>}
             </button>
 
             {/* Idgham */}
             <button
               id="btn-fs-tajweed-idgham"
-              onClick={toggleIdgham}
+              onClick={tjToggleIdgham}
               title="Idghâm (Assimilation)"
               style={{
                 display: "inline-flex",
@@ -1609,9 +1713,9 @@ export function AyatFullScreenModal({
                 gap: 5,
                 padding: "4px 9px",
                 borderRadius: 6,
-                border: `1px solid ${showIdgham ? "#fbbf24" : "rgba(255,255,255,0.12)"}`,
-                background: showIdgham ? "rgba(251,191,36,0.18)" : "rgba(255,255,255,0.04)",
-                color: showIdgham ? "#fde68a" : "var(--text2)",
+                border: `1px solid ${tjIdgham ? "#fbbf24" : "rgba(255,255,255,0.12)"}`,
+                background: tjIdgham ? "rgba(251,191,36,0.18)" : "rgba(255,255,255,0.04)",
+                color: tjIdgham ? "#fde68a" : "var(--text2)",
                 fontSize: 11,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -1620,7 +1724,82 @@ export function AyatFullScreenModal({
             >
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fbbf24", display: "inline-block" }} />
               <span>Idghâm</span>
-              {showIdgham && <span style={{ fontSize: 10 }}>✓</span>}
+              {tjIdgham && <span style={{ fontSize: 10 }}>✓</span>}
+            </button>
+
+            {/* Ikhfa */}
+            <button
+              id="btn-fs-tajweed-ikhfa"
+              onClick={tjToggleIkhfa}
+              title="Ikhfâ (Dissimulation voilée)"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: 6,
+                border: `1px solid ${tjIkhfa ? "#22d3ee" : "rgba(255,255,255,0.12)"}`,
+                background: tjIkhfa ? "rgba(34,211,238,0.18)" : "rgba(255,255,255,0.04)",
+                color: tjIkhfa ? "#67e8f9" : "var(--text2)",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all .15s",
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22d3ee", display: "inline-block" }} />
+              <span>Ikhfâ</span>
+              {tjIkhfa && <span style={{ fontSize: 10 }}>✓</span>}
+            </button>
+
+            {/* Iqlab */}
+            <button
+              id="btn-fs-tajweed-iqlab"
+              onClick={tjToggleIqlab}
+              title="Iqlâb (Conversion en Mīm)"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: 6,
+                border: `1px solid ${tjIqlab ? "#f472b6" : "rgba(255,255,255,0.12)"}`,
+                background: tjIqlab ? "rgba(244,114,182,0.18)" : "rgba(255,255,255,0.04)",
+                color: tjIqlab ? "#f9a8d4" : "var(--text2)",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all .15s",
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#f472b6", display: "inline-block" }} />
+              <span>Iqlâb</span>
+              {tjIqlab && <span style={{ fontSize: 10 }}>✓</span>}
+            </button>
+
+            {/* Ghunnah */}
+            <button
+              id="btn-fs-tajweed-ghunnah"
+              onClick={tjToggleGhunnah}
+              title="Ghunnah (Nasalisation)"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 9px",
+                borderRadius: 6,
+                border: `1px solid ${tjGhunnah ? "#4ade80" : "rgba(255,255,255,0.12)"}`,
+                background: tjGhunnah ? "rgba(74,222,128,0.18)" : "rgba(255,255,255,0.04)",
+                color: tjGhunnah ? "#86efac" : "var(--text2)",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "all .15s",
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", display: "inline-block" }} />
+              <span>Ghunnah</span>
+              {tjGhunnah && <span style={{ fontSize: 10 }}>✓</span>}
             </button>
           </div>
 

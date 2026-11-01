@@ -321,6 +321,9 @@ function AppInner({ currentUser, onSignOut }) {
   const showMadd        = useSelector(sel.showMadd);
   const showIzhar       = useSelector(sel.showIzhar);
   const showIdgham      = useSelector(sel.showIdgham);
+  const showIkhfa       = useSelector(sel.showIkhfa);
+  const showIqlab       = useSelector(sel.showIqlab);
+  const showGhunnah     = useSelector(sel.showGhunnah);
   const showTajweedTone = useSelector(sel.showTajweedTone);
   const announceNum     = useSelector(sel.announceNum);
   const spellCheck      = useSelector(sel.spellCheck);
@@ -441,6 +444,9 @@ function AppInner({ currentUser, onSignOut }) {
   const toggleMadd         = () => dispatch(uiActions.toggleMadd());
   const toggleIzhar        = () => dispatch(uiActions.toggleIzhar());
   const toggleIdgham       = () => dispatch(uiActions.toggleIdgham());
+  const toggleIkhfa        = () => dispatch(uiActions.toggleIkhfa());
+  const toggleIqlab        = () => dispatch(uiActions.toggleIqlab());
+  const toggleGhunnah      = () => dispatch(uiActions.toggleGhunnah());
   const toggleTajweedTone  = () => dispatch(uiActions.toggleTajweedTone());
   const toggleAnnounceNum  = () => dispatch(uiActions.toggleAnnounceNum());
   const toggleSpellCheck   = () => dispatch(uiActions.toggleSpellCheck());
@@ -2579,11 +2585,17 @@ function AppInner({ currentUser, onSignOut }) {
                   showMadd={showMadd}
                   showIzhar={showIzhar}
                   showIdgham={showIdgham}
+                  showIkhfa={showIkhfa}
+                  showIqlab={showIqlab}
+                  showGhunnah={showGhunnah}
                   showTajweedTone={showTajweedTone}
                   toggleQalqala={toggleQalqala}
                   toggleMadd={toggleMadd}
                   toggleIzhar={toggleIzhar}
                   toggleIdgham={toggleIdgham}
+                  toggleIkhfa={toggleIkhfa}
+                  toggleIqlab={toggleIqlab}
+                  toggleGhunnah={toggleGhunnah}
                   toggleTajweedTone={toggleTajweedTone}
                 />
               </AnimatedPage>
@@ -2647,6 +2659,12 @@ function AppInner({ currentUser, onSignOut }) {
                   toggleIzhar={toggleIzhar}
                   showIdgham={showIdgham}
                   toggleIdgham={toggleIdgham}
+                  showIkhfa={showIkhfa}
+                  toggleIkhfa={toggleIkhfa}
+                  showIqlab={showIqlab}
+                  toggleIqlab={toggleIqlab}
+                  showGhunnah={showGhunnah}
+                  toggleGhunnah={toggleGhunnah}
                   showTajweedTone={showTajweedTone}
                   toggleTajweedTone={toggleTajweedTone}
                   fullScreenSelectedAyat={fullScreenSelectedAyat}
@@ -3453,11 +3471,11 @@ function AppInner({ currentUser, onSignOut }) {
                       // Render the Arabic text — either TS-highlighted, inline-selectable, or plain
                       // _tsForAyat: basmala already stripped at parse time — pass ts directly
                       const renderAyatText = () => {
-                        if (isPlaying && ts && enableLetterByLetter) return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="main" showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
+                        if (isPlaying && ts && enableLetterByLetter) return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="main" showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showIkhfa={showIkhfa} showIqlab={showIqlab} showGhunnah={showGhunnah} showTajweedTone={showTajweedTone} />;
                         if (playingPart?.ayatNum === ayat.numberInSurah && ts && enableLetterByLetter)
-                          return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="part" playingPart={playingPart} ld={ld} showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
+                          return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="part" playingPart={playingPart} ld={ld} showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showIkhfa={showIkhfa} showIqlab={showIqlab} showGhunnah={showGhunnah} showTajweedTone={showTajweedTone} />;
                         if (localPlaying?.ayatNum === ayat.numberInSurah && ts && enableLetterByLetter)
-                          return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="local" showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showTajweedTone={showTajweedTone} />;
+                          return <PlayingArabicHighlighted text={ayat.text} timestamps={ts} mode="local" showQalqala={showQalqala} showMadd={showMadd} showIzhar={showIzhar} showIdgham={showIdgham} showIkhfa={showIkhfa} showIqlab={showIqlab} showGhunnah={showGhunnah} showTajweedTone={showTajweedTone} />;
 
                         // Revise highlighting — declared early to avoid TDZ with showPartColors
                         const _reviseData = ld?.toRevise;
@@ -3467,7 +3485,7 @@ function AppInner({ currentUser, onSignOut }) {
                         const aideMemoireClickMode = aideMemoireClickModes[ayat.numberInSurah]||null;
                         const showWordButtons = isSelecting || aideMemoireClickMode !== null;
                         const showPartColors  = !isSelecting && showParts && Object.keys(wordPartMap).length > 0;
-                        const hasAnyTajweed = showQalqala || showMadd || showIzhar || showIdgham || showTajweedTone;
+                        const hasAnyTajweed = showQalqala || showMadd || showIzhar || showIdgham || showIkhfa || showIqlab || showGhunnah || showTajweedTone;
 
                         // Build highlight index set from ld.highlight
                         const hlIndices  = (() => {
@@ -3494,6 +3512,9 @@ function AppInner({ currentUser, onSignOut }) {
                               showMadd={showMadd}
                               showIzhar={showIzhar}
                               showIdgham={showIdgham}
+                              showIkhfa={showIkhfa}
+                              showIqlab={showIqlab}
+                              showGhunnah={showGhunnah}
                               showTajweedTone={showTajweedTone}
                             />
                           );
@@ -3614,7 +3635,7 @@ function AppInner({ currentUser, onSignOut }) {
                                       const wBg     = isUnk ? "rgba(255,126,179,.15)" : isHl ? "rgba(255,209,102,.12)" : isRevW && !wRevChars?.length ? timeColor.rgbaBg : "transparent";
                                       const renderCh = (ch,ci,arr2) => {
                                         if(isUnk||isHl) return <span key={ci}>{ch}</span>;
-                                        const tajStyle = hasAnyTajweed ? getTajweedStyleForChar(arr2, ci, { showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone }) : null;
+                                        const tajStyle = hasAnyTajweed ? getTajweedStyleForChar(arr2, ci, { showQalqala, showMadd, showIzhar, showIdgham, showIkhfa, showIqlab, showGhunnah, showTajweedTone }) : null;
                                         return <span key={ci} style={tajStyle || undefined}>{ch}</span>;
                                       };
                                       return (
@@ -3690,7 +3711,7 @@ function AppInner({ currentUser, onSignOut }) {
                                 const arr2 = [...w];
                                 const tajContent = (hasAnyTajweed && !hit && !unk && !isRevWord)
                                   ? arr2.map((ch, ci) => {
-                                      const style = getTajweedStyleForChar(arr2, ci, { showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone });
+                                      const style = getTajweedStyleForChar(arr2, ci, { showQalqala, showMadd, showIzhar, showIdgham, showIkhfa, showIqlab, showGhunnah, showTajweedTone });
                                       return <span key={ci} style={style || undefined}>{ch}</span>;
                                     })
                                   : w;
@@ -3716,6 +3737,9 @@ function AppInner({ currentUser, onSignOut }) {
                             showMadd={showMadd}
                             showIzhar={showIzhar}
                             showIdgham={showIdgham}
+                            showIkhfa={showIkhfa}
+                            showIqlab={showIqlab}
+                            showGhunnah={showGhunnah}
                             showTajweedTone={showTajweedTone}
                           />
                         );
@@ -4334,12 +4358,18 @@ function AppInner({ currentUser, onSignOut }) {
               showMadd={showMadd}
               showIzhar={showIzhar}
               showIdgham={showIdgham}
+              showIkhfa={showIkhfa}
+              showIqlab={showIqlab}
+              showGhunnah={showGhunnah}
               showTajweedTone={showTajweedTone}
               toggleTajweedTone={toggleTajweedTone}
               toggleQalqala={toggleQalqala}
               toggleMadd={toggleMadd}
               toggleIzhar={toggleIzhar}
               toggleIdgham={toggleIdgham}
+              toggleIkhfa={toggleIkhfa}
+              toggleIqlab={toggleIqlab}
+              toggleGhunnah={toggleGhunnah}
               isPlaying={isCurrentPlaying}
               onTogglePlay={handleTogglePlay}
               onSelectAyat={handleSelectAyat}

@@ -196,4 +196,74 @@ describe("Tajweed Rule Detection Engine", () => {
     expect(sel.tajweedPalette(store.getState())).toBe("classic");
     expect(sel.tajweedCustomColors(store.getState())).toEqual({});
   });
+
+  it("handles Redux store showIkhfa, showIqlab, showGhunnah state and toggle actions", async () => {
+    const { store, uiActions, sel } = await import("../src/store.js");
+
+    // Ikhfa
+    const initIkhfa = sel.showIkhfa(store.getState());
+    store.dispatch(uiActions.toggleIkhfa());
+    expect(sel.showIkhfa(store.getState())).toBe(!initIkhfa);
+    store.dispatch(uiActions.toggleIkhfa());
+    expect(sel.showIkhfa(store.getState())).toBe(initIkhfa);
+
+    // Iqlab
+    const initIqlab = sel.showIqlab(store.getState());
+    store.dispatch(uiActions.toggleIqlab());
+    expect(sel.showIqlab(store.getState())).toBe(!initIqlab);
+    store.dispatch(uiActions.toggleIqlab());
+    expect(sel.showIqlab(store.getState())).toBe(initIqlab);
+
+    // Ghunnah
+    const initGhunnah = sel.showGhunnah(store.getState());
+    store.dispatch(uiActions.toggleGhunnah());
+    expect(sel.showGhunnah(store.getState())).toBe(!initGhunnah);
+    store.dispatch(uiActions.toggleGhunnah());
+    expect(sel.showGhunnah(store.getState())).toBe(initGhunnah);
+  });
+
+  it("applies Ikhfa, Iqlab, and Ghunnah styles correctly in getTajweedStyleForChar", async () => {
+    const { getTajweedStyleForChar, isIkhfa, isIqlab, isGhunnah } = await import("../src/utils/tajweedRules.js");
+
+    // 1. Ghunnah on Noon with Shaddah (إِنَّ)
+    const inna = ["إ", "ِ", "ن", "ّ", "َ"];
+    expect(isGhunnah(inna, 2)).toBe(true);
+
+    // Ghunnah should display even when showIzhar and showIdgham are FALSE
+    const ghunnahStyle = getTajweedStyleForChar(inna, 2, {
+      showGhunnah: true,
+      showIzhar: false,
+      showIdgham: false,
+    });
+    expect(ghunnahStyle).not.toBeNull();
+    expect(ghunnahStyle.color).toBe("#10b981");
+
+    // When showGhunnah is false, it returns null (or tone if enabled)
+    const ghunnahOffStyle = getTajweedStyleForChar(inna, 2, {
+      showGhunnah: false,
+      showIzhar: false,
+      showIdgham: false,
+    });
+    expect(ghunnahOffStyle).toBeNull();
+
+    // 2. Iqlab: Nun Sakinah before Ba (مِنۢ بَعْدِ)
+    const iqlabWord = ["م", "ِ", "ن", "ۢ", " ", "ب", "َ", "ع", "ْ", "د", "ِ"];
+    const iqlabStyle = getTajweedStyleForChar(iqlabWord, 2, { showIqlab: true });
+    expect(iqlabStyle).not.toBeNull();
+    expect(iqlabStyle.color).toBe("#2dd4bf");
+
+    // When showIqlab is false
+    const iqlabOffStyle = getTajweedStyleForChar(iqlabWord, 2, { showIqlab: false });
+    expect(iqlabOffStyle).toBeNull();
+
+    // 3. Ikhfa: Nun Sakinah before Qaf (مِن قَبْلِ)
+    const ikhfaWord = ["م", "ِ", "ن", " ", "ق", "َ", "ب", "ْ", "ل", "ِ"];
+    const ikhfaStyle = getTajweedStyleForChar(ikhfaWord, 2, { showIkhfa: true });
+    expect(ikhfaStyle).not.toBeNull();
+    expect(ikhfaStyle.color).toBe("#c084fc");
+
+    // When showIkhfa is false
+    const ikhfaOffStyle = getTajweedStyleForChar(ikhfaWord, 2, { showIkhfa: false });
+    expect(ikhfaOffStyle).toBeNull();
+  });
 });

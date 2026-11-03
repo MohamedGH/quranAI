@@ -678,6 +678,62 @@ const errorsSlice = createSlice({
 });
 export const errorActions = errorsSlice.actions;
 
+// ─── Slice : Offline Manager ─────────────────────────────────────────────────
+const offlineSlice = createSlice({
+  name: "offline",
+  initialState: {
+    isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
+    cachedSurahsMap: {}, // { [surahNum]: { hasText: bool, audioCount: number, totalCount: number, isComplete: bool } }
+    downloadTask: {
+      active: false,
+      surahNum: null,
+      phase: "",
+      done: 0,
+      total: 0,
+      message: "",
+    },
+    storageEstimate: {
+      usedBytes: 0,
+      quotaBytes: 0,
+      percentUsed: 0,
+      formattedUsed: "0 MB",
+      formattedQuota: "0 MB",
+    },
+  },
+  reducers: {
+    setOnline: (s, a) => {
+      s.isOnline = !!a.payload;
+    },
+    setDownloadTask: (s, a) => {
+      s.downloadTask = { ...s.downloadTask, ...a.payload };
+    },
+    resetDownloadTask: (s) => {
+      s.downloadTask = { active: false, surahNum: null, phase: "", done: 0, total: 0, message: "" };
+    },
+    setCachedSurahsMap: (s, a) => {
+      s.cachedSurahsMap = a.payload || {};
+    },
+    updateCachedSurah: (s, a) => {
+      if (a.payload?.surahNum != null) {
+        s.cachedSurahsMap = {
+          ...s.cachedSurahsMap,
+          [a.payload.surahNum]: a.payload.status,
+        };
+      }
+    },
+    setStorageEstimate: (s, a) => {
+      s.storageEstimate = a.payload || {
+        usedBytes: 0,
+        quotaBytes: 0,
+        percentUsed: 0,
+        formattedUsed: "0 MB",
+        formattedQuota: "0 MB",
+      };
+    },
+  },
+});
+export const offlineActions = offlineSlice.actions;
+
 export const store = configureStore({
   reducer: {
     revision:    revisionSlice.reducer,
@@ -689,12 +745,13 @@ export const store = configureStore({
     voice:       voiceSlice.reducer,
     goals:       goalsSlice.reducer,
     errors:      errorsSlice.reducer,
+    offline:     offlineSlice.reducer,
   },
   // Les timestamps et learnData peuvent être grands — désactiver le check de sérialisation sur ces champs
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
-        ignoredPaths: ["player.timestampsMap", "learn.data", "quran.crossSurahAyatsBySurah"],
+        ignoredPaths: ["player.timestampsMap", "learn.data", "quran.crossSurahAyatsBySurah", "offline.cachedSurahsMap"],
         ignoredActionPaths: ["payload.value", "payload"],
       },
     }),
@@ -814,6 +871,11 @@ export const sel = {
   voiceToast:      (s) => s.voice.voiceToast,
   showVoiceInput:  (s) => s.voice.showVoiceInput,
   voiceInputText:  (s) => s.voice.voiceInputText,
+  // offline
+  isOnline:        (s) => s.offline?.isOnline ?? true,
+  downloadTask:    (s) => s.offline?.downloadTask || { active: false, surahNum: null, phase: "", done: 0, total: 0, message: "" },
+  cachedSurahsMap: (s) => s.offline?.cachedSurahsMap || {},
+  storageEstimate: (s) => s.offline?.storageEstimate || { usedBytes: 0, quotaBytes: 0, percentUsed: 0, formattedUsed: "0 MB", formattedQuota: "0 MB" },
   // goals
   goals:           (s) => s.goals,
   activity:        (s) => s.goals.activity,
@@ -869,5 +931,6 @@ export const act = {
   ...goalsActions,
   ...revisionActions,
   ...errorActions,
+  ...offlineActions,
   setLDataThunk,
 };

@@ -7,7 +7,7 @@ import { Provider, useSelector, useDispatch, shallowEqual } from "react-redux";
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
-import { store, sel, act, uiActions, quranActions, playerActions, learnActions, collectionsActions, voiceActions, goalsActions, revisionActions, errorActions, setLDataThunk } from "./store.js";
+import { store, sel, act, uiActions, quranActions, playerActions, learnActions, collectionsActions, voiceActions, goalsActions, revisionActions, errorActions, offlineActions, setLDataThunk } from "./store.js";
 import { firebaseAuth } from "./firebase.js";
 import { StyleTag } from "./components/common/StyleTag.jsx";
 import { ArabicKeyboard, ArabicKeyboardContext, useArabicKeyboard } from "./components/common/ArabicKeyboard.jsx";
@@ -22,7 +22,7 @@ import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
 import { PWAInstallButton } from "./components/common/PWAInstallButton.jsx";
 import { OfflineIndicator } from "./components/common/OfflineIndicator.jsx";
-import { getPlayableAudioUrl } from "./utils/offlineManager.js";
+import { getPlayableAudioUrl, getStorageUsage, getAllSurahsOfflineStatus } from "./utils/offlineManager.js";
 import { AyatFullScreenModal } from "./components/common/AyatFullScreenModal.jsx";
 import { ArchitecturePdfModal } from "./components/common/ArchitecturePdfModal.jsx";
 import { SurahHeader } from "./components/common/SurahHeader.jsx";
@@ -48,6 +48,7 @@ import { QuranBookPage } from "./components/pages/QuranBookPage.jsx";
 import { QuranBook3DPage } from "./components/pages/QuranBook3DPage.jsx";
 import { PrononciationPage } from "./components/pages/PrononciationPage.jsx";
 import { RecordingsPage } from "./components/pages/RecordingsPage.jsx";
+import { OfflinePage } from "./components/pages/OfflinePage.jsx";
 
 
 import { Submenu } from "./components/modes/Submenu.jsx";
@@ -1329,11 +1330,28 @@ function AppInner({ currentUser, onSignOut }) {
 
   useEffect(() => {
     fetchSurahs().then(d => { setSurahs(d); }); // setSurahs already sets loadingSurahs:false in reducer
-    // Register service worker for offline audio and resource caching
+    // Register service worker for offline audio, app shell, and resource caching
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/audio-sw.js', { scope: '/' }).catch(() => {});
     }
-  }, []);
+
+    // Connectivity state listeners
+    const handleOnline = () => dispatch(offlineActions.setOnline(true));
+    const handleOffline = () => dispatch(offlineActions.setOnline(false));
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Initial background scan for storage usage & cached surahs
+    getStorageUsage().then(u => dispatch(offlineActions.setStorageEstimate(u))).catch(() => {});
+    getAllSurahsOfflineStatus().then(res => {
+      if (res?.surahsMap) dispatch(offlineActions.setCachedSurahsMap(res.surahsMap));
+    }).catch(() => {});
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [dispatch]);
 
   useEffect(() => {
     if (!selectedSurah) return;
@@ -1493,13 +1511,23 @@ function AppInner({ currentUser, onSignOut }) {
       const num = ayats[mainAyatIdx]?.numberInSurah;
       if (ayatChanged) {
         loadedAyatIdxRef.current = mainAyatIdx;
-        safeLoadAudio(audioEl); // new ayat → safely reload its audio source from start
-        if (announceNumRef.current && num) {
-          safePauseAudio(audioEl);
-          speakAyatNum(num).then(() => { if (isMainPlaying) playWhenAudioReady(mainAudioRef.current); });
-        } else {
+        const targetAyat = ayats[mainAyatIdx];
+        const normalUrl = audioUrl(targetAyat);
+        getPlayableAudioUrl(normalUrl).then((resolvedUrl) => {
+          if (resolvedUrl && resolvedUrl !== normalUrl && mainAudioRef.current) {
+            mainAudioRef.current.src = resolvedUrl;
+          }
+          safeLoadAudio(audioEl); // new ayat → safely reload its audio source from start
+          if (announceNumRef.current && num) {
+            safePauseAudio(audioEl);
+            speakAyatNum(num).then(() => { if (isMainPlaying) playWhenAudioReady(mainAudioRef.current); });
+          } else {
+            playWhenAudioReady(audioEl);
+          }
+        }).catch(() => {
+          safeLoadAudio(audioEl);
           playWhenAudioReady(audioEl);
-        }
+        });
       } else {
         safePlayAudio(audioEl); // resume: same ayat, same audio element → keeps its currentTime
       }
@@ -2193,7 +2221,7 @@ function AppInner({ currentUser, onSignOut }) {
               { id: "collections",   icon: "🗂", label: "COLL." },
               { id: "revision",      icon: "✏",  label: "RÉVISION" },
               { id: "recordings",    icon: "🎙",  label: "ENREG." },
-
+              { id: "offline",       icon: "💾", label: "OFFLINE" },
             ].map(({ id, icon, label }) => (
               <button
                 key={id}
@@ -2436,6 +2464,7 @@ function AppInner({ currentUser, onSignOut }) {
 
           <Routes>
             <Route path="/" element={<Navigate to="/quran" replace />} />
+            <Route path="/offline" element={<AnimatedPage pageKey="offline"><OfflinePage /></AnimatedPage>} />
             <Route path="/prononciation" element={<AnimatedPage pageKey="prononciation"><PrononciationPage /></AnimatedPage>} />
             <Route path="/dashboard" element={
               <AnimatedPage pageKey="dashboard"><DashboardPage

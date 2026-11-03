@@ -10,6 +10,7 @@ export const VALID_PAGES = Object.freeze([
   "concordance",
   "collections",
   "revision",
+  "offline",
 ]);
 
 /**

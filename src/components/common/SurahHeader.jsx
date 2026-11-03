@@ -93,6 +93,7 @@ export function SurahHeader({
   const tajweedCustomColors = useSelector(sel.tajweedCustomColors) || {};
   const activeTjColors = getActiveTajweedColors(tajweedPalette, tajweedCustomColors);
   const isCoachEnabled = useSelector(sel.tajweedCoachEnabled);
+  const cachedSurahsMap = useSelector(sel.cachedSurahsMap);
 
   // Redux Tajweed selectors with fallback for robust activation
   const storeShowQalqala     = useSelector(sel.showQalqala);
@@ -294,6 +295,7 @@ export function SurahHeader({
               {displayPage ? ` · P.${displayPage}${pageMode || displayPageMastery.masteryPct > 0 ? ` (${displayPageMastery.masteryPct}%)` : ''}` : ''}
               {displayHizb ? ` · H.${displayHizb}${hizbMode || displayHizbMastery.masteryPct > 0 ? ` (${displayHizbMastery.masteryPct}%)` : ''}` : ''}
               {displayJuz ? ` · J.${displayJuz}${juzMode || displayJuzMastery.masteryPct > 0 ? ` (${displayJuzMastery.masteryPct}%)` : ''}` : ''}
+              {cachedSurahsMap?.[selectedSurah.number]?.isComplete ? ' · 💾 ✓' : cachedSurahsMap?.[selectedSurah.number]?.audioCount > 0 ? ` · 💾 ${cachedSurahsMap[selectedSurah.number].audioCount}/${cachedSurahsMap[selectedSurah.number].totalCount}` : ''}
             </span>
             <span className="m-compact-chevron">▾</span>
           </div>

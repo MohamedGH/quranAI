@@ -372,9 +372,17 @@ export function detectTajweedAt(arr, i) {
   return null;
 }
 
+// ─── Simple In-Memory Cache for scanAyatTajweed ─────────────────────────────
+const _scanCache = new Map();
+const MAX_CACHE_SIZE = 250;
+
 // ─── Scan Full Ayat for Tajweed Occurrences ──────────────────────────────────
 export function scanAyatTajweed(text) {
   if (!text) return [];
+  if (_scanCache.has(text)) {
+    return _scanCache.get(text);
+  }
+
   const arr = [...text];
   const results = [];
   let wordIdx = 0;
@@ -396,6 +404,12 @@ export function scanAyatTajweed(text) {
       });
     }
   }
+
+  if (_scanCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = _scanCache.keys().next().value;
+    _scanCache.delete(firstKey);
+  }
+  _scanCache.set(text, results);
   return results;
 }
 

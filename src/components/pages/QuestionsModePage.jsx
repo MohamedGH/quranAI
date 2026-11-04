@@ -1,10 +1,13 @@
 import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { fetchSurahDefault } from "../../utils/reciterAudio.js";
 import React, { useState, useEffect } from "react";
 import { QuestionsMode } from "../questions/QuestionsMode.jsx";
 import { getAyatRevisionInfo, REVISION_LEVEL_LEGEND } from "../../utils/ayatRevisionLevel.js";
 import { SurahAyatsMasteryRibbon } from "../common/SurahAyatsMasteryRibbon.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "../../utils/safeStorage.js";
+import { quizActions, sel } from "../../store.js";
+import { buildQuizRoute } from "../../utils/routeManager.js";
 
 export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum, initialRangeFrom, initialRangeTo, initialQIdx, initialPreset }) {
   const Q_PAGE_KEY = 'quran_questions_page_session';
@@ -59,6 +62,10 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
   });
   const [started, setStarted] = React.useState(!!(initialSurahNum && initialRangeFrom));
   const qNavigate = useNavigate();
+  const dispatch = useDispatch();
+  const timerMode = useSelector(sel.quizTimerMode);
+  const soundEffects = useSelector(sel.quizSoundEffects);
+  const bestStreak = useSelector(sel.quizBestStreak);
 
   const learnedSurahs = React.useMemo(() =>
     surahs.filter(s => Object.keys(learnData).some(k => k.startsWith(s.number + ":") && learnData[k].learned))
@@ -227,6 +234,59 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
             {randomize ? "ORDRE ALÉATOIRE" : "ORDRE SÉQUENTIEL"} · {skipCorrect ? "IGNORER CORRECTES" : "TOUTES LES QUESTIONS"}{onlyRevise ? " · 🔖 RÉVISION" : ""}
           </div>
         </div>
+
+        {/* Timer & Sound Options */}
+        <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10, padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>⏱ CHRONO PAR QUESTION</div>
+            <button
+              type="button"
+              onClick={() => dispatch(quizActions.toggleQuizSound())}
+              style={{
+                fontSize:8, padding:"3px 8px", borderRadius:6,
+                background: soundEffects ? "rgba(62,184,160,.12)" : "var(--surface3)",
+                border: `1px solid ${soundEffects ? "var(--teal)" : "var(--border2)"}`,
+                color: soundEffects ? "var(--teal2)" : "var(--text3)",
+                cursor: "pointer", fontFamily: "'Cinzel',serif"
+              }}
+            >
+              {soundEffects ? "🔊 Effets ON" : "🔇 Effets OFF"}
+            </button>
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            {[
+              { id: "off", label: "Désactivé" },
+              { id: "15s", label: "⚡ 15s" },
+              { id: "30s", label: "⏱ 30s" },
+              { id: "60s", label: "⏳ 60s" },
+            ].map(opt => {
+              const active = timerMode === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => dispatch(quizActions.setQuizTimerMode(opt.id))}
+                  style={{
+                    flex: 1, padding: "5px 3px", fontSize: 8, fontFamily: "'Cinzel',serif",
+                    borderRadius: 6, cursor: "pointer",
+                    background: active ? "rgba(201,168,76,.15)" : "var(--surface3)",
+                    border: `1px solid ${active ? "var(--gold)" : "var(--border2)"}`,
+                    color: active ? "var(--gold2)" : "var(--text3)",
+                    fontWeight: active ? 600 : 400
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          {bestStreak > 0 && (
+            <div style={{ fontSize:7, color:"var(--gold)", letterSpacing:1, textAlign:"right", fontFamily:"'Cinzel',serif" }}>
+              🔥 Meilleure série : {bestStreak} d'affilée
+            </div>
+          )}
+        </div>
+
         <button onClick={() => {
           // In mono mode, strip types that only work in multi-surah sessions
           if (!isMulti) {
@@ -236,8 +296,18 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
             if (cleaned.size !== selectedQTypes.size) setSelectedQTypes(cleaned);
           }
           setStarted(true); setStage("session");
-          if (!isMulti) qNavigate(`/revision/questions/${selectedSn}/${rangeFrom}/${rangeTo || (surahInfo2?.numberOfAyahs ?? 1)}/0`);
-          else qNavigate("/revision/questions");
+          const targetUrl = !isMulti
+            ? buildQuizRoute({
+                sn: selectedSn,
+                rf: rangeFrom,
+                rt: rangeTo || (surahInfo2?.numberOfAyahs ?? 1),
+                qi: 0,
+                timer: timerMode !== "off" ? timerMode : undefined,
+              })
+            : buildQuizRoute({
+                timer: timerMode !== "off" ? timerMode : undefined,
+              });
+          qNavigate(targetUrl);
         }} style={{ padding:"13px", fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif",
           background:"rgba(201,168,76,.12)", border:"1px solid var(--gold)", color:"var(--gold2)",
           borderRadius:9, cursor:"pointer" }}>
@@ -875,7 +945,59 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                 style={{ accentColor:"var(--gold)", width:14, height:14 }} />
               🔖 UNIQUEMENT À RÉVISER{onlyRevise ? ` (${(multiItems||[]).filter(({sn,ayatNum})=>learnData[`${sn}:${ayatNum}`]?.toRevise).length})` : ""}
             </label>
-            <button onClick={() => { setStarted(true); setStage("session"); qNavigate("/revision/questions"); }}
+
+            {/* Timer & Sound Options */}
+            <div style={{ background:"var(--surface3)", border:"1px solid var(--border)", borderRadius:8, padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>⏱ CHRONOMÈTRE</span>
+                <button
+                  type="button"
+                  onClick={() => dispatch(quizActions.toggleQuizSound())}
+                  style={{
+                    fontSize:8, padding:"3px 8px", borderRadius:6,
+                    background: soundEffects ? "rgba(62,184,160,.12)" : "var(--surface2)",
+                    border: `1px solid ${soundEffects ? "var(--teal)" : "var(--border2)"}`,
+                    color: soundEffects ? "var(--teal2)" : "var(--text3)",
+                    cursor: "pointer", fontFamily: "'Cinzel',serif"
+                  }}
+                >
+                  {soundEffects ? "🔊 Sons ON" : "🔇 Sons OFF"}
+                </button>
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                {[
+                  { id: "off", label: "Désactivé" },
+                  { id: "15s", label: "⚡ 15s" },
+                  { id: "30s", label: "⏱ 30s" },
+                  { id: "60s", label: "⏳ 60s" },
+                ].map(opt => {
+                  const active = timerMode === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => dispatch(quizActions.setQuizTimerMode(opt.id))}
+                      style={{
+                        flex: 1, padding: "5px 3px", fontSize: 8, fontFamily: "'Cinzel',serif",
+                        borderRadius: 6, cursor: "pointer",
+                        background: active ? "rgba(201,168,76,.15)" : "var(--surface2)",
+                        border: `1px solid ${active ? "var(--gold)" : "var(--border2)"}`,
+                        color: active ? "var(--gold2)" : "var(--text3)",
+                        fontWeight: active ? 600 : 400
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button onClick={() => {
+              setStarted(true);
+              setStage("session");
+              qNavigate(buildQuizRoute({ timer: timerMode !== "off" ? timerMode : undefined }));
+            }}
               disabled={(multiItems?.length ?? 0) === 0}
               style={{ padding:"12px", fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif",
                 background: (multiItems?.length ?? 0) > 0 ? "rgba(201,168,76,.12)" : "var(--surface3)",
@@ -1195,10 +1317,67 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
               style={{ accentColor:"var(--gold)", width:14, height:14 }} />
             🔖 UNIQUEMENT À RÉVISER{onlyRevise ? ` (${ayatList.filter(an => learnData[`${selectedSn}:${an}`]?.toRevise).length})` : ""}
           </label>
+
+          {/* Timer & Sound Options */}
+          <div style={{ background:"var(--surface3)", border:"1px solid var(--border)", borderRadius:8, padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <span style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>⏱ CHRONOMÈTRE</span>
+              <button
+                type="button"
+                onClick={() => dispatch(quizActions.toggleQuizSound())}
+                style={{
+                  fontSize:8, padding:"3px 8px", borderRadius:6,
+                  background: soundEffects ? "rgba(62,184,160,.12)" : "var(--surface2)",
+                  border: `1px solid ${soundEffects ? "var(--teal)" : "var(--border2)"}`,
+                  color: soundEffects ? "var(--teal2)" : "var(--text3)",
+                  cursor: "pointer", fontFamily: "'Cinzel',serif"
+                }}
+              >
+                {soundEffects ? "🔊 Sons ON" : "🔇 Sons OFF"}
+              </button>
+            </div>
+            <div style={{ display:"flex", gap:6 }}>
+              {[
+                { id: "off", label: "Désactivé" },
+                { id: "15s", label: "⚡ 15s" },
+                { id: "30s", label: "⏱ 30s" },
+                { id: "60s", label: "⏳ 60s" },
+              ].map(opt => {
+                const active = timerMode === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => dispatch(quizActions.setQuizTimerMode(opt.id))}
+                    style={{
+                      flex: 1, padding: "5px 3px", fontSize: 8, fontFamily: "'Cinzel',serif",
+                      borderRadius: 6, cursor: "pointer",
+                      background: active ? "rgba(201,168,76,.15)" : "var(--surface2)",
+                      border: `1px solid ${active ? "var(--gold)" : "var(--border2)"}`,
+                      color: active ? "var(--gold2)" : "var(--text3)",
+                      fontWeight: active ? 600 : 400
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <button onClick={() => {
-            setStarted(true); setStage("session");
-            if (multiSns.length > 0) qNavigate("/revision/questions");
-            else qNavigate(`/revision/questions/${selectedSn}/${rangeFrom}/${rangeTo || maxAyat}/0`);
+            setStarted(true);
+            setStage("session");
+            const targetUrl = multiSns.length > 0
+              ? buildQuizRoute({ timer: timerMode !== "off" ? timerMode : undefined })
+              : buildQuizRoute({
+                  sn: selectedSn,
+                  rf: rangeFrom,
+                  rt: rangeTo || maxAyat,
+                  qi: 0,
+                  timer: timerMode !== "off" ? timerMode : undefined,
+                });
+            qNavigate(targetUrl);
           }}
             style={{ padding:"12px", fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif",
               background:"rgba(201,168,76,.12)", border:"1px solid var(--gold)", color:"var(--gold2)",

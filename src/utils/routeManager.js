@@ -176,3 +176,78 @@ export const resolveCrossSurahVerseRoute = (ayat, fallbackSurahNum = 1) => {
     route: buildQuranRoute({ surahNum, ayatNum }),
   });
 };
+
+/**
+ * Purely builds a canonical Quiz/Questions route path.
+ */
+export const buildQuizRoute = ({
+  surahNum = null,
+  sn: snAlias = null,
+  rangeFrom = null,
+  rf: rfAlias = null,
+  rangeTo = null,
+  rt: rtAlias = null,
+  qIdx = null,
+  qi: qiAlias = null,
+  preset = null,
+  timer = null,
+} = {}) => {
+  const targetSurah = surahNum ?? snAlias;
+  const targetFrom = rangeFrom ?? rfAlias;
+  const targetTo = rangeTo ?? rtAlias;
+  const targetIdx = qIdx ?? qiAlias;
+
+  const sn = Number(targetSurah);
+  const hasSurah = Number.isFinite(sn) && sn >= 1 && sn <= 114;
+  const rf = targetFrom != null ? parseInt(targetFrom, 10) : null;
+  const rt = targetTo != null ? parseInt(targetTo, 10) : null;
+  const qi = targetIdx != null ? parseInt(targetIdx, 10) : null;
+
+  let path = "/revision/questions";
+  if (hasSurah && rf != null) {
+    const toVal = rt != null ? rt : (SURAH_INFO[sn - 1]?.count || 286);
+    const idxVal = qi != null ? qi : 0;
+    path = `/revision/questions/${sn}/${rf}/${toVal}/${idxVal}`;
+  }
+
+  const query = new URLSearchParams();
+  if (preset) query.set("preset", preset);
+  if (timer) query.set("timer", timer);
+
+  const qs = query.toString();
+  return qs ? `${path}?${qs}` : path;
+};
+
+/**
+ * Purely parses a Quiz/Questions route path and search params.
+ */
+export const parseQuizRoute = (pathname = "/revision/questions", search = "") => {
+  const cleanPath = String(pathname || "").replace(/^#/, "").trim();
+  const segs = cleanPath.replace(/^\//, "").split("/").filter(Boolean);
+  const isQuiz = segs[0] === "revision" && segs[1] === "questions";
+
+  const rawSn = segs[2] != null ? parseInt(segs[2], 10) : null;
+  const rawRf = segs[3] != null ? parseInt(segs[3], 10) : null;
+  const rawRt = segs[4] != null ? parseInt(segs[4], 10) : null;
+  const rawQi = segs[5] != null ? parseInt(segs[5], 10) : null;
+
+  const surahNum = rawSn != null && Number.isFinite(rawSn) && rawSn >= 1 && rawSn <= 114 ? rawSn : null;
+  const rangeFrom = rawRf != null && Number.isFinite(rawRf) && rawRf >= 1 ? rawRf : null;
+  const rangeTo = rawRt != null && Number.isFinite(rawRt) && rawRt >= 1 ? rawRt : null;
+  const qIdx = rawQi != null && Number.isFinite(rawQi) && rawQi >= 0 ? rawQi : 0;
+
+  const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+  const preset = params.get("preset") || null;
+  const timer = params.get("timer") || null;
+
+  return Object.freeze({
+    isQuiz,
+    surahNum,
+    rangeFrom,
+    rangeTo,
+    qIdx,
+    preset,
+    timer,
+  });
+};
+

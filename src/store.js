@@ -734,6 +734,82 @@ const offlineSlice = createSlice({
 });
 export const offlineActions = offlineSlice.actions;
 
+// ─── Slice : Quiz / Questions Engine ─────────────────────────────────────────
+const quizSlice = createSlice({
+  name: "quiz",
+  initialState: {
+    streak: 0,
+    bestStreak: 0,
+    score: 0,
+    timerMode: "off", // "off" | "15s" | "30s" | "60s"
+    timeRemaining: 0,
+    isTimerRunning: false,
+    soundEffects: true,
+    mistakes: [], // [{ sn, ayatNum, qId, type, question, answer, userAnswer, timestamp }]
+    sessionCount: 0,
+    lastSummary: null,
+  },
+  reducers: {
+    recordQuizAnswer: (state, action) => {
+      const { isCorrect, sn, ayatNum, qId, type, question, answer, userAnswer, timeBonus = 0 } = action.payload || {};
+      state.sessionCount += 1;
+      if (isCorrect) {
+        state.streak += 1;
+        if (state.streak > state.bestStreak) {
+          state.bestStreak = state.streak;
+        }
+        const streakBonus = Math.min(100, state.streak * 15);
+        state.score += (100 + streakBonus + Number(timeBonus || 0));
+      } else {
+        state.streak = 0;
+        state.mistakes.push({
+          sn,
+          ayatNum,
+          qId,
+          type,
+          question,
+          answer,
+          userAnswer: userAnswer || "",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    },
+    resetQuizSession: (state) => {
+      state.streak = 0;
+      state.score = 0;
+      state.sessionCount = 0;
+      state.mistakes = [];
+      state.isTimerRunning = false;
+    },
+    setQuizTimerMode: (state, action) => {
+      state.timerMode = action.payload || "off";
+      if (action.payload === "15s") state.timeRemaining = 15;
+      else if (action.payload === "30s") state.timeRemaining = 30;
+      else if (action.payload === "60s") state.timeRemaining = 60;
+      else state.timeRemaining = 0;
+    },
+    setTimeRemaining: (state, action) => {
+      state.timeRemaining = Math.max(0, action.payload);
+    },
+    decrementTimeRemaining: (state) => {
+      if (state.timeRemaining > 0) state.timeRemaining -= 1;
+    },
+    setIsTimerRunning: (state, action) => {
+      state.isTimerRunning = !!action.payload;
+    },
+    toggleQuizSound: (state) => {
+      state.soundEffects = !state.soundEffects;
+    },
+    saveQuizSummary: (state, action) => {
+      state.lastSummary = action.payload;
+    },
+    clearQuizMistakes: (state) => {
+      state.mistakes = [];
+    },
+  },
+});
+export const quizActions = quizSlice.actions;
+
 export const store = configureStore({
   reducer: {
     revision:    revisionSlice.reducer,
@@ -746,6 +822,7 @@ export const store = configureStore({
     goals:       goalsSlice.reducer,
     errors:      errorsSlice.reducer,
     offline:     offlineSlice.reducer,
+    quiz:        quizSlice.reducer,
   },
   // Les timestamps et learnData peuvent être grands — désactiver le check de sérialisation sur ces champs
   middleware: (getDefaultMiddleware) =>
@@ -876,6 +953,16 @@ export const sel = {
   downloadTask:    (s) => s.offline?.downloadTask || { active: false, surahNum: null, phase: "", done: 0, total: 0, message: "" },
   cachedSurahsMap: (s) => s.offline?.cachedSurahsMap || {},
   storageEstimate: (s) => s.offline?.storageEstimate || { usedBytes: 0, quotaBytes: 0, percentUsed: 0, formattedUsed: "0 MB", formattedQuota: "0 MB" },
+  // quiz
+  quizStreak:         (s) => s.quiz?.streak ?? 0,
+  quizBestStreak:     (s) => s.quiz?.bestStreak ?? 0,
+  quizScore:          (s) => s.quiz?.score ?? 0,
+  quizTimerMode:      (s) => s.quiz?.timerMode ?? "off",
+  quizTimeRemaining:  (s) => s.quiz?.timeRemaining ?? 0,
+  quizIsTimerRunning: (s) => s.quiz?.isTimerRunning ?? false,
+  quizSoundEffects:   (s) => s.quiz?.soundEffects ?? true,
+  quizMistakes:       (s) => s.quiz?.mistakes ?? [],
+  quizLastSummary:    (s) => s.quiz?.lastSummary ?? null,
   // goals
   goals:           (s) => s.goals,
   activity:        (s) => s.goals.activity,
@@ -932,5 +1019,6 @@ export const act = {
   ...revisionActions,
   ...errorActions,
   ...offlineActions,
+  ...quizActions,
   setLDataThunk,
 };

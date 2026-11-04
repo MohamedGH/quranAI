@@ -8,6 +8,7 @@ import { SurahAyatsMasteryRibbon } from "../common/SurahAyatsMasteryRibbon.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "../../utils/safeStorage.js";
 import { quizActions, sel } from "../../store.js";
 import { buildQuizRoute } from "../../utils/routeManager.js";
+import { QUIZ_PRESETS } from "../../utils/quizUtils.js";
 
 export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum, initialRangeFrom, initialRangeTo, initialQIdx, initialPreset }) {
   const Q_PAGE_KEY = 'quran_questions_page_session';
@@ -66,6 +67,9 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
   const timerMode = useSelector(sel.quizTimerMode);
   const soundEffects = useSelector(sel.quizSoundEffects);
   const bestStreak = useSelector(sel.quizBestStreak);
+  const answerMode = useSelector(sel.quizAnswerMode);
+  const hapticFeedback = useSelector(sel.quizHapticFeedback);
+  const selectedPreset = useSelector(sel.quizSelectedPreset);
 
   const learnedSurahs = React.useMemo(() =>
     surahs.filter(s => Object.keys(learnData).some(k => k.startsWith(s.number + ":") && learnData[k].learned))
@@ -235,23 +239,85 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
           </div>
         </div>
 
-        {/* Timer & Sound Options */}
-        <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10, padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+        {/* Answer Mode & Timer Options */}
+        <div style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10, padding:"12px 14px", display:"flex", flexDirection:"column", gap:10 }}>
+          {/* Answer Mode Pill Switcher */}
+          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+            <div style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>MODE DE RÉPONSE</div>
+            <div style={{ display:"flex", gap:6 }}>
+              <button
+                type="button"
+                onClick={() => dispatch(quizActions.setQuizAnswerMode("choice"))}
+                style={{
+                  flex: 1,
+                  padding: "7px 6px",
+                  fontSize: 8.5,
+                  fontFamily: "'Cinzel',serif",
+                  letterSpacing: 0.5,
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  background: answerMode === "choice" ? "rgba(201,168,76,.15)" : "var(--surface3)",
+                  border: `1px solid ${answerMode === "choice" ? "var(--gold)" : "var(--border2)"}`,
+                  color: answerMode === "choice" ? "var(--gold2)" : "var(--text3)",
+                  fontWeight: answerMode === "choice" ? 700 : 400,
+                }}
+              >
+                ⚡ Mode QCM (4 Choix)
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch(quizActions.setQuizAnswerMode("free"))}
+                style={{
+                  flex: 1,
+                  padding: "7px 6px",
+                  fontSize: 8.5,
+                  fontFamily: "'Cinzel',serif",
+                  letterSpacing: 0.5,
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  background: answerMode === "free" ? "rgba(62,184,160,.15)" : "var(--surface3)",
+                  border: `1px solid ${answerMode === "free" ? "var(--teal)" : "var(--border2)"}`,
+                  color: answerMode === "free" ? "var(--teal2)" : "var(--text3)",
+                  fontWeight: answerMode === "free" ? 700 : 400,
+                }}
+              >
+                ✍️ Mode Libre / Récitation
+              </button>
+            </div>
+          </div>
+
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>⏱ CHRONO PAR QUESTION</div>
-            <button
-              type="button"
-              onClick={() => dispatch(quizActions.toggleQuizSound())}
-              style={{
-                fontSize:8, padding:"3px 8px", borderRadius:6,
-                background: soundEffects ? "rgba(62,184,160,.12)" : "var(--surface3)",
-                border: `1px solid ${soundEffects ? "var(--teal)" : "var(--border2)"}`,
-                color: soundEffects ? "var(--teal2)" : "var(--text3)",
-                cursor: "pointer", fontFamily: "'Cinzel',serif"
-              }}
-            >
-              {soundEffects ? "🔊 Effets ON" : "🔇 Effets OFF"}
-            </button>
+            <div style={{ display:"flex", gap:6 }}>
+              <button
+                type="button"
+                onClick={() => dispatch(quizActions.toggleQuizSound())}
+                style={{
+                  fontSize:8, padding:"3px 8px", borderRadius:6,
+                  background: soundEffects ? "rgba(62,184,160,.12)" : "var(--surface3)",
+                  border: `1px solid ${soundEffects ? "var(--teal)" : "var(--border2)"}`,
+                  color: soundEffects ? "var(--teal2)" : "var(--text3)",
+                  cursor: "pointer", fontFamily: "'Cinzel',serif"
+                }}
+                title="Activer ou couper les effets sonores"
+              >
+                {soundEffects ? "🔊 Sons ON" : "🔇 Sons OFF"}
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch(quizActions.toggleQuizHaptic())}
+                style={{
+                  fontSize:8, padding:"3px 8px", borderRadius:6,
+                  background: hapticFeedback ? "rgba(201,168,76,.12)" : "var(--surface3)",
+                  border: `1px solid ${hapticFeedback ? "var(--gold)" : "var(--border2)"}`,
+                  color: hapticFeedback ? "var(--gold2)" : "var(--text3)",
+                  cursor: "pointer", fontFamily: "'Cinzel',serif"
+                }}
+                title="Activer ou désactiver les vibrations haptiques"
+              >
+                {hapticFeedback ? "📳 Haptique ON" : "📵 OFF"}
+              </button>
+            </div>
           </div>
           <div style={{ display:"flex", gap:6 }}>
             {[
@@ -303,9 +369,11 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                 rt: rangeTo || (surahInfo2?.numberOfAyahs ?? 1),
                 qi: 0,
                 timer: timerMode !== "off" ? timerMode : undefined,
+                mode: answerMode,
               })
             : buildQuizRoute({
                 timer: timerMode !== "off" ? timerMode : undefined,
+                mode: answerMode,
               });
           qNavigate(targetUrl);
         }} style={{ padding:"13px", fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif",
@@ -434,6 +502,55 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
             }}>
             Toutes ({surahs.length})
           </button>
+        </div>
+
+        {/* Quiz Presets Bar */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ fontSize: 8, letterSpacing: 2, color: "var(--text3)", fontFamily: "'Cinzel',serif" }}>PARCOURS DE RÉVISION RECOMMANDÉS</div>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+            {QUIZ_PRESETS.map((p) => {
+              const active = selectedPreset === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    dispatch(quizActions.setQuizPreset(p.id));
+                    if (p.types) {
+                      setSelectedQTypes(new Set(p.types));
+                    } else {
+                      setSelectedQTypes(new Set(ALL_Q_TYPES));
+                    }
+                    if (p.timer) {
+                      dispatch(quizActions.setQuizTimerMode(p.timer));
+                    }
+                  }}
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: 3,
+                    minWidth: 140,
+                    flexShrink: 0,
+                    background: active ? "rgba(201,168,76,.15)" : "var(--surface2)",
+                    border: `1px solid ${active ? "var(--gold)" : "var(--border)"}`,
+                    textAlign: "left",
+                    transition: "all .15s",
+                  }}
+                >
+                  <span style={{ fontSize: 9.5, fontFamily: "'Cinzel',serif", fontWeight: 700, color: active ? "var(--gold2)" : "var(--text1)" }}>
+                    {p.icon} {p.label}
+                  </span>
+                  <span style={{ fontSize: 7, color: "var(--text3)", lineHeight: 1.3 }}>
+                    {p.desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Premier Contact Quick Launch Banner */}
@@ -946,23 +1063,72 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
               🔖 UNIQUEMENT À RÉVISER{onlyRevise ? ` (${(multiItems||[]).filter(({sn,ayatNum})=>learnData[`${sn}:${ayatNum}`]?.toRevise).length})` : ""}
             </label>
 
-            {/* Timer & Sound Options */}
-            <div style={{ background:"var(--surface3)", border:"1px solid var(--border)", borderRadius:8, padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+            {/* Answer Mode & Timer Options */}
+            <div style={{ background:"var(--surface3)", border:"1px solid var(--border)", borderRadius:8, padding:"12px", display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                <span style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>MODE DE RÉPONSE</span>
+                <div style={{ display:"flex", gap:6 }}>
+                  <button
+                    type="button"
+                    onClick={() => dispatch(quizActions.setQuizAnswerMode("choice"))}
+                    style={{
+                      flex: 1, padding: "7px 4px", fontSize: 8.5, fontFamily: "'Cinzel',serif",
+                      borderRadius: 6, cursor: "pointer",
+                      background: answerMode === "choice" ? "rgba(201,168,76,.15)" : "var(--surface2)",
+                      border: `1px solid ${answerMode === "choice" ? "var(--gold)" : "var(--border2)"}`,
+                      color: answerMode === "choice" ? "var(--gold2)" : "var(--text3)",
+                      fontWeight: answerMode === "choice" ? 700 : 400,
+                    }}
+                  >
+                    ⚡ QCM (4 Choix)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dispatch(quizActions.setQuizAnswerMode("free"))}
+                    style={{
+                      flex: 1, padding: "7px 4px", fontSize: 8.5, fontFamily: "'Cinzel',serif",
+                      borderRadius: 6, cursor: "pointer",
+                      background: answerMode === "free" ? "rgba(62,184,160,.15)" : "var(--surface2)",
+                      border: `1px solid ${answerMode === "free" ? "var(--teal)" : "var(--border2)"}`,
+                      color: answerMode === "free" ? "var(--teal2)" : "var(--text3)",
+                      fontWeight: answerMode === "free" ? 700 : 400,
+                    }}
+                  >
+                    ✍️ Libre / Récitation
+                  </button>
+                </div>
+              </div>
+
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <span style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>⏱ CHRONOMÈTRE</span>
-                <button
-                  type="button"
-                  onClick={() => dispatch(quizActions.toggleQuizSound())}
-                  style={{
-                    fontSize:8, padding:"3px 8px", borderRadius:6,
-                    background: soundEffects ? "rgba(62,184,160,.12)" : "var(--surface2)",
-                    border: `1px solid ${soundEffects ? "var(--teal)" : "var(--border2)"}`,
-                    color: soundEffects ? "var(--teal2)" : "var(--text3)",
-                    cursor: "pointer", fontFamily: "'Cinzel',serif"
-                  }}
-                >
-                  {soundEffects ? "🔊 Sons ON" : "🔇 Sons OFF"}
-                </button>
+                <div style={{ display:"flex", gap:6 }}>
+                  <button
+                    type="button"
+                    onClick={() => dispatch(quizActions.toggleQuizSound())}
+                    style={{
+                      fontSize:8, padding:"3px 8px", borderRadius:6,
+                      background: soundEffects ? "rgba(62,184,160,.12)" : "var(--surface2)",
+                      border: `1px solid ${soundEffects ? "var(--teal)" : "var(--border2)"}`,
+                      color: soundEffects ? "var(--teal2)" : "var(--text3)",
+                      cursor: "pointer", fontFamily: "'Cinzel',serif"
+                    }}
+                  >
+                    {soundEffects ? "🔊 Sons ON" : "🔇 Sons OFF"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dispatch(quizActions.toggleQuizHaptic())}
+                    style={{
+                      fontSize:8, padding:"3px 8px", borderRadius:6,
+                      background: hapticFeedback ? "rgba(201,168,76,.12)" : "var(--surface2)",
+                      border: `1px solid ${hapticFeedback ? "var(--gold)" : "var(--border2)"}`,
+                      color: hapticFeedback ? "var(--gold2)" : "var(--text3)",
+                      cursor: "pointer", fontFamily: "'Cinzel',serif"
+                    }}
+                  >
+                    {hapticFeedback ? "📳 Haptique ON" : "📵 OFF"}
+                  </button>
+                </div>
               </div>
               <div style={{ display:"flex", gap:6 }}>
                 {[
@@ -996,7 +1162,7 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
             <button onClick={() => {
               setStarted(true);
               setStage("session");
-              qNavigate(buildQuizRoute({ timer: timerMode !== "off" ? timerMode : undefined }));
+              qNavigate(buildQuizRoute({ timer: timerMode !== "off" ? timerMode : undefined, mode: answerMode }));
             }}
               disabled={(multiItems?.length ?? 0) === 0}
               style={{ padding:"12px", fontSize:10, letterSpacing:2, fontFamily:"'Cinzel',serif",
@@ -1318,23 +1484,72 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
             🔖 UNIQUEMENT À RÉVISER{onlyRevise ? ` (${ayatList.filter(an => learnData[`${selectedSn}:${an}`]?.toRevise).length})` : ""}
           </label>
 
-          {/* Timer & Sound Options */}
-          <div style={{ background:"var(--surface3)", border:"1px solid var(--border)", borderRadius:8, padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+          {/* Answer Mode & Timer Options */}
+          <div style={{ background:"var(--surface3)", border:"1px solid var(--border)", borderRadius:8, padding:"12px", display:"flex", flexDirection:"column", gap:10 }}>
+            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+              <span style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>MODE DE RÉPONSE</span>
+              <div style={{ display:"flex", gap:6 }}>
+                <button
+                  type="button"
+                  onClick={() => dispatch(quizActions.setQuizAnswerMode("choice"))}
+                  style={{
+                    flex: 1, padding: "7px 4px", fontSize: 8.5, fontFamily: "'Cinzel',serif",
+                    borderRadius: 6, cursor: "pointer",
+                    background: answerMode === "choice" ? "rgba(201,168,76,.15)" : "var(--surface2)",
+                    border: `1px solid ${answerMode === "choice" ? "var(--gold)" : "var(--border2)"}`,
+                    color: answerMode === "choice" ? "var(--gold2)" : "var(--text3)",
+                    fontWeight: answerMode === "choice" ? 700 : 400,
+                  }}
+                >
+                  ⚡ QCM (4 Choix)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => dispatch(quizActions.setQuizAnswerMode("free"))}
+                  style={{
+                    flex: 1, padding: "7px 4px", fontSize: 8.5, fontFamily: "'Cinzel',serif",
+                    borderRadius: 6, cursor: "pointer",
+                    background: answerMode === "free" ? "rgba(62,184,160,.15)" : "var(--surface2)",
+                    border: `1px solid ${answerMode === "free" ? "var(--teal)" : "var(--border2)"}`,
+                    color: answerMode === "free" ? "var(--teal2)" : "var(--text3)",
+                    fontWeight: answerMode === "free" ? 700 : 400,
+                  }}
+                >
+                  ✍️ Libre / Récitation
+                </button>
+              </div>
+            </div>
+
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <span style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", fontFamily:"'Cinzel',serif" }}>⏱ CHRONOMÈTRE</span>
-              <button
-                type="button"
-                onClick={() => dispatch(quizActions.toggleQuizSound())}
-                style={{
-                  fontSize:8, padding:"3px 8px", borderRadius:6,
-                  background: soundEffects ? "rgba(62,184,160,.12)" : "var(--surface2)",
-                  border: `1px solid ${soundEffects ? "var(--teal)" : "var(--border2)"}`,
-                  color: soundEffects ? "var(--teal2)" : "var(--text3)",
-                  cursor: "pointer", fontFamily: "'Cinzel',serif"
-                }}
-              >
-                {soundEffects ? "🔊 Sons ON" : "🔇 Sons OFF"}
-              </button>
+              <div style={{ display:"flex", gap:6 }}>
+                <button
+                  type="button"
+                  onClick={() => dispatch(quizActions.toggleQuizSound())}
+                  style={{
+                    fontSize:8, padding:"3px 8px", borderRadius:6,
+                    background: soundEffects ? "rgba(62,184,160,.12)" : "var(--surface2)",
+                    border: `1px solid ${soundEffects ? "var(--teal)" : "var(--border2)"}`,
+                    color: soundEffects ? "var(--teal2)" : "var(--text3)",
+                    cursor: "pointer", fontFamily: "'Cinzel',serif"
+                  }}
+                >
+                  {soundEffects ? "🔊 Sons ON" : "🔇 Sons OFF"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => dispatch(quizActions.toggleQuizHaptic())}
+                  style={{
+                    fontSize:8, padding:"3px 8px", borderRadius:6,
+                    background: hapticFeedback ? "rgba(201,168,76,.12)" : "var(--surface2)",
+                    border: `1px solid ${hapticFeedback ? "var(--gold)" : "var(--border2)"}`,
+                    color: hapticFeedback ? "var(--gold2)" : "var(--text3)",
+                    cursor: "pointer", fontFamily: "'Cinzel',serif"
+                  }}
+                >
+                  {hapticFeedback ? "📳 Haptique ON" : "📵 OFF"}
+                </button>
+              </div>
             </div>
             <div style={{ display:"flex", gap:6 }}>
               {[
@@ -1369,13 +1584,14 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
             setStarted(true);
             setStage("session");
             const targetUrl = multiSns.length > 0
-              ? buildQuizRoute({ timer: timerMode !== "off" ? timerMode : undefined })
+              ? buildQuizRoute({ timer: timerMode !== "off" ? timerMode : undefined, mode: answerMode })
               : buildQuizRoute({
                   sn: selectedSn,
                   rf: rangeFrom,
                   rt: rangeTo || maxAyat,
                   qi: 0,
                   timer: timerMode !== "off" ? timerMode : undefined,
+                  mode: answerMode,
                 });
             qNavigate(targetUrl);
           }}

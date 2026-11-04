@@ -745,6 +745,9 @@ const quizSlice = createSlice({
     timeRemaining: 0,
     isTimerRunning: false,
     soundEffects: true,
+    answerMode: load("quran_quiz_answerMode", "choice"), // "choice" (QCM) | "free" (libre)
+    hapticFeedback: load("quran_quiz_haptic", true),
+    selectedPreset: "all",
     mistakes: [], // [{ sn, ayatNum, qId, type, question, answer, userAnswer, timestamp }]
     sessionCount: 0,
     lastSummary: null,
@@ -799,6 +802,18 @@ const quizSlice = createSlice({
     },
     toggleQuizSound: (state) => {
       state.soundEffects = !state.soundEffects;
+    },
+    setQuizAnswerMode: (state, action) => {
+      const mode = action.payload === "free" ? "free" : "choice";
+      state.answerMode = mode;
+      save("quran_quiz_answerMode", mode);
+    },
+    toggleQuizHaptic: (state) => {
+      state.hapticFeedback = !state.hapticFeedback;
+      save("quran_quiz_haptic", state.hapticFeedback);
+    },
+    setQuizPreset: (state, action) => {
+      state.selectedPreset = action.payload || "all";
     },
     saveQuizSummary: (state, action) => {
       state.lastSummary = action.payload;
@@ -961,6 +976,9 @@ export const sel = {
   quizTimeRemaining:  (s) => s.quiz?.timeRemaining ?? 0,
   quizIsTimerRunning: (s) => s.quiz?.isTimerRunning ?? false,
   quizSoundEffects:   (s) => s.quiz?.soundEffects ?? true,
+  quizAnswerMode:     (s) => s.quiz?.answerMode ?? "choice",
+  quizHapticFeedback: (s) => s.quiz?.hapticFeedback ?? true,
+  quizSelectedPreset: (s) => s.quiz?.selectedPreset ?? "all",
   quizMistakes:       (s) => s.quiz?.mistakes ?? [],
   quizLastSummary:    (s) => s.quiz?.lastSummary ?? null,
   // goals

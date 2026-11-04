@@ -191,6 +191,7 @@ export const buildQuizRoute = ({
   qi: qiAlias = null,
   preset = null,
   timer = null,
+  mode = null,
 } = {}) => {
   const targetSurah = surahNum ?? snAlias;
   const targetFrom = rangeFrom ?? rfAlias;
@@ -213,6 +214,7 @@ export const buildQuizRoute = ({
   const query = new URLSearchParams();
   if (preset) query.set("preset", preset);
   if (timer) query.set("timer", timer);
+  if (mode) query.set("mode", mode);
 
   const qs = query.toString();
   return qs ? `${path}?${qs}` : path;
@@ -239,6 +241,8 @@ export const parseQuizRoute = (pathname = "/revision/questions", search = "") =>
   const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
   const preset = params.get("preset") || null;
   const timer = params.get("timer") || null;
+  const modeParam = params.get("mode");
+  const mode = modeParam === "free" ? "free" : modeParam === "choice" ? "choice" : null;
 
   return Object.freeze({
     isQuiz,
@@ -248,6 +252,7 @@ export const parseQuizRoute = (pathname = "/revision/questions", search = "") =>
     qIdx,
     preset,
     timer,
+    mode,
   });
 };
 

@@ -6,6 +6,9 @@ import {
   computeSessionSummary,
   filterQuestionsForReview,
   playQuizSound,
+  triggerQuizHaptic,
+  generateMultipleChoiceOptions,
+  QUIZ_PRESETS,
 } from "../src/utils/quizUtils.js";
 import { store, sel, quizActions } from "../src/store.js";
 import { buildQuizRoute, parseQuizRoute } from "../src/utils/routeManager.js";
@@ -144,12 +147,72 @@ describe("Quiz Enhancements & Pure Functions", () => {
     });
   });
 
-  describe("quizUtils - playQuizSound", () => {
-    it("executes without throwing even in environments without Web Audio API", () => {
+  describe("quizUtils - playQuizSound & triggerQuizHaptic", () => {
+    it("executes sounds safely even without Web Audio API in test environment", () => {
       expect(() => playQuizSound("correct", true)).not.toThrow();
       expect(() => playQuizSound("streak", true)).not.toThrow();
       expect(() => playQuizSound("incorrect", true)).not.toThrow();
       expect(() => playQuizSound("tick", false)).not.toThrow();
+    });
+
+    it("executes haptic vibrations safely", () => {
+      expect(() => triggerQuizHaptic("success", true)).not.toThrow();
+      expect(() => triggerQuizHaptic("error", true)).not.toThrow();
+      expect(() => triggerQuizHaptic("streak", false)).not.toThrow();
+    });
+  });
+
+  describe("quizUtils - generateMultipleChoiceOptions & QUIZ_PRESETS", () => {
+    it("defines standard quiz presets", () => {
+      expect(QUIZ_PRESETS).toBeDefined();
+      expect(QUIZ_PRESETS.length).toBeGreaterThanOrEqual(4);
+      expect(QUIZ_PRESETS.some(p => p.id === "express")).toBe(true);
+      expect(QUIZ_PRESETS.some(p => p.id === "starts_ends")).toBe(true);
+    });
+
+    it("generates 4 multiple choice options with exactly 1 correct option", () => {
+      const question = {
+        id: "q_112_1",
+        sn: 112,
+        ayatNum: 1,
+        type: "first_word",
+        answer: "قُلْ",
+      };
+      const allAyatTexts = {
+        "112:1": "قُلْ هُوَ اللَّهُ أَحَدٌ",
+        "112:2": "اللَّهُ الصَّمَدُ",
+        "112:3": "لَمْ يَلِدْ وَلَمْ يُولَدْ",
+      };
+
+      const options = generateMultipleChoiceOptions({
+        question,
+        allAyatTexts,
+        count: 4,
+      });
+
+      expect(options).toHaveLength(4);
+      const correctOpts = options.filter(o => o.isCorrect);
+      expect(correctOpts).toHaveLength(1);
+      expect(correctOpts[0].text).toBe("قُلْ");
+    });
+
+    it("generates plausible numbers for verse_number questions", () => {
+      const question = {
+        id: "q_vn_7",
+        sn: 1,
+        ayatNum: 7,
+        type: "verse_number",
+        answer: "7",
+      };
+      const options = generateMultipleChoiceOptions({ question, count: 4 });
+      expect(options).toHaveLength(4);
+      expect(options.some(o => o.text === "7" && o.isCorrect)).toBe(true);
+      expect(options.every(o => Number(o.text) >= 1)).toBe(true);
+    });
+
+    it("handles missing or empty questions gracefully", () => {
+      expect(generateMultipleChoiceOptions({ question: null })).toEqual([]);
+      expect(generateMultipleChoiceOptions({ question: { answer: "" } })).toEqual([]);
     });
   });
 });
@@ -166,6 +229,8 @@ describe("Quiz Redux State Manager (quizSlice)", () => {
     expect(sel.quizScore(s)).toBe(0);
     expect(sel.quizTimerMode(s)).toBeDefined();
     expect(sel.quizSoundEffects(s)).toBe(true);
+    expect(sel.quizAnswerMode(s)).toBeDefined();
+    expect(sel.quizHapticFeedback(s)).toBe(true);
     expect(sel.quizMistakes(s)).toEqual([]);
   });
 
@@ -202,13 +267,11 @@ describe("Quiz Redux State Manager (quizSlice)", () => {
   });
 
   it("resets current streak and logs mistakes on incorrect answers without resetting bestStreak", () => {
-    // First get a streak of 2
     store.dispatch(quizActions.recordQuizAnswer({ isCorrect: true }));
     store.dispatch(quizActions.recordQuizAnswer({ isCorrect: true }));
     expect(sel.quizStreak(store.getState())).toBe(2);
     expect(sel.quizBestStreak(store.getState())).toBe(2);
 
-    // Fail next question
     store.dispatch(
       quizActions.recordQuizAnswer({
         isCorrect: false,
@@ -230,6 +293,21 @@ describe("Quiz Redux State Manager (quizSlice)", () => {
     expect(mistakes[0].sn).toBe(112);
     expect(mistakes[0].ayatNum).toBe(2);
     expect(mistakes[0].userAnswer).toBe("قُلْ");
+  });
+
+  it("manages answerMode, haptics, and presets", () => {
+    store.dispatch(quizActions.setQuizAnswerMode("free"));
+    expect(sel.quizAnswerMode(store.getState())).toBe("free");
+
+    store.dispatch(quizActions.setQuizAnswerMode("choice"));
+    expect(sel.quizAnswerMode(store.getState())).toBe("choice");
+
+    const hapticInit = sel.quizHapticFeedback(store.getState());
+    store.dispatch(quizActions.toggleQuizHaptic());
+    expect(sel.quizHapticFeedback(store.getState())).toBe(!hapticInit);
+
+    store.dispatch(quizActions.setQuizPreset("express"));
+    expect(sel.quizSelectedPreset(store.getState())).toBe("express");
   });
 
   it("configures timer mode and sets corresponding timeRemaining", () => {
@@ -268,24 +346,28 @@ describe("Quiz Redux State Manager (quizSlice)", () => {
 });
 
 describe("Quiz Route Manager Integration", () => {
-  it("builds clean multi-surah quiz routes with query params", () => {
-    const route = buildQuizRoute({ timer: "30s", preset: "first_contact" });
-    expect(route).toBe("/revision/questions?preset=first_contact&timer=30s");
+  it("builds clean multi-surah quiz routes with query params including mode", () => {
+    const route = buildQuizRoute({ timer: "30s", preset: "first_contact", mode: "choice" });
+    expect(route).toBe("/revision/questions?preset=first_contact&timer=30s&mode=choice");
   });
 
-  it("builds mono-surah quiz routes with path segments and timer query", () => {
+  it("builds mono-surah quiz routes with path segments, timer and mode query", () => {
     const route = buildQuizRoute({
       sn: 114,
       rf: 1,
       rt: 6,
       qi: 3,
       timer: "15s",
+      mode: "free",
     });
-    expect(route).toBe("/revision/questions/114/1/6/3?timer=15s");
+    expect(route).toBe("/revision/questions/114/1/6/3?timer=15s&mode=free");
   });
 
-  it("parses quiz routes accurately with params and timer", () => {
-    const parsed = parseQuizRoute("/revision/questions/112/1/4/2", "?timer=60s&preset=first_contact");
+  it("parses quiz routes accurately with params, timer and mode", () => {
+    const parsed = parseQuizRoute(
+      "/revision/questions/112/1/4/2",
+      "?timer=60s&preset=first_contact&mode=choice"
+    );
     expect(parsed.isQuiz).toBe(true);
     expect(parsed.surahNum).toBe(112);
     expect(parsed.rangeFrom).toBe(1);
@@ -293,6 +375,7 @@ describe("Quiz Route Manager Integration", () => {
     expect(parsed.qIdx).toBe(2);
     expect(parsed.timer).toBe("60s");
     expect(parsed.preset).toBe("first_contact");
+    expect(parsed.mode).toBe("choice");
   });
 
   it("handles non-quiz routes safely", () => {

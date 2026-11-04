@@ -168,3 +168,179 @@ export const playQuizSound = (type = "correct", enabled = true) => {
     }
   }, null, { code: ERROR_CODES.QUIZ_ERROR, type });
 };
+
+/**
+ * Triggers safe haptic vibration feedback for mobile devices (non-blocking).
+ */
+export const triggerQuizHaptic = (type = "success", enabled = true) => {
+  if (!enabled || typeof navigator === "undefined" || !navigator.vibrate) return;
+  trySync(
+    () => {
+      if (type === "success") {
+        navigator.vibrate(25);
+      } else if (type === "streak") {
+        navigator.vibrate([30, 40, 30]);
+      } else if (type === "error") {
+        navigator.vibrate([40, 60, 40]);
+      }
+    },
+    null,
+    { code: ERROR_CODES.QUIZ_ERROR, context: { hapticType: type } }
+  );
+};
+
+/**
+ * Quiz presets defining focused session configurations.
+ */
+export const QUIZ_PRESETS = Object.freeze([
+  {
+    id: "all",
+    label: "Tous types",
+    icon: "🌟",
+    desc: "Session complète avec tous les types de questions",
+    types: null,
+  },
+  {
+    id: "express",
+    label: "Quiz Express",
+    icon: "⚡",
+    desc: "10 questions rapides avec chrono 15s",
+    types: ["first_word", "last_word", "missing_word", "verse_number"],
+    timer: "15s",
+  },
+  {
+    id: "starts_ends",
+    label: "Début & Fin",
+    icon: "🎯",
+    desc: "Premier mot, dernier mot et mots manquants",
+    types: ["first_word", "last_word", "missing_word"],
+  },
+  {
+    id: "transitions",
+    label: "Enchaînements",
+    icon: "🔗",
+    desc: "Verset suivant et verset précédent",
+    types: ["next_verse", "previous_verse", "find_ayat"],
+  },
+  {
+    id: "reconstruct",
+    label: "Reconstitution",
+    icon: "🧩",
+    desc: "Reconstituer les versets dans le bon ordre",
+    types: ["reconstruct", "missing_word"],
+  },
+]);
+
+/**
+ * Pure generator of smart multiple-choice options for a given quiz question.
+ * Returns an array of option objects: [{ id, text, isCorrect }]
+ */
+export const generateMultipleChoiceOptions = ({
+  question,
+  allAyatTexts = {},
+  surahs = [],
+  count = 4,
+} = {}) => {
+  if (!question || !question.answer) return [];
+
+  const rawAnswer = String(question.answer || "").trim();
+  if (!rawAnswer) return [];
+
+  const cleanText = (t) =>
+    String(t || "")
+      .replace(/[۝۩۞ۖ-ۜ]/g, "")
+      .trim();
+
+  const targetAnswer = cleanText(rawAnswer);
+  const distractors = new Set();
+  const qType = question.type || "";
+  const sn = question.sn || 1;
+  const an = question.ayatNum || 1;
+
+  if (qType === "verse_number") {
+    const num = parseInt(targetAnswer, 10) || an;
+    const candidates = [num - 2, num - 1, num + 1, num + 2, num + 3, num - 3];
+    candidates
+      .filter((n) => n >= 1 && n !== num)
+      .slice(0, count - 1)
+      .forEach((n) => distractors.add(String(n)));
+  } else if (qType === "find_surah" && Array.isArray(surahs) && surahs.length > 0) {
+    const otherSurahs = surahs.filter((s) => s.englishName !== targetAnswer && s.name !== targetAnswer);
+    const shuffled = [...otherSurahs].sort(() => 0.5 - Math.random());
+    shuffled.slice(0, count - 1).forEach((s) => {
+      distractors.add(s.englishName || s.name);
+    });
+  } else {
+    // For word-based and verse-based questions: first_word, last_word, missing_word, next_verse, previous_verse, find_ayat
+    const nearbyKeys = [
+      `${sn}:${an - 1}`,
+      `${sn}:${an}`,
+      `${sn}:${an + 1}`,
+      `${sn}:${an - 2}`,
+      `${sn}:${an + 2}`,
+      `${sn}:${Math.max(1, an - 3)}`,
+      `${sn}:${an + 3}`,
+    ];
+
+    const isFullVerse = qType === "next_verse" || qType === "previous_verse" || qType === "find_ayat";
+
+    if (isFullVerse) {
+      for (const k of nearbyKeys) {
+        const text = allAyatTexts[k];
+        if (text) {
+          const cleaned = cleanText(text);
+          if (cleaned && cleaned !== targetAnswer && !distractors.has(cleaned)) {
+            distractors.add(cleaned);
+            if (distractors.size >= count - 1) break;
+          }
+        }
+      }
+    } else {
+      // Word distractors
+      for (const k of nearbyKeys) {
+        const text = allAyatTexts[k];
+        if (text) {
+          const words = text
+            .split(/\s+/)
+            .map(cleanText)
+            .filter((w) => w.length >= 2 && w !== targetAnswer);
+          for (const w of words) {
+            if (!distractors.has(w)) {
+              distractors.add(w);
+              if (distractors.size >= count - 1) break;
+            }
+          }
+        }
+        if (distractors.size >= count - 1) break;
+      }
+    }
+  }
+
+  // Fallbacks if not enough distractors found
+  const defaultDistractors = ["اللَّهِ", "الرَّحْمَٰنِ", "آمَنُوا", "الصَّالِحَاتِ", "الْجَنَّةِ", "الْأَرْضِ"];
+  let fallbackIdx = 0;
+  while (distractors.size < count - 1 && fallbackIdx < defaultDistractors.length) {
+    const fb = defaultDistractors[fallbackIdx++];
+    if (fb !== targetAnswer) {
+      distractors.add(fb);
+    }
+  }
+
+  const options = [
+    { id: "correct", text: targetAnswer, isCorrect: true },
+    ...Array.from(distractors)
+      .slice(0, count - 1)
+      .map((txt, idx) => ({ id: `dist_${idx}`, text: txt, isCorrect: false })),
+  ];
+
+  // Deterministic pseudo-shuffle based on question ID so options don't jump around on re-renders
+  const seed = (question.id || "q").split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const shuffled = [...options].sort((a, b) => {
+    const valA = ((a.text.charCodeAt(0) || 0) * 17 + seed) % 100;
+    const valB = ((b.text.charCodeAt(0) || 0) * 17 + seed) % 100;
+    return valA - valB;
+  });
+
+  return Object.freeze(shuffled);
+};
+

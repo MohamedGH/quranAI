@@ -31,6 +31,8 @@ import {
   formatQuizTimer,
   computeSessionSummary,
   playQuizSound,
+  triggerQuizHaptic,
+  generateMultipleChoiceOptions,
 } from "../../utils/quizUtils.js";
 import { getPlayableAudioUrl } from "../../utils/offlineManager.js";
 import { ERROR_CODES, createAppError } from "../../utils/errorManager.js";
@@ -60,6 +62,8 @@ export function QuestionsMode({
   const timeRemaining = useSelector(sel.quizTimeRemaining);
   const soundEffects = useSelector(sel.quizSoundEffects);
   const quizMistakes = useSelector(sel.quizMistakes);
+  const answerMode = useSelector(sel.quizAnswerMode);
+  const hapticFeedback = useSelector(sel.quizHapticFeedback);
 
   // ── Session persistence ──────────────────────────────────────────────────────
   const _items = multiItems || (ayatList || []).map((n) => ({ sn: selectedSn, ayatNum: n }));
@@ -76,6 +80,8 @@ export function QuestionsMode({
   const [results, setResults] = React.useState(() => saved?.results ?? []);
   const [revealed, setRevealed] = React.useState(false);
   const [lastAutoGrade, setLastAutoGrade] = React.useState(null);
+  const [selectedChoiceId, setSelectedChoiceId] = React.useState(null);
+  const [choiceEvaluation, setChoiceEvaluation] = React.useState(null);
   const [done, setDone] = React.useState(false);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [emptyTimeout, setEmptyTimeout] = React.useState(false);
@@ -551,6 +557,74 @@ export function QuestionsMode({
   }, [activeQuestions, currentQId]);
 
   const q = activeQuestions[qIdx] ?? null;
+
+  // ── Smart Multiple Choice Options Generation ─────────────────────────────────
+  const multipleChoiceOptions = React.useMemo(() => {
+    if (answerMode !== "choice" || !q) return [];
+    const choiceCompatible = [
+      "first_word",
+      "last_word",
+      "missing_word",
+      "next_verse",
+      "previous_verse",
+      "verse_number",
+      "find_ayat",
+      "find_surah",
+    ];
+    if (!choiceCompatible.includes(q.type)) return [];
+    return generateMultipleChoiceOptions({
+      question: q,
+      allAyatTexts: ayatTexts,
+      surahs,
+      count: 4,
+    });
+  }, [q?.id, answerMode, ayatTexts, surahs]);
+
+  // Reset choice selection when question changes
+  React.useEffect(() => {
+    setSelectedChoiceId(null);
+    setChoiceEvaluation(null);
+  }, [currentQId]);
+
+  const handleSelectChoice = (opt) => {
+    if (selectedChoiceId || revealed || !q) return;
+    setSelectedChoiceId(opt.id);
+    const isCorrect = Boolean(opt.isCorrect);
+    setChoiceEvaluation({ isCorrect });
+    triggerQuizHaptic(isCorrect ? "success" : "error", hapticFeedback);
+
+    if (isCorrect) {
+      const isStreakBonus = streak + 1 >= 3;
+      playQuizSound(isStreakBonus ? "streak" : "correct", soundEffects);
+    } else {
+      playQuizSound("incorrect", soundEffects);
+    }
+
+    // Auto-advance after 650ms for satisfying game-like rhythm
+    setTimeout(() => {
+      answer(isCorrect);
+      setSelectedChoiceId(null);
+      setChoiceEvaluation(null);
+    }, 650);
+  };
+
+  // Keyboard accessibility: 1, 2, 3, 4 for choices; Space to reveal
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (["INPUT", "TEXTAREA"].includes(e.target?.tagName)) return;
+      if (answerMode === "choice" && multipleChoiceOptions.length > 0 && !selectedChoiceId && !revealed) {
+        if (e.key === "1" && multipleChoiceOptions[0]) handleSelectChoice(multipleChoiceOptions[0]);
+        else if (e.key === "2" && multipleChoiceOptions[1]) handleSelectChoice(multipleChoiceOptions[1]);
+        else if (e.key === "3" && multipleChoiceOptions[2]) handleSelectChoice(multipleChoiceOptions[2]);
+        else if (e.key === "4" && multipleChoiceOptions[3]) handleSelectChoice(multipleChoiceOptions[3]);
+      } else if (e.code === "Space" && !revealed) {
+        e.preventDefault();
+        setRevealed(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [answerMode, multipleChoiceOptions, selectedChoiceId, revealed]);
 
   // ── Timer Countdown Logic ───────────────────────────────────────────────────
   useEffect(() => {
@@ -1091,25 +1165,48 @@ export function QuestionsMode({
             )}
           </div>
 
-          {/* Quick Controls: Timer, Sound, Bookmark */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {/* Quick Controls: Answer Mode, Timer, Sound, Haptic, Bookmark */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {/* Mode QCM / Libre switcher */}
+            <button
+              onClick={() => {
+                const nextMode = answerMode === "choice" ? "free" : "choice";
+                dispatch(quizActions.setQuizAnswerMode(nextMode));
+              }}
+              style={{
+                fontSize: 8.5,
+                padding: "3px 8px",
+                fontFamily: "'Cinzel', serif",
+                background: answerMode === "choice" ? "rgba(201,168,76,0.15)" : "var(--surface3)",
+                border: `1px solid ${answerMode === "choice" ? "var(--gold)" : "var(--border2)"}`,
+                color: answerMode === "choice" ? "var(--gold2)" : "var(--text3)",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+              title="Basculer entre Mode QCM (Choix instantanés) et Mode Libre (Saisie / Récitation)"
+            >
+              {answerMode === "choice" ? "⚡ QCM" : "✍️ LIBRE"}
+            </button>
+
             {/* Timer mode pill */}
             <button
               onClick={() => {
-                const nextMode = timerMode === "off" ? "30s" : timerMode === "30s" ? "15s" : "off";
+                const nextMode = timerMode === "off" ? "30s" : timerMode === "30s" ? "15s" : timerMode === "15s" ? "60s" : "off";
                 dispatch(quizActions.setQuizTimerMode(nextMode));
               }}
               style={{
-                fontSize: 9,
+                fontSize: 8.5,
                 padding: "3px 7px",
                 fontFamily: "'Cinzel', serif",
-                background: timerMode !== "off" ? "rgba(62,184,160,0.15)" : "transparent",
-                border: `1px solid ${timerMode !== "off" ? "var(--teal)" : "var(--border2)"}`,
-                color: timerMode !== "off" ? "var(--teal2)" : "var(--text3)",
+                background: timerMode !== "off" ? (timeRemaining <= 5 ? "rgba(231,76,60,0.18)" : "rgba(62,184,160,0.15)") : "transparent",
+                border: `1px solid ${timerMode !== "off" ? (timeRemaining <= 5 ? "var(--red)" : "var(--teal)") : "var(--border2)"}`,
+                color: timerMode !== "off" ? (timeRemaining <= 5 ? "var(--red)" : "var(--teal2)") : "var(--text3)",
                 borderRadius: 6,
                 cursor: "pointer",
+                fontWeight: 600,
               }}
-              title="Changer le mode chronomètre"
+              title="Changer le mode chronomètre (15s, 30s, 60s, OFF)"
             >
               ⏱ {timerMode !== "off" ? `${timeRemaining}s` : "OFF"}
             </button>
@@ -1125,9 +1222,25 @@ export function QuestionsMode({
                 cursor: "pointer",
                 padding: "2px 4px",
               }}
-              title={soundEffects ? "Sons activés" : "Sons coupés"}
+              title={soundEffects ? "Sons activés (Web Audio API)" : "Sons coupés"}
             >
               {soundEffects ? "🔊" : "🔇"}
+            </button>
+
+            {/* Haptic feedback toggle */}
+            <button
+              onClick={() => dispatch(quizActions.toggleQuizHaptic())}
+              style={{
+                fontSize: 11,
+                background: "transparent",
+                border: "none",
+                color: hapticFeedback ? "var(--teal2)" : "var(--text3)",
+                cursor: "pointer",
+                padding: "2px 4px",
+              }}
+              title={hapticFeedback ? "Vibrations haptiques activées" : "Vibrations haptiques désactivées"}
+            >
+              {hapticFeedback ? "📳" : "📵"}
             </button>
 
             {/* Verse Bookmark to Revise */}
@@ -1344,21 +1457,193 @@ export function QuestionsMode({
             sn={qSn}
           />
         ) : !revealed ? (
-          <TextAnswerInput
-            q={q}
-            onInspect={(grade) => {
-              setLastAutoGrade(grade);
-              setRevealed(true);
-            }}
-            onReveal={(autoCorrect) => {
-              if (autoCorrect !== null) {
-                answer(autoCorrect);
-              } else {
-                setLastAutoGrade(null);
-                setRevealed(true);
-              }
-            }}
-          />
+          answerMode === "choice" && multipleChoiceOptions.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 2px" }}>
+                <span style={{ fontSize: 8, letterSpacing: 1.5, color: "var(--text3)", fontFamily: "'Cinzel', serif" }}>
+                  CHOISIS LA BONNE RÉPONSE (1 - {multipleChoiceOptions.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => dispatch(quizActions.setQuizAnswerMode("free"))}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--teal2)",
+                    fontSize: 8.5,
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    fontFamily: "'Cinzel', serif",
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  ✍️ Saisie libre
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, width: "100%" }}>
+                {multipleChoiceOptions.map((opt, idx) => {
+                  const isSelected = selectedChoiceId === opt.id;
+                  const showResult = selectedChoiceId !== null;
+                  let bg = "var(--surface3)";
+                  let border = "1px solid var(--border2)";
+                  let color = "var(--text1)";
+
+                  if (showResult) {
+                    if (opt.isCorrect) {
+                      bg = "rgba(46, 204, 113, 0.18)";
+                      border = "1px solid var(--green)";
+                      color = "var(--green)";
+                    } else if (isSelected && !opt.isCorrect) {
+                      bg = "rgba(231, 76, 60, 0.18)";
+                      border = "1px solid var(--red)";
+                      color = "var(--red)";
+                    } else {
+                      bg = "var(--surface3)";
+                      border = "1px solid var(--border)";
+                      color = "var(--text3)";
+                    }
+                  }
+
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      disabled={showResult}
+                      onClick={() => handleSelectChoice(opt)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "12px 14px",
+                        minHeight: 48,
+                        borderRadius: 10,
+                        background: bg,
+                        border,
+                        color,
+                        cursor: showResult ? "default" : "pointer",
+                        transition: "all 0.15s ease",
+                        boxShadow: isSelected ? "0 0 12px rgba(201,168,76,0.3)" : "none",
+                        textAlign: q.type === "verse_number" || q.type === "find_surah" ? "left" : "right",
+                        direction: q.type === "verse_number" || q.type === "find_surah" ? "ltr" : "rtl",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          width: "100%",
+                          justifyContent: "space-between",
+                          direction: "ltr",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: 6,
+                            background: isSelected ? "rgba(201,168,76,0.2)" : "rgba(255,255,255,0.06)",
+                            border: `1px solid ${isSelected ? "var(--gold)" : "var(--border2)"}`,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontFamily: "'Cinzel', serif",
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: isSelected ? "var(--gold2)" : "var(--text3)",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {idx + 1}
+                        </span>
+
+                        <span
+                          style={{
+                            flex: 1,
+                            padding: "0 8px",
+                            fontFamily: q.type === "verse_number" ? "'Cinzel', serif" : "'Amiri Quran', serif",
+                            fontSize: q.type === "verse_number" ? 16 : 22,
+                            lineHeight: 1.8,
+                            textAlign: q.type === "verse_number" || q.type === "find_surah" ? "left" : "right",
+                            direction: q.type === "verse_number" || q.type === "find_surah" ? "ltr" : "rtl",
+                          }}
+                        >
+                          {opt.text}
+                        </span>
+
+                        {showResult && (
+                          <span style={{ fontSize: 16, flexShrink: 0, fontWeight: 700 }}>
+                            {opt.isCorrect ? "✓" : isSelected ? "✗" : ""}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Reveal answer button in QCM if learner is stuck */}
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevealed(true);
+                    setLastAutoGrade(null);
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--text3)",
+                    fontSize: 8,
+                    cursor: "pointer",
+                    fontFamily: "'Cinzel', serif",
+                    letterSpacing: 1,
+                  }}
+                >
+                  💡 Voir la réponse (ou appuyer sur Espace)
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+              {multipleChoiceOptions.length > 0 && (
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    type="button"
+                    onClick={() => dispatch(quizActions.setQuizAnswerMode("choice"))}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "var(--gold2)",
+                      fontSize: 8.5,
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      fontFamily: "'Cinzel', serif",
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    ⚡ Passer en mode QCM (Choix)
+                  </button>
+                </div>
+              )}
+              <TextAnswerInput
+                q={q}
+                onInspect={(grade) => {
+                  setLastAutoGrade(grade);
+                  setRevealed(true);
+                }}
+                onReveal={(autoCorrect) => {
+                  if (autoCorrect !== null) {
+                    answer(autoCorrect);
+                  } else {
+                    setLastAutoGrade(null);
+                    setRevealed(true);
+                  }
+                }}
+              />
+            </div>
+          )
         ) : (
           <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
             {/* Arabic audio player with timestamps */}

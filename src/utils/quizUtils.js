@@ -55,6 +55,108 @@ export const getStreakCelebration = (streak = 0) => {
 };
 
 /**
+ * Returns formatted streak multiplier string (e.g. 'x1.0', 'x1.2', 'x1.5', 'x2.0', 'x2.5').
+ */
+export const formatStreakMultiplier = (streak = 0) => {
+  const celebration = getStreakCelebration(streak);
+  const mult = celebration ? celebration.multiplier : 1.0;
+  return `x${mult.toFixed(1)}`;
+};
+
+/**
+ * Returns human-readable label for Tajweed toggle.
+ */
+export const getTajweedToggleLabel = (enabled = true) => {
+  return enabled ? "🎨 Tajwîd actif" : "🎨 Tajwîd masqué";
+};
+
+/**
+ * Maps font size level ('sm' | 'md' | 'lg' | 'xl') to inline typography styles.
+ */
+export const getFontSizeStyle = (sizeLevel = "md") => {
+  switch (sizeLevel) {
+    case "sm":
+      return Object.freeze({ fontSize: "1.25rem", lineHeight: "2.2rem" });
+    case "lg":
+      return Object.freeze({ fontSize: "1.9rem", lineHeight: "3.2rem" });
+    case "xl":
+      return Object.freeze({ fontSize: "2.3rem", lineHeight: "3.8rem" });
+    case "md":
+    default:
+      return Object.freeze({ fontSize: "1.55rem", lineHeight: "2.7rem" });
+  }
+};
+
+/**
+ * Groups mistakes by question type with human-readable French labels and counts.
+ */
+export const computeMistakesSummaryByCategory = (mistakes = []) => {
+  if (!Array.isArray(mistakes) || mistakes.length === 0) return [];
+
+  const TYPE_NAMES = {
+    first_word: "Premier mot",
+    last_word: "Dernier mot",
+    missing_word: "Mot manquant",
+    next_verse: "Verset suivant",
+    previous_verse: "Verset précédent",
+    verse_number: "Numéro de verset",
+    find_ayat: "Trouver le verset",
+    find_surah: "Trouver la sourate",
+    reconstruct: "Reconstitution",
+    unknown_word: "Mots inconnus",
+    first_contact: "Premier contact",
+  };
+
+  const counts = {};
+  mistakes.forEach((m) => {
+    const typeKey = m.type || "autre";
+    counts[typeKey] = (counts[typeKey] || 0) + 1;
+  });
+
+  return Object.keys(counts)
+    .map((type) => ({
+      type,
+      label: TYPE_NAMES[type] || type,
+      count: counts[type],
+    }))
+    .sort((a, b) => b.count - a.count);
+};
+
+/**
+ * Builds a clean collection payload from mistakes for Redux collections.
+ */
+export const createMistakesCollectionPayload = (mistakes = [], contextName = "") => {
+  if (!Array.isArray(mistakes) || mistakes.length === 0) return null;
+
+  // Deduplicate by sn:ayatNum
+  const seen = new Set();
+  const ayats = [];
+  mistakes.forEach((m) => {
+    if (m.sn && m.ayatNum) {
+      const key = `${m.sn}:${m.ayatNum}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        ayats.push({ sn: m.sn, ayatNum: m.ayatNum });
+      }
+    }
+  });
+
+  if (ayats.length === 0) return null;
+
+  const now = new Date();
+  const dateStr = `${now.getHours()}h${String(now.getMinutes()).padStart(2, "0")}`;
+  const prefix = contextName ? `Erreurs Quiz (${contextName})` : "Erreurs Quiz";
+  const name = `${prefix} · ${dateStr}`;
+
+  return Object.freeze({
+    name,
+    ayats,
+    totalAyats: ayats.length,
+    createdAt: now.toISOString(),
+  });
+};
+
+/**
  * Formats seconds into MM:SS.
  */
 export const formatQuizTimer = (totalSeconds = 0) => {

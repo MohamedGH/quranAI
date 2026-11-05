@@ -9,8 +9,13 @@ import {
   triggerQuizHaptic,
   generateMultipleChoiceOptions,
   QUIZ_PRESETS,
+  formatStreakMultiplier,
+  getTajweedToggleLabel,
+  getFontSizeStyle,
+  computeMistakesSummaryByCategory,
+  createMistakesCollectionPayload,
 } from "../src/utils/quizUtils.js";
-import { store, sel, quizActions } from "../src/store.js";
+import { store, sel, quizActions, collectionsActions } from "../src/store.js";
 import { buildQuizRoute, parseQuizRoute } from "../src/utils/routeManager.js";
 import { ERROR_CODES, createAppError } from "../src/utils/errorManager.js";
 
@@ -400,3 +405,143 @@ describe("Quiz Error Manager Integration", () => {
     expect(err.context.surahNum).toBe(1);
   });
 });
+
+describe("Quiz UI/UX Utilities - Tajweed, Font Sizing & Multipliers", () => {
+  describe("formatStreakMultiplier", () => {
+    it("returns x1.0 for streaks under 3", () => {
+      expect(formatStreakMultiplier(0)).toBe("x1.0");
+      expect(formatStreakMultiplier(1)).toBe("x1.0");
+      expect(formatStreakMultiplier(2)).toBe("x1.0");
+    });
+
+    it("returns milestone multipliers (x1.2, x1.5, x2.0, x2.5)", () => {
+      expect(formatStreakMultiplier(3)).toBe("x1.2");
+      expect(formatStreakMultiplier(4)).toBe("x1.2");
+      expect(formatStreakMultiplier(5)).toBe("x1.5");
+      expect(formatStreakMultiplier(9)).toBe("x1.5");
+      expect(formatStreakMultiplier(10)).toBe("x2.0");
+      expect(formatStreakMultiplier(14)).toBe("x2.0");
+      expect(formatStreakMultiplier(15)).toBe("x2.5");
+    });
+  });
+
+  describe("getTajweedToggleLabel", () => {
+    it("returns proper label according to active status", () => {
+      expect(getTajweedToggleLabel(true)).toContain("Tajwîd actif");
+      expect(getTajweedToggleLabel(false)).toContain("Tajwîd masqué");
+    });
+  });
+
+  describe("getFontSizeStyle", () => {
+    it("returns proper fontSize and lineHeight for each level", () => {
+      const sm = getFontSizeStyle("sm");
+      expect(sm.fontSize).toBe("1.25rem");
+
+      const md = getFontSizeStyle("md");
+      expect(md.fontSize).toBe("1.55rem");
+
+      const lg = getFontSizeStyle("lg");
+      expect(lg.fontSize).toBe("1.9rem");
+
+      const xl = getFontSizeStyle("xl");
+      expect(xl.fontSize).toBe("2.3rem");
+
+      // Default fallback
+      const def = getFontSizeStyle("unknown");
+      expect(def.fontSize).toBe("1.55rem");
+    });
+  });
+
+  describe("computeMistakesSummaryByCategory", () => {
+    it("returns empty array when no mistakes", () => {
+      expect(computeMistakesSummaryByCategory([])).toEqual([]);
+      expect(computeMistakesSummaryByCategory(null)).toEqual([]);
+    });
+
+    it("groups and sorts mistakes by question type", () => {
+      const mistakes = [
+        { type: "next_verse", sn: 1, ayatNum: 2 },
+        { type: "next_verse", sn: 1, ayatNum: 3 },
+        { type: "first_word", sn: 1, ayatNum: 4 },
+        { type: "first_word", sn: 1, ayatNum: 5 },
+        { type: "first_word", sn: 1, ayatNum: 6 },
+        { type: "missing_word", sn: 1, ayatNum: 7 },
+      ];
+
+      const summary = computeMistakesSummaryByCategory(mistakes);
+      expect(summary.length).toBe(3);
+      expect(summary[0].type).toBe("first_word");
+      expect(summary[0].label).toBe("Premier mot");
+      expect(summary[0].count).toBe(3);
+
+      expect(summary[1].type).toBe("next_verse");
+      expect(summary[1].label).toBe("Verset suivant");
+      expect(summary[1].count).toBe(2);
+
+      expect(summary[2].type).toBe("missing_word");
+      expect(summary[2].count).toBe(1);
+    });
+  });
+
+  describe("createMistakesCollectionPayload", () => {
+    it("returns null for empty mistakes list", () => {
+      expect(createMistakesCollectionPayload([])).toBeNull();
+      expect(createMistakesCollectionPayload(null)).toBeNull();
+    });
+
+    it("creates deduplicated collection payload with timestamps and context name", () => {
+      const mistakes = [
+        { sn: 112, ayatNum: 2 },
+        { sn: 112, ayatNum: 2 }, // duplicate
+        { sn: 112, ayatNum: 3 },
+      ];
+
+      const payload = createMistakesCollectionPayload(mistakes, "Al-Ikhlas");
+      expect(payload).toBeDefined();
+      expect(payload.name).toContain("Erreurs Quiz (Al-Ikhlas)");
+      expect(payload.ayats.length).toBe(2);
+      expect(payload.totalAyats).toBe(2);
+      expect(payload.ayats).toEqual([
+        { sn: 112, ayatNum: 2 },
+        { sn: 112, ayatNum: 3 },
+      ]);
+    });
+  });
+});
+
+describe("Quiz Store Extensions - Collections & UI Settings", () => {
+  it("creates collection with multiple ayats via createCollectionWithMultipleAyats", () => {
+    const payload = {
+      name: "Révision Versets 1-3",
+      ayats: [
+        { sn: 1, ayatNum: 1 },
+        { sn: 1, ayatNum: 2 },
+        { sn: 1, ayatNum: 3 },
+      ],
+    };
+
+    store.dispatch(collectionsActions.createCollectionWithMultipleAyats(payload));
+    const collections = sel.collections(store.getState());
+    const created = collections.find((c) => c.name === "Révision Versets 1-3");
+    expect(created).toBeDefined();
+    expect(created.ayats.length).toBe(3);
+  });
+
+  it("sets and persists quiz Arabic font size", () => {
+    store.dispatch(quizActions.setQuizArabicFontSize("xl"));
+    expect(sel.quizArabicFontSize(store.getState())).toBe("xl");
+
+    store.dispatch(quizActions.setQuizArabicFontSize("sm"));
+    expect(sel.quizArabicFontSize(store.getState())).toBe("sm");
+  });
+
+  it("toggles quiz Tajweed display preference", () => {
+    const initial = sel.quizShowTajweed(store.getState());
+    store.dispatch(quizActions.toggleQuizTajweed());
+    expect(sel.quizShowTajweed(store.getState())).toBe(!initial);
+
+    store.dispatch(quizActions.toggleQuizTajweed());
+    expect(sel.quizShowTajweed(store.getState())).toBe(initial);
+  });
+});
+

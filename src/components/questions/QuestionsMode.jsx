@@ -23,8 +23,9 @@ import { PageStructureQuestion } from "./PageStructureQuestion.jsx";
 import { FirstContactQuestion } from "./FirstContactQuestion.jsx";
 import { QAyatPlayer } from "../audio/QAyatPlayer.jsx";
 import { TextAnswerInput } from "../common/TextAnswerInput.jsx";
+import { ArabicHighlighted } from "../common/ArabicHighlighted.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "../../utils/safeStorage.js";
-import { store, sel, quizActions, errorActions } from "../../store.js";
+import { store, sel, quizActions, collectionsActions, errorActions } from "../../store.js";
 import {
   calculateQuizPoints,
   getStreakCelebration,
@@ -33,6 +34,11 @@ import {
   playQuizSound,
   triggerQuizHaptic,
   generateMultipleChoiceOptions,
+  getFontSizeStyle,
+  getTajweedToggleLabel,
+  formatStreakMultiplier,
+  computeMistakesSummaryByCategory,
+  createMistakesCollectionPayload,
 } from "../../utils/quizUtils.js";
 import { getPlayableAudioUrl } from "../../utils/offlineManager.js";
 import { ERROR_CODES, createAppError } from "../../utils/errorManager.js";
@@ -64,6 +70,8 @@ export function QuestionsMode({
   const quizMistakes = useSelector(sel.quizMistakes);
   const answerMode = useSelector(sel.quizAnswerMode);
   const hapticFeedback = useSelector(sel.quizHapticFeedback);
+  const arabicFontSize = useSelector(sel.quizArabicFontSize);
+  const showTajweedInQuiz = useSelector(sel.quizShowTajweed);
 
   // ── Session persistence ──────────────────────────────────────────────────────
   const _items = multiItems || (ayatList || []).map((n) => ({ sn: selectedSn, ayatNum: n }));
@@ -94,6 +102,9 @@ export function QuestionsMode({
   // Review-only mode for mistakes
   const [reviewMistakesMode, setReviewMistakesMode] = React.useState(false);
   const [mistakesQueue, setMistakesQueue] = React.useState([]);
+  const [collectionCreatedNotice, setCollectionCreatedNotice] = React.useState(null);
+  const [showDetailedReview, setShowDetailedReview] = React.useState(false);
+  const [reviewAudioPlayingAyat, setReviewAudioPlayingAyat] = React.useState(null);
 
   // Session start timestamp for duration
   const [sessionStartTime] = React.useState(() => Date.now());
@@ -620,11 +631,14 @@ export function QuestionsMode({
       } else if (e.code === "Space" && !revealed) {
         e.preventDefault();
         setRevealed(true);
+      } else if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        toggleAudio();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [answerMode, multipleChoiceOptions, selectedChoiceId, revealed]);
+  }, [answerMode, multipleChoiceOptions, selectedChoiceId, revealed, isPlaying, rawAudioUrl]);
 
   // ── Timer Countdown Logic ───────────────────────────────────────────────────
   useEffect(() => {
@@ -801,6 +815,43 @@ export function QuestionsMode({
       }
       return { ...d, toRevise: nextRev, reviseHistory: hist };
     });
+  };
+
+  // Export mistakes into a new Revision Collection
+  const handleCreateMistakesCollection = () => {
+    const failedList = results.filter((r) => !r.correct);
+    if (failedList.length === 0) return;
+    const sName = surahInfo?.englishName || (multiItems ? "Multi-sourates" : `S.${selectedSn}`);
+    const payload = createMistakesCollectionPayload(failedList, sName);
+    if (!payload) return;
+    dispatch(collectionsActions.createCollectionWithMultipleAyats(payload));
+    setCollectionCreatedNotice(payload.name);
+    triggerQuizHaptic("success", hapticFeedback);
+    playQuizSound("correct", soundEffects);
+  };
+
+  // Play audio for a specific verse in review breakdown
+  const playReviewAudio = async (sn, ayatNum) => {
+    const key = `${sn}:${ayatNum}`;
+    const a = audioRef.current;
+    if (!a) return;
+    if (reviewAudioPlayingAyat === key) {
+      a.pause();
+      setReviewAudioPlayingAyat(null);
+      return;
+    }
+    const gNum = globalNums[key];
+    if (!gNum) return;
+    try {
+      const url = `${getAudioBase()}/${gNum}.mp3`;
+      const playable = await getPlayableAudioUrl(url);
+      a.src = playable;
+      await a.play();
+      setReviewAudioPlayingAyat(key);
+      a.onended = () => setReviewAudioPlayingAyat(null);
+    } catch {
+      setReviewAudioPlayingAyat(null);
+    }
   };
 
   // Empty state handling
@@ -1014,6 +1065,58 @@ export function QuestionsMode({
           </div>
         </div>
 
+        {/* Mistakes categories breakdown */}
+        {incorrectCount > 0 && (
+          <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+            <div style={{ fontSize: 8, letterSpacing: 1.5, color: "var(--text3)", textAlign: "center", fontFamily: "'Cinzel', serif" }}>
+              ANALYSE DES ERREURS PAR TYPE
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+              {computeMistakesSummaryByCategory(results.filter((r) => !r.correct)).map((cat) => (
+                <span
+                  key={cat.type}
+                  style={{
+                    fontSize: 9,
+                    padding: "3px 8px",
+                    borderRadius: 12,
+                    background: "rgba(231,76,60,0.12)",
+                    border: "1px solid rgba(231,76,60,0.3)",
+                    color: "var(--red)",
+                    fontFamily: "'Cinzel', serif",
+                    fontWeight: 600,
+                  }}
+                >
+                  {cat.label} : <strong>{cat.count}</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Collection creation feedback banner */}
+        {collectionCreatedNotice && (
+          <div
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              borderRadius: 8,
+              background: "rgba(46,204,113,0.15)",
+              border: "1px solid var(--green)",
+              color: "var(--green)",
+              fontSize: 10,
+              fontFamily: "'Cinzel', serif",
+              textAlign: "center",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+            }}
+          >
+            ✓ Collection enregistrée : "{collectionCreatedNotice}"
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", marginTop: 6 }}>
           {incorrectCount > 0 && (
@@ -1036,6 +1139,119 @@ export function QuestionsMode({
             >
               🔄 REVOIR UNIQUEMENT MES ERREURS ({incorrectCount})
             </button>
+          )}
+
+          {incorrectCount > 0 && !collectionCreatedNotice && (
+            <button
+              onClick={handleCreateMistakesCollection}
+              style={{
+                width: "100%",
+                padding: "11px",
+                fontSize: 10,
+                letterSpacing: 1.5,
+                fontWeight: 700,
+                fontFamily: "'Cinzel', serif",
+                background: "rgba(62,184,160,0.16)",
+                border: "1px solid var(--teal2)",
+                color: "var(--teal2)",
+                borderRadius: 8,
+                cursor: "pointer",
+                boxShadow: "0 2px 10px rgba(0,0,0,0.25)",
+              }}
+            >
+              📁 CRÉER UNE COLLECTION DE RÉVISION ({incorrectCount} versets)
+            </button>
+          )}
+
+          {/* Toggle Question-by-Question Detailed Review */}
+          <button
+            onClick={() => setShowDetailedReview(!showDetailedReview)}
+            style={{
+              background: "transparent",
+              border: "1px dashed var(--border2)",
+              color: "var(--text3)",
+              fontSize: 9,
+              padding: "7px 12px",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontFamily: "'Cinzel', serif",
+              letterSpacing: 1,
+              width: "100%",
+            }}
+          >
+            {showDetailedReview ? "▲ MASQUER LE DÉTAIL" : `▼ VOIR LE DÉTAIL DES ${results.length} QUESTIONS`}
+          </button>
+
+          {showDetailedReview && (
+            <div
+              style={{
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+                maxHeight: 280,
+                overflowY: "auto",
+                padding: "8px",
+                background: "var(--surface3)",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+              }}
+            >
+              {results.map((r, i) => {
+                const qObj = questions.find((item) => item.id === r.qId) || {};
+                const key = `${r.sn}:${r.ayatNum}`;
+                const isAudioActive = reviewAudioPlayingAyat === key;
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "8px 10px",
+                      borderRadius: 6,
+                      background: r.correct ? "rgba(46,204,113,0.06)" : "rgba(224,90,90,0.06)",
+                      borderLeft: `3px solid ${r.correct ? "var(--green)" : "var(--red)"}`,
+                      fontSize: 10,
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+                      <span style={{ fontFamily: "'Cinzel', serif", fontWeight: 700, color: "var(--text1)" }}>
+                        #{i + 1} · {multiItems ? `S.${r.sn}:${r.ayatNum}` : `v.${r.ayatNum}`} — {qObj.question || r.type}
+                      </span>
+                      {qObj.answer && (
+                        <span style={{ fontSize: 9.5, color: "var(--gold2)", direction: "rtl", fontFamily: "'Amiri Quran', serif" }}>
+                          Réponse : {qObj.answer}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                      <span style={{ color: r.correct ? "var(--green)" : "var(--red)", fontWeight: 700, fontSize: 12 }}>
+                        {r.correct ? "✓" : "✗"}
+                      </span>
+                      {globalNums[key] && (
+                        <button
+                          onClick={() => playReviewAudio(r.sn, r.ayatNum)}
+                          style={{
+                            background: isAudioActive ? "rgba(62,184,160,0.3)" : "transparent",
+                            border: "1px solid var(--border2)",
+                            color: "var(--teal2)",
+                            fontSize: 10,
+                            borderRadius: 4,
+                            padding: "3px 7px",
+                            cursor: "pointer",
+                          }}
+                          title="Écouter la récitation du verset"
+                        >
+                          {isAudioActive ? "⏸" : "▶"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
 
           <div style={{ display: "flex", gap: 8 }}>
@@ -1187,6 +1403,48 @@ export function QuestionsMode({
               title="Basculer entre Mode QCM (Choix instantanés) et Mode Libre (Saisie / Récitation)"
             >
               {answerMode === "choice" ? "⚡ QCM" : "✍️ LIBRE"}
+            </button>
+
+            {/* Tajweed colored rules toggle */}
+            <button
+              onClick={() => dispatch(quizActions.toggleQuizTajweed())}
+              style={{
+                fontSize: 8.5,
+                padding: "3px 7px",
+                fontFamily: "'Cinzel', serif",
+                background: showTajweedInQuiz ? "rgba(251,191,36,0.15)" : "transparent",
+                border: `1px solid ${showTajweedInQuiz ? "#fbbf24" : "var(--border2)"}`,
+                color: showTajweedInQuiz ? "#fbbf24" : "var(--text3)",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+              title="Afficher ou masquer les couleurs de Tajwîd sur les versets"
+            >
+              {showTajweedInQuiz ? "🎨 TAJWÎD" : "🎨 SIMPLE"}
+            </button>
+
+            {/* Arabic font size adjuster */}
+            <button
+              onClick={() => {
+                const sizes = ["sm", "md", "lg", "xl"];
+                const nextIdx = (sizes.indexOf(arabicFontSize) + 1) % sizes.length;
+                dispatch(quizActions.setQuizArabicFontSize(sizes[nextIdx]));
+              }}
+              style={{
+                fontSize: 8.5,
+                padding: "3px 7px",
+                fontFamily: "'Cinzel', serif",
+                background: "var(--surface3)",
+                border: "1px solid var(--border2)",
+                color: "var(--gold2)",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+              title={`Taille du texte arabe (${arabicFontSize.toUpperCase()}) — Cliquez pour agrandir`}
+            >
+              A± {arabicFontSize.toUpperCase()}
             </button>
 
             {/* Timer mode pill */}
@@ -1348,28 +1606,29 @@ export function QuestionsMode({
             </div>
           </div>
 
-          {/* Offline-resilient audio listening button */}
+          {/* Offline-resilient audio listening clue button */}
           {rawAudioUrl && (
             <button
               onClick={toggleAudio}
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
+                padding: "6px 12px",
+                borderRadius: 20,
                 border: "none",
                 background: isPlaying ? "rgba(62,184,160,.25)" : "rgba(62,184,160,.12)",
                 color: "var(--teal2)",
-                fontSize: 16,
+                fontSize: 11,
                 cursor: "pointer",
-                display: "flex",
+                display: "inline-flex",
                 alignItems: "center",
-                justifyContent: "center",
+                gap: 6,
                 boxShadow: isPlaying ? "0 0 0 3px rgba(62,184,160,.3)" : "none",
                 transition: "all .2s",
+                fontFamily: "'Cinzel', serif",
+                fontWeight: 600,
               }}
-              title="Écouter le verset"
+              title="Écouter le verset comme indice (Raccourci: Touche R)"
             >
-              {isPlaying ? "⏸" : "▶"}
+              <span>{isPlaying ? "⏸ Pause" : "🎧 Indice (R)"}</span>
             </button>
           )}
         </div>
@@ -1392,20 +1651,32 @@ export function QuestionsMode({
             <div
               style={{
                 fontFamily: "'Amiri Quran', serif",
-                fontSize: 22,
                 direction: "rtl",
                 textAlign: "center",
                 color: "var(--text1)",
-                padding: "12px 16px",
+                padding: "14px 18px",
                 background: "var(--surface3)",
                 borderRadius: 9,
                 border: "1px solid var(--border)",
-                lineHeight: 2.2,
                 width: "100%",
                 boxSizing: "border-box",
+                ...getFontSizeStyle(arabicFontSize),
               }}
             >
-              {q.questionData}
+              {showTajweedInQuiz ? (
+                <ArabicHighlighted
+                  text={q.questionData}
+                  showQalqala={true}
+                  showMadd={true}
+                  showIzhar={true}
+                  showIdgham={true}
+                  showIkhfa={true}
+                  showIqlab={true}
+                  showGhunnah={true}
+                />
+              ) : (
+                q.questionData
+              )}
             </div>
           )}
 
@@ -1563,13 +1834,26 @@ export function QuestionsMode({
                             flex: 1,
                             padding: "0 8px",
                             fontFamily: q.type === "verse_number" ? "'Cinzel', serif" : "'Amiri Quran', serif",
-                            fontSize: q.type === "verse_number" ? 16 : 22,
+                            fontSize: q.type === "verse_number" ? 16 : (getFontSizeStyle(arabicFontSize).fontSize || "1.45rem"),
                             lineHeight: 1.8,
                             textAlign: q.type === "verse_number" || q.type === "find_surah" ? "left" : "right",
                             direction: q.type === "verse_number" || q.type === "find_surah" ? "ltr" : "rtl",
                           }}
                         >
-                          {opt.text}
+                          {showTajweedInQuiz && q.type !== "verse_number" && q.type !== "find_surah" ? (
+                            <ArabicHighlighted
+                              text={opt.text}
+                              showQalqala={true}
+                              showMadd={true}
+                              showIzhar={true}
+                              showIdgham={true}
+                              showIkhfa={true}
+                              showIqlab={true}
+                              showGhunnah={true}
+                            />
+                          ) : (
+                            opt.text
+                          )}
                         </span>
 
                         {showResult && (

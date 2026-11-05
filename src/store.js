@@ -556,6 +556,21 @@ const collectionsSlice = createSlice({
       s.list = [...s.list, { id: Date.now(), name: name.trim(), ayats: [ayatEntry], createdAt: new Date().toISOString() }];
       save("quran_collections", s.list);
     },
+    createCollectionWithMultipleAyats: (s, a) => {
+      // a.payload = { name, ayats }
+      const { name, ayats } = a.payload || {};
+      if (!name?.trim() || !Array.isArray(ayats) || ayats.length === 0) return;
+      s.list = [
+        ...s.list,
+        {
+          id: Date.now(),
+          name: name.trim(),
+          ayats,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      save("quran_collections", s.list);
+    },
     setCollModal: (s, a) => { s.collModal = a.payload; },
     restoreFromCloud: (s, a) => { s.list = a.payload; },
   },
@@ -747,6 +762,8 @@ const quizSlice = createSlice({
     soundEffects: true,
     answerMode: load("quran_quiz_answerMode", "choice"), // "choice" (QCM) | "free" (libre)
     hapticFeedback: load("quran_quiz_haptic", true),
+    arabicFontSize: load("quran_quiz_arabicFontSize", "md"), // "sm" | "md" | "lg" | "xl"
+    showTajweedInQuiz: load("quran_quiz_showTajweed", true),
     selectedPreset: "all",
     mistakes: [], // [{ sn, ayatNum, qId, type, question, answer, userAnswer, timestamp }]
     sessionCount: 0,
@@ -814,6 +831,16 @@ const quizSlice = createSlice({
     },
     setQuizPreset: (state, action) => {
       state.selectedPreset = action.payload || "all";
+    },
+    setQuizArabicFontSize: (state, action) => {
+      const allowed = ["sm", "md", "lg", "xl"];
+      const size = allowed.includes(action.payload) ? action.payload : "md";
+      state.arabicFontSize = size;
+      save("quran_quiz_arabicFontSize", size);
+    },
+    toggleQuizTajweed: (state) => {
+      state.showTajweedInQuiz = !state.showTajweedInQuiz;
+      save("quran_quiz_showTajweed", state.showTajweedInQuiz);
     },
     saveQuizSummary: (state, action) => {
       state.lastSummary = action.payload;
@@ -978,6 +1005,8 @@ export const sel = {
   quizSoundEffects:   (s) => s.quiz?.soundEffects ?? true,
   quizAnswerMode:     (s) => s.quiz?.answerMode ?? "choice",
   quizHapticFeedback: (s) => s.quiz?.hapticFeedback ?? true,
+  quizArabicFontSize: (s) => s.quiz?.arabicFontSize ?? "md",
+  quizShowTajweed:    (s) => s.quiz?.showTajweedInQuiz ?? true,
   quizSelectedPreset: (s) => s.quiz?.selectedPreset ?? "all",
   quizMistakes:       (s) => s.quiz?.mistakes ?? [],
   quizLastSummary:    (s) => s.quiz?.lastSummary ?? null,

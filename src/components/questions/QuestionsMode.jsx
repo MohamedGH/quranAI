@@ -39,6 +39,9 @@ import {
   formatStreakMultiplier,
   computeMistakesSummaryByCategory,
   createMistakesCollectionPayload,
+  calculateAudioClueDuration,
+  detectSwipeDirection,
+  getAccuracyBadge,
 } from "../../utils/quizUtils.js";
 import { getPlayableAudioUrl } from "../../utils/offlineManager.js";
 import { ERROR_CODES, createAppError } from "../../utils/errorManager.js";
@@ -108,9 +111,12 @@ export function QuestionsMode({
 
   // Session start timestamp for duration
   const [sessionStartTime] = React.useState(() => Date.now());
+  const [clueMode, setClueMode] = React.useState(null); // null | "word" | "full"
 
   const audioRef = React.useRef(null);
   const timerIntervalRef = useRef(null);
+  const clueTimeoutRef = useRef(null);
+  const touchStartRef = useRef(null);
 
   // Load global ayat numbers + timestamps once
   React.useEffect(() => {
@@ -161,6 +167,7 @@ export function QuestionsMode({
     () => () => {
       audioRef.current?.pause();
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
     },
     []
   );
@@ -633,12 +640,15 @@ export function QuestionsMode({
         setRevealed(true);
       } else if (e.key === "r" || e.key === "R") {
         e.preventDefault();
-        toggleAudio();
+        playWordClueAudio();
+      } else if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        playFullAudio();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [answerMode, multipleChoiceOptions, selectedChoiceId, revealed, isPlaying, rawAudioUrl]);
+  }, [answerMode, multipleChoiceOptions, selectedChoiceId, revealed, isPlaying, rawAudioUrl, clueMode]);
 
   // ── Timer Countdown Logic ───────────────────────────────────────────────────
   useEffect(() => {
@@ -787,18 +797,105 @@ export function QuestionsMode({
     const a = audioRef.current;
     if (!a || !rawAudioUrl) return;
     if (isPlaying) {
+      if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
       a.pause();
       setIsPlaying(false);
+      setClueMode(null);
     } else {
       try {
         const playable = await getPlayableAudioUrl(rawAudioUrl);
         a.src = playable;
         await a.play();
         setIsPlaying(true);
+        setClueMode("full");
       } catch {
         setIsPlaying(false);
+        setClueMode(null);
       }
     }
+  };
+
+  // Play progressive first-word audio clue
+  const playWordClueAudio = async () => {
+    const a = audioRef.current;
+    if (!a || !rawAudioUrl) return;
+    if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
+    if (isPlaying && clueMode === "word") {
+      a.pause();
+      setIsPlaying(false);
+      setClueMode(null);
+      return;
+    }
+    try {
+      const playable = await getPlayableAudioUrl(rawAudioUrl);
+      a.src = playable;
+      a.currentTime = 0;
+      await a.play();
+      setIsPlaying(true);
+      setClueMode("word");
+      const qTimestamps = timestamps?.[qSn]?.[qAyatNum];
+      const clueSec = calculateAudioClueDuration(qTimestamps, 1.4);
+      clueTimeoutRef.current = setTimeout(() => {
+        if (a && !a.paused) {
+          a.pause();
+          setIsPlaying(false);
+          setClueMode(null);
+        }
+      }, clueSec * 1000);
+    } catch {
+      setIsPlaying(false);
+      setClueMode(null);
+    }
+  };
+
+  const playFullAudio = async () => {
+    if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
+    const a = audioRef.current;
+    if (!a || !rawAudioUrl) return;
+    if (isPlaying && clueMode === "full") {
+      a.pause();
+      setIsPlaying(false);
+      setClueMode(null);
+      return;
+    }
+    try {
+      const playable = await getPlayableAudioUrl(rawAudioUrl);
+      a.src = playable;
+      await a.play();
+      setIsPlaying(true);
+      setClueMode("full");
+    } catch {
+      setIsPlaying(false);
+      setClueMode(null);
+    }
+  };
+
+  // Mobile Touch Swipe Handlers for intuitive gesture navigation
+  const handleTouchStart = (e) => {
+    if (!e.touches || e.touches.length !== 1) return;
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchStartRef.current || !e.changedTouches || e.changedTouches.length !== 1) return;
+    const dir = detectSwipeDirection({
+      startX: touchStartRef.current.x,
+      startY: touchStartRef.current.y,
+      endX: e.changedTouches[0].clientX,
+      endY: e.changedTouches[0].clientY,
+      minDistance: 55,
+      maxVerticalRatio: 1.4,
+    });
+    if (dir === "left") {
+      if (!revealed) {
+        setRevealed(true);
+        triggerQuizHaptic("success", hapticFeedback);
+      }
+    } else if (dir === "right") {
+      playWordClueAudio();
+      triggerQuizHaptic("success", hapticFeedback);
+    }
+    touchStartRef.current = null;
   };
 
   // Quick toggle ToRevise bookmark for current verse
@@ -1002,6 +1099,33 @@ export function QuestionsMode({
           <div style={{ fontSize: 11, color: "var(--text2)", letterSpacing: 1, fontWeight: 600 }}>
             {summary.evaluation}
           </div>
+
+          {/* Accuracy Milestone Badge */}
+          {(() => {
+            const badge = getAccuracyBadge(pct);
+            return (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 14px",
+                  borderRadius: 16,
+                  background: `${badge.color}15`,
+                  border: `1px solid ${badge.color}`,
+                  color: badge.color,
+                  fontSize: 10,
+                  fontFamily: "'Cinzel', serif",
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  boxShadow: `0 2px 8px ${badge.color}25`,
+                }}
+              >
+                <span>{badge.emoji}</span>
+                <span>{badge.title}</span>
+              </div>
+            );
+          })()}
 
           {/* Stats Bar */}
           <div
@@ -1313,7 +1437,14 @@ export function QuestionsMode({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "12px 0", maxWidth: 680, margin: "0 auto" }}>
-      <audio ref={audioRef} onEnded={() => setIsPlaying(false)} style={{ display: "none" }} />
+      <audio
+        ref={audioRef}
+        onEnded={() => {
+          setIsPlaying(false);
+          setClueMode(null);
+        }}
+        style={{ display: "none" }}
+      />
 
       {/* Top HUD: Progress, Points, Streak & Controls */}
       <div
@@ -1562,9 +1693,11 @@ export function QuestionsMode({
         </div>
       )}
 
-      {/* Main Question Card */}
+      {/* Main Question Card with Touch Swipe Gestures */}
       <div
         key={q.id}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         style={{
           display: "flex",
           flexDirection: "column",
@@ -1575,9 +1708,10 @@ export function QuestionsMode({
           border: "1px solid var(--border)",
           borderRadius: 14,
           boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+          touchAction: "pan-y",
         }}
       >
-        {/* Header: Verse Number, Surah Name, Mastery & Audio Reciter Preview */}
+        {/* Header: Verse Number, Surah Name, Mastery & Dual Audio Clues */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div
@@ -1606,30 +1740,56 @@ export function QuestionsMode({
             </div>
           </div>
 
-          {/* Offline-resilient audio listening clue button */}
+          {/* Progressive Audio Clue Controls: 1st Word Hint vs Full Verse */}
           {rawAudioUrl && (
-            <button
-              onClick={toggleAudio}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 20,
-                border: "none",
-                background: isPlaying ? "rgba(62,184,160,.25)" : "rgba(62,184,160,.12)",
-                color: "var(--teal2)",
-                fontSize: 11,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                boxShadow: isPlaying ? "0 0 0 3px rgba(62,184,160,.3)" : "none",
-                transition: "all .2s",
-                fontFamily: "'Cinzel', serif",
-                fontWeight: 600,
-              }}
-              title="Écouter le verset comme indice (Raccourci: Touche R)"
-            >
-              <span>{isPlaying ? "⏸ Pause" : "🎧 Indice (R)"}</span>
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button
+                type="button"
+                onClick={playWordClueAudio}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: 18,
+                  border: `1px solid ${isPlaying && clueMode === "word" ? "var(--teal)" : "var(--border2)"}`,
+                  background: isPlaying && clueMode === "word" ? "rgba(62,184,160,.28)" : "rgba(62,184,160,.10)",
+                  color: "var(--teal2)",
+                  fontSize: 9.5,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  boxShadow: isPlaying && clueMode === "word" ? "0 0 0 2px rgba(62,184,160,.3)" : "none",
+                  transition: "all .18s",
+                  fontFamily: "'Cinzel', serif",
+                  fontWeight: 600,
+                }}
+                title="Écouter le 1er mot comme indice (Raccourci: Touche R)"
+              >
+                <span>{isPlaying && clueMode === "word" ? "⏸ 1er Mot" : "🎧 1er Mot (R)"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={playFullAudio}
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: "50%",
+                  border: `1px solid ${isPlaying && clueMode === "full" ? "var(--teal)" : "var(--border2)"}`,
+                  background: isPlaying && clueMode === "full" ? "rgba(62,184,160,.28)" : "var(--surface3)",
+                  color: "var(--teal2)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: isPlaying && clueMode === "full" ? "0 0 0 2px rgba(62,184,160,.3)" : "none",
+                  transition: "all .18s",
+                }}
+                title="Écouter tout le verset (Raccourci: Touche T)"
+              >
+                {isPlaying && clueMode === "full" ? "⏸" : "▶"}
+              </button>
+            </div>
           )}
         </div>
 
@@ -2044,6 +2204,21 @@ export function QuestionsMode({
             )}
           </div>
         )}
+      </div>
+
+      {/* Mobile Touch Swipe Guidance */}
+      <div
+        style={{
+          fontSize: 8,
+          letterSpacing: 1.2,
+          color: "var(--text3)",
+          fontFamily: "'Cinzel', serif",
+          textAlign: "center",
+          padding: "2px 8px",
+          opacity: 0.8,
+        }}
+      >
+        📱 GESTES MOBILES : GLISSER GAUCHE POUR RÉVÉLER · GLISSER DROITE POUR INDICE AUDIO
       </div>
     </div>
   );

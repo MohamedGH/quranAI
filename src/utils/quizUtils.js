@@ -157,6 +157,89 @@ export const createMistakesCollectionPayload = (mistakes = [], contextName = "")
 };
 
 /**
+ * Calculates optimal audio clue duration for first-word hint from verse timestamps.
+ */
+export const calculateAudioClueDuration = (timestamps, defaultSec = 1.3) => {
+  if (!timestamps || !Array.isArray(timestamps.words) || timestamps.words.length === 0) {
+    return defaultSec;
+  }
+  const firstWord = timestamps.words[0];
+  const firstWordChars = firstWord?.chars || [];
+  const endMs = firstWordChars.length > 0 ? firstWordChars[firstWordChars.length - 1]?.end : null;
+
+  if (typeof endMs === "number" && endMs > 0) {
+    // Clamp duration between 0.8s and 2.5s for ideal first-word audio clue
+    return Math.min(2.5, Math.max(0.8, Number((endMs / 1000).toFixed(2))));
+  }
+  return defaultSec;
+};
+
+/**
+ * Detects touch swipe direction from coordinates (pure functional).
+ * Returns 'left' | 'right' | 'up' | 'down' | null.
+ */
+export const detectSwipeDirection = ({
+  startX = 0,
+  startY = 0,
+  endX = 0,
+  endY = 0,
+  minDistance = 60,
+  maxVerticalRatio = 1.5,
+} = {}) => {
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  if (absDx >= minDistance && absDx >= absDy * maxVerticalRatio) {
+    return dx < 0 ? "left" : "right";
+  }
+  if (absDy >= minDistance && absDy >= absDx * maxVerticalRatio) {
+    return dy < 0 ? "up" : "down";
+  }
+  return null;
+};
+
+/**
+ * Estimates total questions generated for a given number of ayats and selected question types.
+ */
+export const estimateQuizQuestionCount = ({ itemsCount = 0, selectedTypes = [] } = {}) => {
+  const count = Math.max(0, Number(itemsCount) || 0);
+  const types = Array.isArray(selectedTypes)
+    ? selectedTypes
+    : selectedTypes instanceof Set
+    ? Array.from(selectedTypes)
+    : [];
+
+  if (count === 0 || types.length === 0) return 0;
+
+  // Approximate weight multiplier per question type (some types yield multiple per ayah, others 1)
+  const isAll = types.length >= 10;
+  if (isAll) return count * 4;
+  return Math.max(count, Math.round(count * (types.length * 0.75)));
+};
+
+/**
+ * Returns accuracy badge and achievement title based on quiz percentage.
+ */
+export const getAccuracyBadge = (accuracyPct = 0) => {
+  const pct = Math.max(0, Math.min(100, Math.round(Number(accuracyPct) || 0)));
+  if (pct === 100) {
+    return Object.freeze({ emoji: "👑", title: "Maître Coranique (100%)", color: "#f1c40f" });
+  }
+  if (pct >= 85) {
+    return Object.freeze({ emoji: "🌟", title: "Hāfiz Confirmé", color: "#2ecc71" });
+  }
+  if (pct >= 70) {
+    return Object.freeze({ emoji: "🎯", title: "Solide Rétention", color: "#3498db" });
+  }
+  if (pct >= 50) {
+    return Object.freeze({ emoji: "📖", title: "En Progression", color: "#e67e22" });
+  }
+  return Object.freeze({ emoji: "🌱", title: "Initiation & Découverte", color: "#95a5a6" });
+};
+
+/**
  * Formats seconds into MM:SS.
  */
 export const formatQuizTimer = (totalSeconds = 0) => {

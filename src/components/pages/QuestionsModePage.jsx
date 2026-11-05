@@ -8,7 +8,7 @@ import { SurahAyatsMasteryRibbon } from "../common/SurahAyatsMasteryRibbon.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "../../utils/safeStorage.js";
 import { quizActions, sel } from "../../store.js";
 import { buildQuizRoute } from "../../utils/routeManager.js";
-import { QUIZ_PRESETS } from "../../utils/quizUtils.js";
+import { QUIZ_PRESETS, estimateQuizQuestionCount } from "../../utils/quizUtils.js";
 
 export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum, initialRangeFrom, initialRangeTo, initialQIdx, initialPreset }) {
   const Q_PAGE_KEY = 'quran_questions_page_session';
@@ -1170,7 +1170,13 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
                 border:`1px solid ${(multiItems?.length ?? 0) > 0 ? "var(--gold)" : "var(--border2)"}`,
                 color: (multiItems?.length ?? 0) > 0 ? "var(--gold2)" : "var(--text3)",
                 borderRadius:9, cursor: (multiItems?.length ?? 0) > 0 ? "pointer" : "default", marginTop:4 }}>
-              ❓ LANCER {(multiItems?.length ?? 0) > 0 ? `(${new Set(multiItems.map(i=>`${i.sn}:${i.ayatNum}`)).size} AYAT${multiItems.length > 1 ? 'S' : ''})` : "(AUCUN AYAT APPRIS DANS LA PLAGE)"}
+              {(() => {
+                const totalAyats = new Set((multiItems || []).map(i => `${i.sn}:${i.ayatNum}`)).size;
+                const estQ = estimateQuizQuestionCount({ itemsCount: totalAyats, selectedTypes: selectedQTypes });
+                return totalAyats > 0
+                  ? `❓ LANCER (${totalAyats} AYAT${totalAyats > 1 ? 'S' : ''} · ~${estQ} QUESTIONS)`
+                  : "(AUCUN AYAT APPRIS DANS LA PLAGE)";
+              })()}
             </button>
           </div>
         </div>
@@ -1605,7 +1611,8 @@ export function QuestionsModePage({ surahs, learnData, setLData, initialSurahNum
               const toReviseInRange = (hasFC ? ayatList : learnedInRange).filter(an => learnData[`${selectedSn}:${an}`]?.toRevise);
               const basePool = onlyRevise ? toReviseInRange : (hasFC ? (fcInRange.length > 0 ? fcInRange : ayatList) : learnedInRange);
               const count = basePool.length;
-              return `❓ LANCER (${count > 0 ? `${count} AYAT${count > 1 ? 'S' : ''}` : `${ayatList.length} AYATS EN DÉCOUVERTE`})`;
+              const estQ = estimateQuizQuestionCount({ itemsCount: count > 0 ? count : ayatList.length, selectedTypes: selectedQTypes });
+              return `❓ LANCER (${count > 0 ? `${count} AYAT${count > 1 ? 'S' : ''}` : `${ayatList.length} EN DÉCOUVERTE`} · ~${estQ} Q)`;
             })()}
           </button>
         </div>

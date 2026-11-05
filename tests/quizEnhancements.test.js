@@ -14,6 +14,10 @@ import {
   getFontSizeStyle,
   computeMistakesSummaryByCategory,
   createMistakesCollectionPayload,
+  calculateAudioClueDuration,
+  detectSwipeDirection,
+  estimateQuizQuestionCount,
+  getAccuracyBadge,
 } from "../src/utils/quizUtils.js";
 import { store, sel, quizActions, collectionsActions } from "../src/store.js";
 import { buildQuizRoute, parseQuizRoute } from "../src/utils/routeManager.js";
@@ -544,4 +548,109 @@ describe("Quiz Store Extensions - Collections & UI Settings", () => {
     expect(sel.quizShowTajweed(store.getState())).toBe(initial);
   });
 });
+
+describe("Quiz Mobile Ergonomics & Progressive Hints", () => {
+  describe("calculateAudioClueDuration", () => {
+    it("returns default fallback when timestamps are missing or empty", () => {
+      expect(calculateAudioClueDuration(null, 1.5)).toBe(1.5);
+      expect(calculateAudioClueDuration({}, 1.4)).toBe(1.4);
+      expect(calculateAudioClueDuration({ words: [] }, 1.3)).toBe(1.3);
+    });
+
+    it("calculates clamped duration based on first word end timestamp", () => {
+      const timestamps = {
+        words: [
+          { chars: [{ start: 0, end: 1200 }] },
+          { chars: [{ start: 1200, end: 2400 }] },
+        ],
+      };
+      // 1200ms -> 1.2s
+      expect(calculateAudioClueDuration(timestamps)).toBe(1.2);
+
+      // Clamps under 0.8s to minimum 0.8s
+      const shortTimestamps = {
+        words: [{ chars: [{ start: 0, end: 400 }] }],
+      };
+      expect(calculateAudioClueDuration(shortTimestamps)).toBe(0.8);
+
+      // Clamps over 2.5s to maximum 2.5s
+      const longTimestamps = {
+        words: [{ chars: [{ start: 0, end: 3800 }] }],
+      };
+      expect(calculateAudioClueDuration(longTimestamps)).toBe(2.5);
+    });
+  });
+
+  describe("detectSwipeDirection", () => {
+    it("returns null when movement is below threshold", () => {
+      const res = detectSwipeDirection({ startX: 100, startY: 100, endX: 120, endY: 105, minDistance: 50 });
+      expect(res).toBeNull();
+    });
+
+    it("detects clean horizontal left swipe", () => {
+      const res = detectSwipeDirection({ startX: 200, startY: 100, endX: 110, endY: 105, minDistance: 60 });
+      expect(res).toBe("left");
+    });
+
+    it("detects clean horizontal right swipe", () => {
+      const res = detectSwipeDirection({ startX: 100, startY: 100, endX: 190, endY: 105, minDistance: 60 });
+      expect(res).toBe("right");
+    });
+
+    it("returns null when diagonal movement violates vertical ratio constraint", () => {
+      // 70px horizontal vs 60px vertical -> not a dominant horizontal swipe
+      const res = detectSwipeDirection({ startX: 100, startY: 100, endX: 170, endY: 160, minDistance: 50, maxVerticalRatio: 1.5 });
+      expect(res).toBeNull();
+    });
+  });
+
+  describe("estimateQuizQuestionCount", () => {
+    it("returns 0 for empty ayat count or empty types", () => {
+      expect(estimateQuizQuestionCount({ itemsCount: 0, selectedTypes: ["first_word"] })).toBe(0);
+      expect(estimateQuizQuestionCount({ itemsCount: 10, selectedTypes: [] })).toBe(0);
+    });
+
+    it("estimates questions dynamically according to selected types count", () => {
+      const est3Types = estimateQuizQuestionCount({ itemsCount: 7, selectedTypes: ["first_word", "last_word", "missing_word"] });
+      expect(est3Types).toBeGreaterThanOrEqual(7);
+
+      const estAllTypes = estimateQuizQuestionCount({
+        itemsCount: 7,
+        selectedTypes: [
+          "first_contact", "first_word", "last_word", "missing_word", "next_verse",
+          "previous_verse", "verse_number", "find_ayat", "reconstruct", "find_surah"
+        ],
+      });
+      expect(estAllTypes).toBe(28); // 7 * 4
+    });
+  });
+
+  describe("getAccuracyBadge", () => {
+    it("returns crown badge for 100% mastery", () => {
+      const b100 = getAccuracyBadge(100);
+      expect(b100.emoji).toBe("👑");
+      expect(b100.title).toContain("Maître Coranique");
+      expect(b100.color).toBe("#f1c40f");
+    });
+
+    it("returns appropriate progressive badges according to percentage tiers", () => {
+      const b90 = getAccuracyBadge(90);
+      expect(b90.emoji).toBe("🌟");
+      expect(b90.title).toContain("Hāfiz Confirmé");
+
+      const b75 = getAccuracyBadge(75);
+      expect(b75.emoji).toBe("🎯");
+      expect(b75.title).toContain("Solide Rétention");
+
+      const b55 = getAccuracyBadge(55);
+      expect(b55.emoji).toBe("📖");
+      expect(b55.title).toContain("En Progression");
+
+      const b30 = getAccuracyBadge(30);
+      expect(b30.emoji).toBe("🌱");
+      expect(b30.title).toContain("Initiation");
+    });
+  });
+});
+
 

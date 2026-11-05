@@ -576,6 +576,123 @@ export function QuestionsMode({
 
   const q = activeQuestions[qIdx] ?? null;
 
+  // Audio Playback & Active Question Meta (initialized before hooks/callbacks to avoid TDZ)
+  const qSn = q?.sn ?? selectedSn;
+  const qAyatNum = q?.ayatNum;
+  const ayatText = (qSn && qAyatNum && ayatTexts[`${qSn}:${qAyatNum}`]) || "";
+  const ldQ = (qSn && qAyatNum && learnData[`${qSn}:${qAyatNum}`]) || {};
+  const prevScore = q ? ldQ.questionScores?.[q.id] : null;
+  const lastCorrect = prevScore ? prevScore[prevScore.length - 1] : null;
+  const rawAudioUrl =
+    qSn && qAyatNum && globalNums[`${qSn}:${qAyatNum}`]
+      ? `${getAudioBase()}/${globalNums[`${qSn}:${qAyatNum}`]}.mp3`
+      : null;
+
+  const toggleAudio = async () => {
+    const a = audioRef.current;
+    if (!a || !rawAudioUrl) return;
+    if (isPlaying) {
+      if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
+      a.pause();
+      setIsPlaying(false);
+      setClueMode(null);
+    } else {
+      try {
+        const playable = await getPlayableAudioUrl(rawAudioUrl);
+        a.src = playable;
+        await a.play();
+        setIsPlaying(true);
+        setClueMode("full");
+      } catch {
+        setIsPlaying(false);
+        setClueMode(null);
+      }
+    }
+  };
+
+  // Play progressive first-word audio clue
+  const playWordClueAudio = async () => {
+    const a = audioRef.current;
+    if (!a || !rawAudioUrl) return;
+    if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
+    if (isPlaying && clueMode === "word") {
+      a.pause();
+      setIsPlaying(false);
+      setClueMode(null);
+      return;
+    }
+    try {
+      const playable = await getPlayableAudioUrl(rawAudioUrl);
+      a.src = playable;
+      a.currentTime = 0;
+      await a.play();
+      setIsPlaying(true);
+      setClueMode("word");
+      const qTimestamps = timestamps?.[qSn]?.[qAyatNum];
+      const clueSec = calculateAudioClueDuration(qTimestamps, 1.4);
+      clueTimeoutRef.current = setTimeout(() => {
+        if (a && !a.paused) {
+          a.pause();
+          setIsPlaying(false);
+          setClueMode(null);
+        }
+      }, clueSec * 1000);
+    } catch {
+      setIsPlaying(false);
+      setClueMode(null);
+    }
+  };
+
+  const playFullAudio = async () => {
+    if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
+    const a = audioRef.current;
+    if (!a || !rawAudioUrl) return;
+    if (isPlaying && clueMode === "full") {
+      a.pause();
+      setIsPlaying(false);
+      setClueMode(null);
+      return;
+    }
+    try {
+      const playable = await getPlayableAudioUrl(rawAudioUrl);
+      a.src = playable;
+      await a.play();
+      setIsPlaying(true);
+      setClueMode("full");
+    } catch {
+      setIsPlaying(false);
+      setClueMode(null);
+    }
+  };
+
+  // Mobile Touch Swipe Handlers for intuitive gesture navigation
+  const handleTouchStart = (e) => {
+    if (!e.touches || e.touches.length !== 1) return;
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchStartRef.current || !e.changedTouches || e.changedTouches.length !== 1) return;
+    const dir = detectSwipeDirection({
+      startX: touchStartRef.current.x,
+      startY: touchStartRef.current.y,
+      endX: e.changedTouches[0].clientX,
+      endY: e.changedTouches[0].clientY,
+      minDistance: 55,
+      maxVerticalRatio: 1.4,
+    });
+    if (dir === "left") {
+      if (!revealed) {
+        setRevealed(true);
+        triggerQuizHaptic("success", hapticFeedback);
+      }
+    } else if (dir === "right") {
+      playWordClueAudio();
+      triggerQuizHaptic("success", hapticFeedback);
+    }
+    touchStartRef.current = null;
+  };
+
   // ── Smart Multiple Choice Options Generation ─────────────────────────────────
   const multipleChoiceOptions = React.useMemo(() => {
     if (answerMode !== "choice" || !q) return [];
@@ -780,123 +897,6 @@ export function QuestionsMode({
   }, [activeQuestions.length, _items.length]);
 
   const textsLoaded = _items.some(({ sn: s, ayatNum }) => !!ayatTexts[`${s ?? selectedSn}:${ayatNum}`]);
-
-  // Audio Playback
-  const qSn = q?.sn ?? selectedSn;
-  const qAyatNum = q?.ayatNum;
-  const ayatText = (qSn && qAyatNum && ayatTexts[`${qSn}:${qAyatNum}`]) || "";
-  const ldQ = (qSn && qAyatNum && learnData[`${qSn}:${qAyatNum}`]) || {};
-  const prevScore = q ? ldQ.questionScores?.[q.id] : null;
-  const lastCorrect = prevScore ? prevScore[prevScore.length - 1] : null;
-  const rawAudioUrl =
-    qSn && qAyatNum && globalNums[`${qSn}:${qAyatNum}`]
-      ? `${getAudioBase()}/${globalNums[`${qSn}:${qAyatNum}`]}.mp3`
-      : null;
-
-  const toggleAudio = async () => {
-    const a = audioRef.current;
-    if (!a || !rawAudioUrl) return;
-    if (isPlaying) {
-      if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
-      a.pause();
-      setIsPlaying(false);
-      setClueMode(null);
-    } else {
-      try {
-        const playable = await getPlayableAudioUrl(rawAudioUrl);
-        a.src = playable;
-        await a.play();
-        setIsPlaying(true);
-        setClueMode("full");
-      } catch {
-        setIsPlaying(false);
-        setClueMode(null);
-      }
-    }
-  };
-
-  // Play progressive first-word audio clue
-  const playWordClueAudio = async () => {
-    const a = audioRef.current;
-    if (!a || !rawAudioUrl) return;
-    if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
-    if (isPlaying && clueMode === "word") {
-      a.pause();
-      setIsPlaying(false);
-      setClueMode(null);
-      return;
-    }
-    try {
-      const playable = await getPlayableAudioUrl(rawAudioUrl);
-      a.src = playable;
-      a.currentTime = 0;
-      await a.play();
-      setIsPlaying(true);
-      setClueMode("word");
-      const qTimestamps = timestamps?.[qSn]?.[qAyatNum];
-      const clueSec = calculateAudioClueDuration(qTimestamps, 1.4);
-      clueTimeoutRef.current = setTimeout(() => {
-        if (a && !a.paused) {
-          a.pause();
-          setIsPlaying(false);
-          setClueMode(null);
-        }
-      }, clueSec * 1000);
-    } catch {
-      setIsPlaying(false);
-      setClueMode(null);
-    }
-  };
-
-  const playFullAudio = async () => {
-    if (clueTimeoutRef.current) clearTimeout(clueTimeoutRef.current);
-    const a = audioRef.current;
-    if (!a || !rawAudioUrl) return;
-    if (isPlaying && clueMode === "full") {
-      a.pause();
-      setIsPlaying(false);
-      setClueMode(null);
-      return;
-    }
-    try {
-      const playable = await getPlayableAudioUrl(rawAudioUrl);
-      a.src = playable;
-      await a.play();
-      setIsPlaying(true);
-      setClueMode("full");
-    } catch {
-      setIsPlaying(false);
-      setClueMode(null);
-    }
-  };
-
-  // Mobile Touch Swipe Handlers for intuitive gesture navigation
-  const handleTouchStart = (e) => {
-    if (!e.touches || e.touches.length !== 1) return;
-    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  };
-
-  const handleTouchEnd = (e) => {
-    if (!touchStartRef.current || !e.changedTouches || e.changedTouches.length !== 1) return;
-    const dir = detectSwipeDirection({
-      startX: touchStartRef.current.x,
-      startY: touchStartRef.current.y,
-      endX: e.changedTouches[0].clientX,
-      endY: e.changedTouches[0].clientY,
-      minDistance: 55,
-      maxVerticalRatio: 1.4,
-    });
-    if (dir === "left") {
-      if (!revealed) {
-        setRevealed(true);
-        triggerQuizHaptic("success", hapticFeedback);
-      }
-    } else if (dir === "right") {
-      playWordClueAudio();
-      triggerQuizHaptic("success", hapticFeedback);
-    }
-    touchStartRef.current = null;
-  };
 
   // Quick toggle ToRevise bookmark for current verse
   const handleToggleCurrentRevise = () => {

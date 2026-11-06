@@ -5,6 +5,7 @@ import { RECITATORS, TRANS_EDITIONS, TRANS_LABELS, setGlobalRecitator, getGlobal
 import { UX_MODES, getAvailableUxProfiles, getUxProfile } from "../../utils/uxProfileManager.js";
 
 export function OptionsModal({ onClose, onOpenReminders }) {
+  const [activeTab, setActiveTab] = useState("ux"); // "ux" | "settings"
   const dispatch = useDispatch();
   const uxMode                = useSelector(sel.uxMode);
   const showBeginnerGuides    = useSelector(sel.showBeginnerGuides);
@@ -64,65 +65,139 @@ export function OptionsModal({ onClose, onOpenReminders }) {
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
           padding:"14px 20px 10px", borderBottom:"1px solid var(--border)",
           position:"sticky", top:0, background:"var(--surface)", zIndex:1 }}>
-          <span style={{ fontSize:10, letterSpacing:3, color:"var(--gold2)", fontFamily:"'Cinzel',serif" }}>⚙ OPTIONS</span>
+          <span style={{ fontSize:10, letterSpacing:3, color:"var(--gold2)", fontFamily:"'Cinzel',serif" }}>⚙ OPTIONS & PROFILS</span>
           <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--text3)", fontSize:18, cursor:"pointer" }}>✕</button>
         </div>
+
+        {/* ── Modal Tabs Bar ────────────────────────────────────────────── */}
+        <div style={{
+          display: "flex",
+          padding: "8px 20px 0",
+          gap: 8,
+          borderBottom: "1px solid var(--border)",
+          background: "var(--surface)",
+        }}>
+          {[
+            { id: "ux", icon: "🧭", label: "MODE & PROFIL" },
+            { id: "settings", icon: "⚙️", label: "RÉGLAGES D'AFFICHAGE" },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                id={`options-tab-${tab.id}`}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: "8px 14px",
+                  fontFamily: "'Cinzel', serif",
+                  fontSize: 10,
+                  fontWeight: isActive ? 700 : 500,
+                  letterSpacing: 1,
+                  background: isActive ? "rgba(201, 168, 76, 0.16)" : "transparent",
+                  border: "none",
+                  borderBottom: isActive ? "2px solid var(--gold)" : "2px solid transparent",
+                  borderRadius: "6px 6px 0 0",
+                  color: isActive ? "var(--gold2)" : "var(--text3)",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  transition: "all .15s",
+                }}
+              >
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
         <div style={{ padding:"0 20px calc(32px + env(safe-area-inset-bottom, 0px))" }}>
-          <Section title="PROFIL & EXPÉRIENCE UTILISATEUR" />
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
-            gap: 8,
-            paddingTop: 6,
-            paddingBottom: 10,
-            borderBottom: "1px solid var(--border)"
-          }}>
-            {getAvailableUxProfiles().map((p) => {
-              const active = uxMode === p.id;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => dispatch(uiActions.setUxMode(p.id))}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    border: active ? "1.5px solid var(--gold)" : "1px solid var(--border2)",
-                    background: active ? "rgba(201, 168, 76, 0.15)" : "var(--surface2)",
-                    color: active ? "var(--gold2)" : "var(--text2)",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    transition: "all .15s",
-                  }}
-                >
-                  <span style={{ fontSize: 16 }}>{p.icon}</span>
-                  <div style={{ minWidth: 0, overflow: "hidden" }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, fontFamily: "'Cinzel', serif", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                      {p.shortLabel}
-                    </div>
-                    <div style={{ fontSize: 8, color: "var(--text3)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
-                      {p.name}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-          <Row
-            label="AIDES ET CONSEILS PAS-À-PAS"
-            desc="Affiche des conseils guidés pour les débutants"
-            on={showBeginnerGuides}
-            onToggle={() => dispatch(uiActions.toggleBeginnerGuides())}
-            color="var(--gold)"
-          />
-          <Section title="PERFORMANCE" />
-          <Row label="TIMESTAMPS" desc="Synchronisation audio — désactiver accélère le chargement" on={enableTimestamps} onToggle={() => dispatch(uiActions.toggleEnableTimestamps())} color="var(--teal2)" />
-          <Row label="LETTRE PAR LETTRE" desc="Surlignage animé pendant la lecture audio" on={enableLetterByLetter} onToggle={() => dispatch(uiActions.toggleEnableLetterByLetter())} color="#5bc8f5" />
-          <Row label="ANIMATIONS" desc="Transitions entre pages" on={enableAnimations} onToggle={() => dispatch(uiActions.toggleEnableAnimations())} color="var(--gold2)" />
-          <Row label="CALCULS AVANCÉS" desc="Maîtrise par ayat, stats sourates — désactiver accélère le rendu" on={enableHeavyCompute} onToggle={() => dispatch(uiActions.toggleEnableHeavyCompute())} color="#c878ff" />
+          {activeTab === "ux" && (
+            <>
+              <Section title="CHOISIR LE MODE D'INTERFACE" />
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, 1fr)",
+                gap: 8,
+                paddingTop: 8,
+                paddingBottom: 12,
+                borderBottom: "1px solid var(--border)"
+              }}>
+                {getAvailableUxProfiles().map((p) => {
+                  const active = uxMode === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      id={`opt-profile-${p.id}`}
+                      onClick={() => dispatch(uiActions.setUxMode(p.id))}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        border: active ? "1.5px solid var(--gold)" : "1px solid var(--border2)",
+                        background: active ? "rgba(201, 168, 76, 0.15)" : "var(--surface2)",
+                        color: active ? "var(--gold2)" : "var(--text2)",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        transition: "all .15s",
+                      }}
+                    >
+                      <span style={{ fontSize: 20 }}>{p.icon}</span>
+                      <div style={{ minWidth: 0, overflow: "hidden" }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "'Cinzel', serif", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                          {p.shortLabel} {active ? "✓" : ""}
+                        </div>
+                        <div style={{ fontSize: 8.5, color: "var(--text3)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                          {p.name}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Profile Details Card */}
+              <div style={{
+                marginTop: 12,
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: "var(--surface2)",
+                border: "1px solid rgba(201, 168, 76, 0.25)",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--gold2)", fontWeight: 700, fontSize: 12, fontFamily: "'Cinzel', serif" }}>
+                  <span>{currentProfile.icon}</span>
+                  <span>{currentProfile.name}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 4, lineHeight: 1.4 }}>
+                  {currentProfile.description}
+                </div>
+                <div style={{ fontSize: 9.5, color: "var(--text3)", marginTop: 4 }}>
+                  Public recommandé : {currentProfile.targetAudience}
+                </div>
+              </div>
+
+              <Row
+                label="AIDES ET CONSEILS PAS-À-PAS"
+                desc="Affiche des conseils guidés pour les débutants"
+                on={showBeginnerGuides}
+                onToggle={() => dispatch(uiActions.toggleBeginnerGuides())}
+                color="var(--gold)"
+              />
+            </>
+          )}
+
+          {activeTab === "settings" && (
+            <>
+              <Section title="PERFORMANCE" />
+              <Row label="TIMESTAMPS" desc="Synchronisation audio — désactiver accélère le chargement" on={enableTimestamps} onToggle={() => dispatch(uiActions.toggleEnableTimestamps())} color="var(--teal2)" />
+              <Row label="LETTRE PAR LETTRE" desc="Surlignage animé pendant la lecture audio" on={enableLetterByLetter} onToggle={() => dispatch(uiActions.toggleEnableLetterByLetter())} color="#5bc8f5" />
+              <Row label="ANIMATIONS" desc="Transitions entre pages" on={enableAnimations} onToggle={() => dispatch(uiActions.toggleEnableAnimations())} color="var(--gold2)" />
+              <Row label="CALCULS AVANCÉS" desc="Maîtrise par ayat, stats sourates — désactiver accélère le rendu" on={enableHeavyCompute} onToggle={() => dispatch(uiActions.toggleEnableHeavyCompute())} color="#c878ff" />
           <Section title="TAJWEED" />
           <Row label="QALQALA قلقلة" on={showQalqala} onToggle={() => dispatch(uiActions.toggleQalqala())} color="#5bc8f5" />
           <Row label="MADD مَدّ" on={showMadd} onToggle={() => dispatch(uiActions.toggleMadd())} color="#f09de0" />
@@ -246,6 +321,8 @@ export function OptionsModal({ onClose, onOpenReminders }) {
                   <span>➜</span>
                 </button>
               </div>
+            </>
+          )}
             </>
           )}
         </div>

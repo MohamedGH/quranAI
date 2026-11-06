@@ -2266,31 +2266,20 @@ function AppInner({ currentUser, onSignOut }) {
               🎤
             </button>
 
-            {/* Quick UX Mode Selector Button */}
+            {/* Interactive UX Mode Badge: ALWAYS visible, never squished */}
             <button
-              id="header-ux-mode-btn"
-              className={`header-tool-btn ux-mode-btn-${uxMode}`}
-              onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
-              title={`Mode d'interface : ${currentUxProfile.name} (Cliquez pour changer)`}
-              aria-label="Changer le mode d'interface"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: '4px 10px',
-                borderRadius: 8,
-                background: isBeginner ? 'rgba(46, 196, 182, 0.16)' : isChild ? 'rgba(255, 183, 3, 0.16)' : 'rgba(255, 255, 255, 0.05)',
-                border: isBeginner ? '1px solid var(--teal2)' : isChild ? '1px solid #ffb703' : '1px solid rgba(255, 255, 255, 0.1)',
-                color: isBeginner ? 'var(--teal2)' : isChild ? '#ffb703' : 'var(--text2)',
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: 'pointer',
+              id="header-ux-mode-badge"
+              className={`header-ux-badge ux-${uxMode}`}
+              onClick={() => {
+                setHeaderToolsInitialTab('ux');
+                setShowHeaderToolsModal(true);
               }}
+              title={`Mode actif : ${currentUxProfile.name} (Cliquez pour changer)`}
+              aria-label={`Mode d'interface : ${currentUxProfile.name}`}
             >
-              <span style={{ fontSize: 13 }}>{currentUxProfile.icon}</span>
-              <span className="desktop-only" style={{ fontFamily: "'Cinzel', serif", letterSpacing: 0.5 }}>
-                {currentUxProfile.shortLabel.toUpperCase()}
-              </span>
+              <span className="ux-badge-icon">{currentUxProfile.icon}</span>
+              <span className="ux-badge-label">{currentUxProfile.shortLabel.toUpperCase()}</span>
+              <span className="ux-badge-chevron">▾</span>
             </button>
 
             {/* Outils & Aides d'étude Modal Button */}

@@ -136,21 +136,19 @@ export function HeaderToolsModal({
         <div
           style={{
             display: 'flex',
-            padding: '8px 14px 0',
+            flexWrap: 'wrap',
+            padding: '10px 14px 8px',
             gap: 6,
-            borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-            overflowX: 'auto',
-            WebkitOverflowScrolling: 'touch',
-            maxWidth: '100%',
-            scrollbarWidth: 'none',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'rgba(255, 255, 255, 0.02)',
           }}
         >
           {[
-            { id: 'tools', label: '🎛️ OUTILS D\'ÉTUDE' },
-            { id: 'ux', label: '🧭 MODE & PROFIL' },
-            { id: 'voice', label: '🎤 VOCAL & AIDE' },
-            { id: 'offline', label: '📥 HORS-LIGNE & PWA' },
-            { id: 'account', label: '👤 MON COMPTE' }
+            { id: 'tools', icon: '🎛️', label: 'OUTILS' },
+            { id: 'ux', icon: '🧭', label: 'MODE & PROFIL' },
+            { id: 'voice', icon: '🎤', label: 'VOCAL' },
+            { id: 'offline', icon: '📥', label: 'HORS-LIGNE' },
+            { id: 'account', icon: '👤', label: 'COMPTE' }
           ].map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -159,23 +157,28 @@ export function HeaderToolsModal({
                 id={`modal-tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
                 style={{
-                  padding: '8px 12px',
+                  flex: '1 1 auto',
+                  padding: '7px 11px',
                   fontFamily: "'Cinzel', serif",
-                  fontSize: 9,
-                  fontWeight: isActive ? 700 : 500,
-                  letterSpacing: 1,
-                  background: isActive ? 'rgba(201, 168, 76, 0.12)' : 'transparent',
-                  border: 'none',
-                  borderBottom: isActive ? '2px solid var(--gold)' : '2px solid transparent',
-                  borderRadius: '6px 6px 0 0',
-                  color: isActive ? 'var(--gold2)' : 'var(--text3)',
+                  fontSize: 9.5,
+                  fontWeight: isActive ? 700 : 600,
+                  letterSpacing: 0.8,
+                  background: isActive ? 'rgba(201, 168, 76, 0.18)' : 'rgba(255, 255, 255, 0.04)',
+                  border: isActive ? '1px solid var(--gold)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: 8,
+                  color: isActive ? 'var(--gold2)' : 'var(--text2)',
                   cursor: 'pointer',
                   transition: 'all .15s',
-                  flexShrink: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 5,
                   whiteSpace: 'nowrap',
+                  boxShadow: isActive ? '0 0 10px rgba(201, 168, 76, 0.2)' : 'none',
                 }}
               >
-                {tab.label}
+                <span style={{ fontSize: 13 }}>{tab.icon}</span>
+                <span>{tab.label}</span>
               </button>
             );
           })}

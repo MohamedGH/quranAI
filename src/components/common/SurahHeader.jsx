@@ -4,6 +4,7 @@ import { sel, uiActions, playerActions } from "../../store.js";
 import { masteryColor, computeMastery, computeDisplayedPartMastery } from "./Mastery.jsx";
 import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
+import { getUxProfile } from "../../utils/uxProfileManager.js";
 
 export function SurahHeader({
   selectedSurah,
@@ -94,6 +95,8 @@ export function SurahHeader({
   const activeTjColors = getActiveTajweedColors(tajweedPalette, tajweedCustomColors);
   const isCoachEnabled = useSelector(sel.tajweedCoachEnabled);
   const cachedSurahsMap = useSelector(sel.cachedSurahsMap);
+  const uxMode = useSelector(sel.uxMode);
+  const currentUx = getUxProfile(uxMode);
 
   // Redux Tajweed selectors with fallback for robust activation
   const storeShowQalqala     = useSelector(sel.showQalqala);
@@ -473,6 +476,24 @@ export function SurahHeader({
         >
           <span className="m-act-icon">🌐</span>
           <span className="m-act-label">{translationLang ? langLabel : "TRAD."}</span>
+        </button>
+
+        {/* 3b. UX Mode Interactive Badge */}
+        <button
+          id="surah-header-ux-badge"
+          onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
+          className={`m-action-btn ux-mode-btn ${uxMode}`}
+          title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
+          style={{
+            borderColor: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'rgba(201,168,76,.4)',
+            background: uxMode === 'beginner' ? 'rgba(46,196,182,0.18)' : uxMode === 'child' ? 'rgba(255,183,3,0.18)' : uxMode === 'expert' ? 'rgba(200,120,255,0.18)' : 'rgba(201,168,76,0.12)',
+            color: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'var(--gold2)',
+            fontWeight: 700,
+          }}
+        >
+          <span className="m-act-icon">{currentUx.icon}</span>
+          <span className="m-act-label">{currentUx.shortLabel.toUpperCase()}</span>
+          <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
         </button>
 
         {/* 4. Reading Modes & Display Options */}
@@ -1085,6 +1106,56 @@ export function SurahHeader({
               <span className="m-drawer-title">OPTIONS DE LECTURE & AFFICHAGE</span>
             </div>
             <button className="m-drawer-close" onClick={() => setShowOptionsDrawer(false)}>✕</button>
+          </div>
+
+          {/* ── Mode & Profil UX Quick Card ── */}
+          <div
+            id="options-drawer-ux-mode-card"
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: uxMode === 'beginner' ? 'rgba(46,196,182,0.1)' : uxMode === 'child' ? 'rgba(255,183,3,0.1)' : uxMode === 'expert' ? 'rgba(200,120,255,0.1)' : 'rgba(201,168,76,0.08)',
+              border: `1px solid ${uxMode === 'beginner' ? 'rgba(46,196,182,0.3)' : uxMode === 'child' ? 'rgba(255,183,3,0.3)' : uxMode === 'expert' ? 'rgba(200,120,255,0.3)' : 'rgba(201,168,76,0.3)'}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              <span style={{ fontSize: 18 }}>{currentUx.icon}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 700, color: "var(--gold2)", fontFamily: "'Cinzel', serif" }}>
+                  MODE : {currentUx.name.toUpperCase()}
+                </div>
+                <div style={{ fontSize: 8.5, color: "var(--textSub)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {currentUx.tagline}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowOptionsDrawer(false);
+                dispatch(uiActions.setShowUxModeModal(true));
+              }}
+              style={{
+                fontSize: 8.5,
+                fontWeight: 700,
+                padding: "4px 8px",
+                borderRadius: 6,
+                background: "rgba(201,168,76,0.16)",
+                border: "1px solid rgba(201,168,76,0.35)",
+                color: "var(--gold2)",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              🧭 CHANGER
+            </button>
           </div>
 
           {/* ── Verse Text Size Adjuster ── */}

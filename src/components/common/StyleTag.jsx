@@ -108,6 +108,64 @@ export const CSS = `
   }
   .header-tool-btn .tool-icon{ font-size:13px; line-height:1; }
 
+  /* ── Header UX Mode Badge ── */
+  .header-ux-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    height: 32px !important;
+    padding: 0 10px !important;
+    border-radius: 9px !important;
+    font-family: 'Cinzel', serif !important;
+    font-size: 9.5px !important;
+    font-weight: 700 !important;
+    letter-spacing: .8px !important;
+    cursor: pointer !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    border: 1.5px solid rgba(201, 168, 76, 0.45) !important;
+    background: rgba(201, 168, 76, 0.12) !important;
+    color: var(--gold2) !important;
+    transition: all .2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    -webkit-tap-highlight-color: transparent !important;
+  }
+  .header-ux-badge:hover {
+    border-color: var(--gold) !important;
+    background: rgba(201, 168, 76, 0.22) !important;
+    box-shadow: 0 0 12px rgba(201, 168, 76, 0.3) !important;
+    transform: translateY(-1px);
+  }
+  .header-ux-badge:active {
+    transform: scale(0.96);
+  }
+  .header-ux-badge.ux-beginner {
+    border-color: rgba(46, 196, 182, 0.6) !important;
+    background: rgba(46, 196, 182, 0.18) !important;
+    color: var(--teal2) !important;
+  }
+  .header-ux-badge.ux-child {
+    border-color: rgba(255, 183, 3, 0.6) !important;
+    background: rgba(255, 183, 3, 0.18) !important;
+    color: #ffb703 !important;
+  }
+  .header-ux-badge.ux-expert {
+    border-color: rgba(200, 120, 255, 0.6) !important;
+    background: rgba(200, 120, 255, 0.18) !important;
+    color: #c878ff !important;
+  }
+  .header-ux-badge .ux-badge-icon {
+    font-size: 13px !important;
+    line-height: 1 !important;
+  }
+  .header-ux-badge .ux-badge-label {
+    display: inline-block !important;
+    font-weight: 700 !important;
+  }
+  .header-ux-badge .ux-badge-chevron {
+    font-size: 9px !important;
+    opacity: 0.75 !important;
+  }
+
   .header-user-btn{display:flex;align-items:center;justify-content:center;padding:2px;border-radius:50%;border:1.5px solid rgba(201,168,76,.35);background:transparent;cursor:pointer;transition:all .2s cubic-bezier(0.4, 0, 0.2, 1);flex-shrink:0;-webkit-tap-highlight-color:transparent;}
   .header-user-btn:hover,.header-user-btn.active{border-color:var(--gold2);box-shadow:0 0 12px rgba(201,168,76,.35);transform:scale(1.05);}
   .header-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;}
@@ -2169,6 +2227,9 @@ export const CSS = `
     .header-tool-btn{ width:30px; height:30px; padding:0; justify-content:center; border-radius:7px; }
     .header-tool-btn .tool-label{ display:none; }
     .desktop-only-action{ display:none !important; }
+    .header-ux-badge{ height:26px !important; padding:0 6px !important; font-size:8px !important; gap:3px !important; border-radius:6px !important; }
+    .header-ux-badge .ux-badge-label{ font-size:8px !important; }
+    .header-ux-badge .ux-badge-icon{ font-size:11px !important; }
     
     .header-user-btn{ width:30px; height:30px; }
     .header-avatar,.header-avatar-placeholder{ width:25px; height:25px; font-size:10px; }

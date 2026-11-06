@@ -46,6 +46,9 @@ const uiSlice = createSlice({
     ayatFilterActive:    false,
     dashboardRevisionGroupBy: load("quran_dashboardRevisionGroupBy", "surah"),
     dashboardRevisionCollapsedGroups: load("quran_dashboardRevisionCollapsedGroups", {}),
+    uxMode:              load("quran_uxMode", "standard"),
+    showUxModeModal:     false,
+    showBeginnerGuides:  load("quran_showBeginnerGuides", true),
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -238,6 +241,49 @@ const uiSlice = createSlice({
     setDashboardRevisionAllGroupsCollapsed: (s, a) => {
       s.dashboardRevisionCollapsedGroups = a.payload || {};
       save("quran_dashboardRevisionCollapsedGroups", s.dashboardRevisionCollapsedGroups);
+    },
+    setUxMode: (s, a) => {
+      const mode = ["beginner", "standard", "expert", "child"].includes(a.payload)
+        ? a.payload
+        : "standard";
+      s.uxMode = mode;
+      save("quran_uxMode", mode);
+      if (mode === "beginner") {
+        s.ayatFontSize = 32;
+        s.enableAnimations = false;
+        s.showBeginnerGuides = true;
+        save("quran_ayatFontSize", 32);
+        save("quran_enableAnimations", false);
+        save("quran_showBeginnerGuides", true);
+      } else if (mode === "child") {
+        s.ayatFontSize = 34;
+        s.enableAnimations = true;
+        s.showBeginnerGuides = true;
+        save("quran_ayatFontSize", 34);
+        save("quran_enableAnimations", true);
+        save("quran_showBeginnerGuides", true);
+      } else if (mode === "expert") {
+        s.enableAnimations = true;
+        s.enableTimestamps = true;
+        s.enableLetterByLetter = true;
+        s.enableHeavyCompute = true;
+        s.showBeginnerGuides = false;
+        save("quran_showBeginnerGuides", false);
+      }
+    },
+    setShowUxModeModal: (s, a) => {
+      s.showUxModeModal = Boolean(a.payload);
+    },
+    toggleShowUxModeModal: (s) => {
+      s.showUxModeModal = !s.showUxModeModal;
+    },
+    setShowBeginnerGuides: (s, a) => {
+      s.showBeginnerGuides = Boolean(a.payload);
+      save("quran_showBeginnerGuides", s.showBeginnerGuides);
+    },
+    toggleBeginnerGuides: (s) => {
+      s.showBeginnerGuides = !s.showBeginnerGuides;
+      save("quran_showBeginnerGuides", s.showBeginnerGuides);
     },
   },
   extraReducers: (builder) => {
@@ -927,6 +973,12 @@ export const sel = {
   isAnyFilterActive:   (s) => !!s.ui.masteryFilterActive || !!s.ui.ayatFilterActive,
   dashboardRevisionGroupBy: (s) => s.ui.dashboardRevisionGroupBy || "surah",
   dashboardRevisionCollapsedGroups: (s) => s.ui.dashboardRevisionCollapsedGroups || {},
+  uxMode:              (s) => s.ui.uxMode || "standard",
+  isBeginnerUx:        (s) => (s.ui.uxMode || "standard") === "beginner",
+  isExpertUx:          (s) => (s.ui.uxMode || "standard") === "expert",
+  isChildUx:           (s) => (s.ui.uxMode || "standard") === "child",
+  showUxModeModal:     (s) => Boolean(s.ui.showUxModeModal),
+  showBeginnerGuides:  (s) => s.ui.showBeginnerGuides !== false,
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

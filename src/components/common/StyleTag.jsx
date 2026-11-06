@@ -2630,6 +2630,35 @@ export const CSS = `
     100% { transform: translateY(0) scale(1); opacity: 1; }
   }
 
+  /* ── UX Profile Enhancements ── */
+  .ux-profile-beginner .ayat-row {
+    padding: 18px 16px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+  }
+  .ux-profile-beginner .ayat-arabic {
+    line-height: 2.3;
+    font-size: calc(var(--ayat-font-size, 32px));
+  }
+  .ux-profile-beginner .ayat-trans {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .ux-profile-beginner button {
+    min-height: 44px;
+  }
+  .ux-profile-child .ayat-arabic {
+    font-size: calc(var(--ayat-font-size, 34px));
+    line-height: 2.4;
+  }
+  .ux-profile-child .ayat-row {
+    border-radius: 16px;
+  }
+  .ux-profile-expert .ayat-arabic {
+    line-height: 2.0;
+  }
+
   @media(max-width:700px){.concord-page{padding:16px 14px 80px;}.concord-ayat-text{font-size:var(--ayat-font-size, 18px);}.concord-search-bar input{font-size:16px;}}
 
 `;

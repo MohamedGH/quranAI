@@ -17,6 +17,9 @@ import { MasteryBar, MasteryBadge, MasteryDebug, computeMastery, computeDisplaye
 import { RappelWidget } from "./components/common/RappelWidget.jsx";
 import { ScheduledRemindersModal } from "./components/common/ScheduledRemindersModal.jsx";
 import { HeaderToolsModal } from "./components/common/HeaderToolsModal.jsx";
+import { UxModeSelectorModal } from "./components/common/UxModeSelectorModal.jsx";
+import { BeginnerGuideBanner } from "./components/common/BeginnerGuideBanner.jsx";
+import { getUxProfile, getUxModeClassName } from "./utils/uxProfileManager.js";
 import { NotificationToast } from "./components/common/NotificationToast.jsx";
 import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
@@ -136,6 +139,11 @@ function AppInner({ currentUser, onSignOut }) {
   const learnData       = useSelector(sel.learnData, shallowEqual);
   const collections     = useSelector(sel.collections, shallowEqual);
   const collModal       = useSelector(sel.collModal);
+  const uxMode          = useSelector(sel.uxMode);
+  const isBeginner      = useSelector(sel.isBeginnerUx);
+  const isChild         = useSelector(sel.isChildUx);
+  const showUxModeModal = useSelector(sel.showUxModeModal);
+  const currentUxProfile = useMemo(() => getUxProfile(uxMode), [uxMode]);
   // ── High-frequency play state → refs + version counter (avoids full re-render) ──
   const playingAyatNumRef = useRef(null);
   const isMainPlayingRef  = useRef(false);
@@ -194,6 +202,13 @@ function AppInner({ currentUser, onSignOut }) {
   const activePage      = parsedRoute.activePage || urlSegs[0] || 'quran';
   const urlSurahNum     = parsedRoute.surahNum ?? parseInt(urlSegs[1]);
   const urlAyatNum      = parsedRoute.ayatNum ?? parseInt(urlSegs[2]);
+
+  // ── Sync URL ux param → Redux ──
+  useEffect(() => {
+    if (parsedRoute.uxMode) {
+      dispatch(uiActions.setUxMode(parsedRoute.uxMode));
+    }
+  }, [parsedRoute.uxMode, dispatch]);
 
   // ── Sync URL → Redux (selectedSurah, openAyatNum) ──
   useEffect(() => {
@@ -2189,7 +2204,7 @@ function AppInner({ currentUser, onSignOut }) {
     <ArabicKeyboardContext.Provider value={{ show: showArabicKeyboard, setShow: setShowArabicKeyboard, activeInput: activeArabicInput }}>
     <>
       <StyleTag />
-      <div className="app" onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
+      <div className={`app ${getUxModeClassName(uxMode)}`} onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
         <header className="header">
           {/* Left Branding / Hamburger group */}
           <div className="header-left">
@@ -2249,6 +2264,33 @@ function AppInner({ currentUser, onSignOut }) {
               aria-label="Commande vocale"
             >
               🎤
+            </button>
+
+            {/* Quick UX Mode Selector Button */}
+            <button
+              id="header-ux-mode-btn"
+              className={`header-tool-btn ux-mode-btn-${uxMode}`}
+              onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
+              title={`Mode d'interface : ${currentUxProfile.name} (Cliquez pour changer)`}
+              aria-label="Changer le mode d'interface"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 10px',
+                borderRadius: 8,
+                background: isBeginner ? 'rgba(46, 196, 182, 0.16)' : isChild ? 'rgba(255, 183, 3, 0.16)' : 'rgba(255, 255, 255, 0.05)',
+                border: isBeginner ? '1px solid var(--teal2)' : isChild ? '1px solid #ffb703' : '1px solid rgba(255, 255, 255, 0.1)',
+                color: isBeginner ? 'var(--teal2)' : isChild ? '#ffb703' : 'var(--text2)',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ fontSize: 13 }}>{currentUxProfile.icon}</span>
+              <span className="desktop-only" style={{ fontFamily: "'Cinzel', serif", letterSpacing: 0.5 }}>
+                {currentUxProfile.shortLabel.toUpperCase()}
+              </span>
             </button>
 
             {/* Outils & Aides d'étude Modal Button */}
@@ -2632,6 +2674,7 @@ function AppInner({ currentUser, onSignOut }) {
             <Route path="/book3d" element={<Navigate to="/quran/book3d" replace />} />
             <Route path="/quran/:surahNum?/:ayatNum?" element={(
             <AnimatedPage pageKey="quran"><main className="main">
+              <BeginnerGuideBanner context="quran" />
               {!selectedSurah ? (
               <div className="empty-state">
                 <div className="empty-arabic">القرآن الكريم</div>
@@ -4302,6 +4345,12 @@ function AppInner({ currentUser, onSignOut }) {
           selectedSurah={selectedSurah}
           activeHizb={resolvedActiveHizb || activeHizbCoran}
           initialTab={headerToolsInitialTab}
+        />
+
+        {/* UX MODE SELECTOR MODAL */}
+        <UxModeSelectorModal
+          isOpen={showUxModeModal}
+          onClose={() => dispatch(uiActions.setShowUxModeModal(false))}
         />
 
         {/* AYAT FULL SCREEN (FOCUS) MODAL */}

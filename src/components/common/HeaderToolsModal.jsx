@@ -4,6 +4,7 @@ import { sel, uiActions } from "../../store.js";
 import { OfflineLoader } from "./OfflineLoader.jsx";
 import { PWAInstallButton } from "./PWAInstallButton.jsx";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus.js";
+import { getAvailableUxProfiles, getUxProfile, isValidUxMode } from "../../utils/uxProfileManager.js";
 
 export function HeaderToolsModal({
   isOpen,
@@ -27,6 +28,8 @@ export function HeaderToolsModal({
   const dispatch = useDispatch();
   const fullScreenSelectedAyat = useSelector(sel.fullScreenSelectedAyat);
   const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
+  const uxMode = useSelector(sel.uxMode);
+  const showBeginnerGuides = useSelector(sel.showBeginnerGuides);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -144,6 +147,7 @@ export function HeaderToolsModal({
         >
           {[
             { id: 'tools', label: '🎛️ OUTILS D\'ÉTUDE' },
+            { id: 'ux', label: '🧭 MODE & PROFIL' },
             { id: 'voice', label: '🎤 VOCAL & AIDE' },
             { id: 'offline', label: '📥 HORS-LIGNE & PWA' },
             { id: 'account', label: '👤 MON COMPTE' }
@@ -182,6 +186,63 @@ export function HeaderToolsModal({
           {/* TAB 1: OUTILS D'ÉTUDE */}
           {activeTab === 'tools' && (
             <>
+              {/* Profil d'Interface UX Actif */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'var(--surface2)',
+                  border: '1px solid rgba(201, 168, 76, 0.35)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      background: 'rgba(201, 168, 76, 0.14)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                    }}
+                  >
+                    {getUxProfile(uxMode).icon}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)', fontFamily: "'Cinzel', serif" }}>
+                      PROFIL UX : {getUxProfile(uxMode).name.toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+                      {getUxProfile(uxMode).targetAudience}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('ux')}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: 6,
+                    border: '1px solid var(--gold)',
+                    background: 'rgba(201, 168, 76, 0.12)',
+                    color: 'var(--gold2)',
+                    fontSize: 9,
+                    fontFamily: "'Cinzel', serif",
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  CHANGER
+                </button>
+              </div>
+
               {/* Taille du Texte des Versets */}
               <div
                 style={{
@@ -763,6 +824,128 @@ export function HeaderToolsModal({
                 onDownloadDone={() => {}}
               />
             </>
+          )}
+
+          {/* TAB: MODE & PROFIL UX */}
+          {activeTab === 'ux' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.5 }}>
+                Choisissez le niveau d'interface adapté à vos besoins (novice, débutant, standard, expert, enfant).
+              </div>
+
+              {getAvailableUxProfiles().map((p) => {
+                const isSelected = uxMode === p.id;
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => dispatch(uiActions.setUxMode(p.id))}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                      padding: '12px 14px',
+                      borderRadius: 10,
+                      cursor: 'pointer',
+                      border: isSelected
+                        ? '2px solid var(--gold)'
+                        : '1px solid rgba(255, 255, 255, 0.08)',
+                      background: isSelected
+                        ? 'rgba(201, 168, 76, 0.12)'
+                        : 'var(--surface2)',
+                      transition: 'all .15s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 20 }}>{p.icon}</span>
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: isSelected ? 'var(--gold2)' : 'var(--text)', fontFamily: "'Cinzel', serif" }}>
+                            {p.name}
+                          </span>
+                          {isSelected && (
+                            <span style={{ marginLeft: 8, fontSize: 9, color: 'var(--gold)', fontWeight: 600 }}>
+                              · ACTIF
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          border: isSelected ? '2px solid var(--gold)' : '2px solid var(--border2)',
+                          background: isSelected ? 'var(--gold)' : 'transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10131d' }} />}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text2)', lineHeight: 1.4 }}>
+                      {p.description}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--text3)' }}>
+                      Idéal pour : {p.targetAudience}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'var(--surface2)',
+                  border: '1px solid var(--border2)',
+                  marginTop: 4,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>
+                    Aides et infobulles pas-à-pas
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+                    Affiche des conseils pour guider la lecture
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dispatch(uiActions.toggleBeginnerGuides())}
+                  role="switch"
+                  aria-checked={showBeginnerGuides}
+                  style={{
+                    width: 40,
+                    height: 22,
+                    borderRadius: 11,
+                    cursor: 'pointer',
+                    background: showBeginnerGuides ? 'var(--gold)' : 'rgba(255, 255, 255, 0.15)',
+                    border: 'none',
+                    position: 'relative',
+                    transition: 'background .2s',
+                    padding: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      left: showBeginnerGuides ? 20 : 2,
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: '#fff',
+                      transition: 'left .2s',
+                    }}
+                  />
+                </button>
+              </div>
+            </div>
           )}
 
           {/* TAB 3: MON COMPTE */}

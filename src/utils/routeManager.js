@@ -54,6 +54,9 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       const silenceModeParam = params.get("silenceMode");
       const silenceMode = silenceModeParam === "skip" ? "skip" : silenceModeParam === "mute" ? "mute" : null;
 
+      const uxParam = params.get("ux") || params.get("uxMode");
+      const uxMode = ["beginner", "standard", "expert", "child"].includes(uxParam) ? uxParam : null;
+
       return Object.freeze({
         activePage,
         surahNum,
@@ -66,6 +69,7 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
         page,
         silenceRevise,
         silenceMode,
+        uxMode,
       });
     },
     Object.freeze({
@@ -80,6 +84,7 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       page: null,
       silenceRevise: false,
       silenceMode: null,
+      uxMode: null,
     }),
     { code: ERROR_CODES.ROUTE_PARSE_ERROR, pathname, search }
   ).value;
@@ -99,9 +104,18 @@ export const buildQuranRoute = ({
   page = null,
   silenceRevise = false,
   silenceMode = null,
+  uxMode = null,
+  ux = null,
 } = {}) => {
+  const query = new URLSearchParams();
+  const effectiveUx = uxMode || ux;
+  if (effectiveUx && ["beginner", "standard", "expert", "child"].includes(effectiveUx)) {
+    query.set("ux", effectiveUx);
+  }
+
   if (activePage && activePage !== "quran") {
-    return `/${activePage}`;
+    const qs = query.toString();
+    return qs ? `/${activePage}?${qs}` : `/${activePage}`;
   }
   const sn = Number(surahNum);
   const hasSurah = Number.isFinite(sn) && sn >= 1 && sn <= 114;
@@ -115,7 +129,6 @@ export const buildQuranRoute = ({
       : `/quran/${sn}`
     : "/quran";
 
-  const query = new URLSearchParams();
   if (mode && ["page", "hizb", "juz"].includes(mode)) query.set("mode", mode);
   const targetHizb = hizb ?? hizbNum;
   if (targetHizb != null && clampHizbNumber(targetHizb)) query.set("hizb", String(clampHizbNumber(targetHizb)));
@@ -135,6 +148,17 @@ export const buildQuranRoute = ({
 
   const qs = query.toString();
   return qs ? `${basePath}?${qs}` : basePath;
+};
+
+/**
+ * Purely updates or replaces UX mode parameter in a route URL.
+ */
+export const setRouteUxMode = (pathname = "/quran", search = "", uxMode = "standard") => {
+  const parsed = parseQuranRoute(pathname, search);
+  return buildQuranRoute({
+    ...parsed,
+    uxMode,
+  });
 };
 
 /**

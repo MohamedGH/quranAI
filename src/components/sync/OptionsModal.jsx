@@ -2,9 +2,12 @@ import React, { useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { sel, act, uiActions } from "../../store.js";
 import { RECITATORS, TRANS_EDITIONS, TRANS_LABELS, setGlobalRecitator, getGlobalRecitator } from "../../utils/reciterAudio.js";
+import { UX_MODES, getAvailableUxProfiles, getUxProfile } from "../../utils/uxProfileManager.js";
 
 export function OptionsModal({ onClose, onOpenReminders }) {
   const dispatch = useDispatch();
+  const uxMode                = useSelector(sel.uxMode);
+  const showBeginnerGuides    = useSelector(sel.showBeginnerGuides);
   const enableTimestamps      = useSelector(sel.enableTimestamps);
   const enableLetterByLetter  = useSelector(sel.enableLetterByLetter);
   const enableAnimations      = useSelector(sel.enableAnimations);
@@ -46,6 +49,8 @@ export function OptionsModal({ onClose, onOpenReminders }) {
     <div style={{ fontSize:8, letterSpacing:2, color:"var(--text3)", paddingTop:16, paddingBottom:2 }}>{title}</div>
   );
 
+  const currentProfile = getUxProfile(uxMode);
+
   return (
     <div onClick={onClose} style={{
       position:"fixed", inset:0, zIndex:2000,
@@ -63,6 +68,56 @@ export function OptionsModal({ onClose, onOpenReminders }) {
           <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--text3)", fontSize:18, cursor:"pointer" }}>✕</button>
         </div>
         <div style={{ padding:"0 20px calc(32px + env(safe-area-inset-bottom, 0px))" }}>
+          <Section title="PROFIL & EXPÉRIENCE UTILISATEUR" />
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: 8,
+            paddingTop: 6,
+            paddingBottom: 10,
+            borderBottom: "1px solid var(--border)"
+          }}>
+            {getAvailableUxProfiles().map((p) => {
+              const active = uxMode === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => dispatch(uiActions.setUxMode(p.id))}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: active ? "1.5px solid var(--gold)" : "1px solid var(--border2)",
+                    background: active ? "rgba(201, 168, 76, 0.15)" : "var(--surface2)",
+                    color: active ? "var(--gold2)" : "var(--text2)",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: "all .15s",
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>{p.icon}</span>
+                  <div style={{ minWidth: 0, overflow: "hidden" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, fontFamily: "'Cinzel', serif", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                      {p.shortLabel}
+                    </div>
+                    <div style={{ fontSize: 8, color: "var(--text3)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                      {p.name}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <Row
+            label="AIDES ET CONSEILS PAS-À-PAS"
+            desc="Affiche des conseils guidés pour les débutants"
+            on={showBeginnerGuides}
+            onToggle={() => dispatch(uiActions.toggleBeginnerGuides())}
+            color="var(--gold)"
+          />
           <Section title="PERFORMANCE" />
           <Row label="TIMESTAMPS" desc="Synchronisation audio — désactiver accélère le chargement" on={enableTimestamps} onToggle={() => dispatch(uiActions.toggleEnableTimestamps())} color="var(--teal2)" />
           <Row label="LETTRE PAR LETTRE" desc="Surlignage animé pendant la lecture audio" on={enableLetterByLetter} onToggle={() => dispatch(uiActions.toggleEnableLetterByLetter())} color="#5bc8f5" />

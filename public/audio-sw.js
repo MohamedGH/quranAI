@@ -6,10 +6,10 @@
 // 3. Audio caching & Range 206 responses via IndexedDB (Islamic Network & EveryAyah)
 // 4. Runtime APIs & Fonts Stale-While-Revalidate caching
 
-const APP_SHELL_CACHE = "quran-app-shell-v3";
-const RUNTIME_CACHE   = "quran-runtime-v3";
+const APP_SHELL_CACHE = "quran-app-shell-v4";
+const RUNTIME_CACHE   = "quran-runtime-v4";
 const IDB_NAME        = "quran-ts-cache";
-const IDB_VERSION     = 3;
+const IDB_VERSION     = 4;
 const IDB_AUDIO_STORE = "audio";
 const CDN_ORIGIN      = "https://cdn.islamic.network";
 const PROXY_PATH      = "/audio-proxy/";
@@ -166,6 +166,20 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   const reqUrl = e.request.url;
 
+  // Never intercept dev server internal URLs, source files, or Vite HMR
+  if (
+    reqUrl.includes("/@vite/") ||
+    reqUrl.includes("/@fs/") ||
+    reqUrl.includes("/@id/") ||
+    reqUrl.includes("/src/") ||
+    reqUrl.includes("/node_modules/") ||
+    reqUrl.includes("?t=") ||
+    reqUrl.includes("&t=") ||
+    reqUrl.includes("vite.svg")
+  ) {
+    return;
+  }
+
   // 1. Navigation requests (HTML page loads / reloads)
   if (e.request.mode === "navigate") {
     e.respondWith(
@@ -243,22 +257,21 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // 4. Same-origin static assets (.js, .css, images, fonts)
+  // 4. Same-origin static assets (.js, .css, images, fonts) — Network-First for prompt updates
   if (reqUrl.startsWith(self.location.origin)) {
     e.respondWith(
       (async () => {
-        const cached = await caches.match(e.request);
-        if (cached) return cached;
         try {
           const response = await fetch(e.request);
           if (response && response.ok) {
             const cache = await caches.open(APP_SHELL_CACHE);
             cache.put(e.request, response.clone()).catch(() => {});
+            return response;
           }
-          return response;
-        } catch {
-          return cached || new Response(null, { status: 503, statusText: "Offline" });
-        }
+        } catch {}
+        const cached = await caches.match(e.request);
+        if (cached) return cached;
+        return new Response(null, { status: 503, statusText: "Offline" });
       })()
     );
   }

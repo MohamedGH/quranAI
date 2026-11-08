@@ -932,7 +932,7 @@ export const voiceActions       = voiceSlice.actions;
 export const goalsActions       = goalsSlice.actions;
 
 // ─── Selectors ────────────────────────────────────────────────────────────────
-export const sel = {
+const rawSel = {
   // ui
   options:         (s) => s.ui,
   activePage:      (s) => s.ui.activePage,
@@ -1080,6 +1080,17 @@ export const sel = {
     return totalVerses > 0 ? Math.round((masteredCount / totalVerses) * 100) : 0;
   },
 };
+
+// Defensive proxy ensuring any selector lookup always returns a callable selector function
+export const sel = new Proxy(rawSel, {
+  get(target, prop) {
+    if (prop in target) return target[prop];
+    if (typeof prop === "string" && prop !== "then" && prop !== "inspect") {
+      return (state) => state?.ui?.[prop] ?? state?.quran?.[prop] ?? state?.player?.[prop] ?? null;
+    }
+    return undefined;
+  }
+});
 
 export const selectors = sel;
 

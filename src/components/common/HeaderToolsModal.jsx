@@ -6,6 +6,14 @@ import { PWAInstallButton } from "./PWAInstallButton.jsx";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus.js";
 import { getAvailableUxProfiles, getUxProfile, isValidUxMode } from "../../utils/uxProfileManager.js";
 
+export const HEADER_TOOLS_TABS = [
+  { id: 'tools', icon: '🎛️', label: 'OUTILS' },
+  { id: 'ux', icon: '🧭', label: 'MODE & PROFIL' },
+  { id: 'voice', icon: '🎤', label: 'VOCAL' },
+  { id: 'offline', icon: '📥', label: 'HORS-LIGNE' },
+  { id: 'account', icon: '👤', label: 'COMPTE' }
+];
+
 export function HeaderToolsModal({
   isOpen,
   onClose,
@@ -132,8 +140,9 @@ export function HeaderToolsModal({
           </button>
         </div>
 
-        {/* ── Tabs Selector ────────────────────────────────────────────── */}
+        {/* ── Tabs Selector (5 Tabs: OUTILS, MODE & PROFIL, VOCAL, HORS-LIGNE, COMPTE) ── */}
         <div
+          id="modal-header-tabs-container"
           style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -143,14 +152,9 @@ export function HeaderToolsModal({
             background: 'rgba(255, 255, 255, 0.02)',
           }}
         >
-          {[
-            { id: 'tools', icon: '🎛️', label: 'OUTILS' },
-            { id: 'ux', icon: '🧭', label: 'MODE & PROFIL' },
-            { id: 'voice', icon: '🎤', label: 'VOCAL' },
-            { id: 'offline', icon: '📥', label: 'HORS-LIGNE' },
-            { id: 'account', icon: '👤', label: 'COMPTE' }
-          ].map((tab) => {
+          {HEADER_TOOLS_TABS.map((tab) => {
             const isActive = activeTab === tab.id;
+            const isUx = tab.id === 'ux';
             return (
               <button
                 key={tab.id}
@@ -163,10 +167,18 @@ export function HeaderToolsModal({
                   fontSize: 9.5,
                   fontWeight: isActive ? 700 : 600,
                   letterSpacing: 0.8,
-                  background: isActive ? 'rgba(201, 168, 76, 0.18)' : 'rgba(255, 255, 255, 0.04)',
-                  border: isActive ? '1px solid var(--gold)' : '1px solid rgba(255, 255, 255, 0.08)',
+                  background: isActive
+                    ? 'rgba(201, 168, 76, 0.22)'
+                    : isUx
+                    ? 'rgba(201, 168, 76, 0.09)'
+                    : 'rgba(255, 255, 255, 0.04)',
+                  border: isActive
+                    ? '1.5px solid var(--gold)'
+                    : isUx
+                    ? '1px solid rgba(201, 168, 76, 0.35)'
+                    : '1px solid rgba(255, 255, 255, 0.08)',
                   borderRadius: 8,
-                  color: isActive ? 'var(--gold2)' : 'var(--text2)',
+                  color: isActive ? 'var(--gold2)' : isUx ? 'var(--gold3)' : 'var(--text2)',
                   cursor: 'pointer',
                   transition: 'all .15s',
                   display: 'inline-flex',
@@ -174,7 +186,7 @@ export function HeaderToolsModal({
                   justifyContent: 'center',
                   gap: 5,
                   whiteSpace: 'nowrap',
-                  boxShadow: isActive ? '0 0 10px rgba(201, 168, 76, 0.2)' : 'none',
+                  boxShadow: isActive ? '0 0 10px rgba(201, 168, 76, 0.25)' : 'none',
                 }}
               >
                 <span style={{ fontSize: 13 }}>{tab.icon}</span>

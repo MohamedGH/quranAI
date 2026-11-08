@@ -281,6 +281,19 @@ describe("Redux Store & Production Slice Integration", () => {
       store.dispatch(uiActions.setDashboardRevisionAllGroupsCollapsed({}));
       expect(sel.dashboardRevisionCollapsedGroups(store.getState())).toEqual({});
     });
+
+    it("ensures sel Proxy never returns undefined for unknown selectors, preventing useSelector crash", () => {
+      // UX selectors are functions
+      expect(typeof sel.uxMode).toBe("function");
+      expect(typeof sel.isBeginnerUx).toBe("function");
+      expect(typeof sel.isChildUx).toBe("function");
+      expect(typeof sel.showUxModeModal).toBe("function");
+
+      // Arbitrary/unknown selector returns a safe selector function and not undefined
+      expect(typeof sel.nonExistentKeyXYZ).toBe("function");
+      const state = store.getState();
+      expect(sel.nonExistentKeyXYZ(state)).toBeNull();
+    });
   });
 });
 

@@ -139,10 +139,10 @@ function AppInner({ currentUser, onSignOut }) {
   const learnData       = useSelector(sel.learnData, shallowEqual);
   const collections     = useSelector(sel.collections, shallowEqual);
   const collModal       = useSelector(sel.collModal);
-  const uxMode          = useSelector(sel.uxMode);
-  const isBeginner      = useSelector(sel.isBeginnerUx);
-  const isChild         = useSelector(sel.isChildUx);
-  const showUxModeModal = useSelector(sel.showUxModeModal);
+  const uxMode          = useSelector(sel.uxMode || ((s) => s?.ui?.uxMode || "standard"));
+  const isBeginner      = useSelector(sel.isBeginnerUx || ((s) => (s?.ui?.uxMode || "standard") === "beginner"));
+  const isChild         = useSelector(sel.isChildUx || ((s) => (s?.ui?.uxMode || "standard") === "child"));
+  const showUxModeModal = useSelector(sel.showUxModeModal || ((s) => Boolean(s?.ui?.showUxModeModal)));
   const currentUxProfile = useMemo(() => getUxProfile(uxMode), [uxMode]);
   // ── High-frequency play state → refs + version counter (avoids full re-render) ──
   const playingAyatNumRef = useRef(null);
@@ -1345,9 +1345,18 @@ function AppInner({ currentUser, onSignOut }) {
 
   useEffect(() => {
     fetchSurahs().then(d => { setSurahs(d); }); // setSurahs already sets loadingSurahs:false in reducer
-    // Register service worker for offline audio, app shell, and resource caching
+    // Register service worker only in production; in dev, clean up registrations to prevent stale caching
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/audio-sw.js', { scope: '/' }).catch(() => {});
+      const isDevHost = window.location.hostname.includes("ais-dev") ||
+                        window.location.hostname === "localhost" ||
+                        window.location.hostname === "127.0.0.1";
+      if (isDevHost) {
+        navigator.serviceWorker.getRegistrations?.().then((regs) => {
+          regs.forEach((r) => r.unregister().catch(() => {}));
+        }).catch(() => {});
+      } else {
+        navigator.serviceWorker.register('/audio-sw.js', { scope: '/' }).catch(() => {});
+      }
     }
 
     // Connectivity state listeners

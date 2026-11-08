@@ -18,8 +18,9 @@ import { RappelWidget } from "./components/common/RappelWidget.jsx";
 import { ScheduledRemindersModal } from "./components/common/ScheduledRemindersModal.jsx";
 import { HeaderToolsModal } from "./components/common/HeaderToolsModal.jsx";
 import { UxModeSelectorModal } from "./components/common/UxModeSelectorModal.jsx";
+import { PlayerAudioOptionsModal } from "./components/common/PlayerAudioOptionsModal.jsx";
 import { BeginnerGuideBanner } from "./components/common/BeginnerGuideBanner.jsx";
-import { getUxProfile, getUxModeClassName } from "./utils/uxProfileManager.js";
+import { getUxProfile, getUxModeClassName, isSimplifiedUxMode } from "./utils/uxProfileManager.js";
 import { NotificationToast } from "./components/common/NotificationToast.jsx";
 import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
@@ -268,6 +269,7 @@ function AppInner({ currentUser, onSignOut }) {
   const enableAnimations     = useSelector(sel.enableAnimations);
   const enableHeavyCompute   = useSelector(sel.enableHeavyCompute);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [showPlayerAudioModal, setShowPlayerAudioModal] = useState(false);
   const [showHeaderToolsModal, setShowHeaderToolsModal] = useState(false);
   const [headerToolsInitialTab, setHeaderToolsInitialTab] = useState('tools');
   const [showUserMenu, setShowUserMenu]         = useState(false);
@@ -4351,6 +4353,42 @@ function AppInner({ currentUser, onSignOut }) {
           onClose={() => dispatch(uiActions.setShowUxModeModal(false))}
         />
 
+        {/* PLAYER AUDIO & TAJWEED OPTIONS MODAL */}
+        <PlayerAudioOptionsModal
+          isOpen={showPlayerAudioModal}
+          onClose={() => setShowPlayerAudioModal(false)}
+          currentMainAyat={currentMainAyat}
+          selectedSurah={selectedSurah}
+          timestampsMap={timestampsMapRef.current || timestampsMap}
+          learnData={learnData}
+          mainCurrentMs={mainCurrentMsRef.current}
+          isPlaying={isMainPlaying}
+          onLoadTimestamps={() => {
+            if (selectedSurah?.number) {
+              loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
+                if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
+              });
+            }
+          }}
+          loopActive={loopActive}
+          setLoopActive={setLoopActive}
+          loopStart={loopStart}
+          setLoopStart={setLoopStart}
+          loopEnd={loopEnd}
+          setLoopEnd={setLoopEnd}
+          loopMax={loopMax}
+          setLoopMax={setLoopMax}
+          loopCount={loopCount}
+          setLoopCount={setLoopCount}
+          activeRecitator={activeRecitator}
+          recitatorId={recitatorId}
+          onOpenReciterPicker={() => {
+            setShowRecitPanel(true);
+            setShowPlayerAudioModal(false);
+          }}
+          totalAyahs={ayats.length}
+        />
+
         {/* AYAT FULL SCREEN (FOCUS) MODAL */}
         {((fullScreenSelectedAyat || explicitFullScreen) && openAyatNum != null && selectedSurah) && (() => {
           const currentAyat = ayats.find(a => a.numberInSurah === openAyatNum);
@@ -4663,35 +4701,75 @@ function AppInner({ currentUser, onSignOut }) {
                     }
                   }}
                   style={{ fontSize: 12 }}>↺</button>
-                {/* Silence / Masquage sur mots à réviser */}
-                <SilenceReviseControl
-                  compact={true}
-                  timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
-                  ld={currentMainAyat ? learnData[`${selectedSurah.number}:${currentMainAyat.numberInSurah}`] : null}
-                  ayatText={currentMainAyat?.text || ""}
-                  surahNum={selectedSurah.number}
-                  ayatNum={currentMainAyat?.numberInSurah}
-                  currentMs={mainCurrentMsRef.current}
-                  isPlaying={isMainPlaying}
-                  onLoadTimestamps={() => {
-                    loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
-                      if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
-                    });
-                  }}
-                />
-                {/* Coach Vocal Tajwid (pause prédictive & annonce vocale des règles) */}
-                <TajweedAudioCoachControl
-                  compact={true}
-                  timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
-                  ayatText={currentMainAyat?.text || ""}
-                  surahNum={selectedSurah.number}
-                  ayatNum={currentMainAyat?.numberInSurah}
-                  onLoadTimestamps={() => {
-                    loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
-                      if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
-                    });
-                  }}
-                />
+                {/* Options Tajwid & Audio : Mode simplifié (enfant, débutant) regroupe dans une modal dédiée */}
+                {isSimplifiedUxMode(uxMode) ? (
+                  <button
+                    id="player-audio-options-modal-btn"
+                    className={`ctrl-btn player-tajweed-modal-trigger${(isCoachEnabled || silenceWordsToRevise) ? " loop-on" : ""}`}
+                    onClick={() => setShowPlayerAudioModal(true)}
+                    title="Options audio, Récitateur, Répétition & Tajwid (Modal)"
+                    aria-label="Ouvrir les options audio et Tajwid"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "4px 8px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      borderRadius: 12,
+                      background: (isCoachEnabled || silenceWordsToRevise) ? "rgba(16, 185, 129, 0.2)" : "rgba(255, 255, 255, 0.08)",
+                      border: (isCoachEnabled || silenceWordsToRevise) ? "1px solid #10b981" : "1px solid rgba(255, 255, 255, 0.15)",
+                      color: (isCoachEnabled || silenceWordsToRevise) ? "#34d399" : "#e2e8f0",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <span>🎨</span>
+                    <span>TAJWID</span>
+                    {(isCoachEnabled || silenceWordsToRevise) && (
+                      <span style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        backgroundColor: "#10b981",
+                        display: "inline-block"
+                      }} />
+                    )}
+                    <span style={{ fontSize: 9, opacity: 0.8 }}>▾</span>
+                  </button>
+                ) : (
+                  <>
+                    {/* Silence / Masquage sur mots à réviser */}
+                    <SilenceReviseControl
+                      compact={true}
+                      timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
+                      ld={currentMainAyat ? learnData[`${selectedSurah.number}:${currentMainAyat.numberInSurah}`] : null}
+                      ayatText={currentMainAyat?.text || ""}
+                      surahNum={selectedSurah.number}
+                      ayatNum={currentMainAyat?.numberInSurah}
+                      currentMs={mainCurrentMsRef.current}
+                      isPlaying={isMainPlaying}
+                      onLoadTimestamps={() => {
+                        loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
+                          if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
+                        });
+                      }}
+                    />
+                    {/* Coach Vocal Tajwid (pause prédictive & annonce vocale des règles) */}
+                    <TajweedAudioCoachControl
+                      compact={true}
+                      timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
+                      ayatText={currentMainAyat?.text || ""}
+                      surahNum={selectedSurah.number}
+                      ayatNum={currentMainAyat?.numberInSurah}
+                      onLoadTimestamps={() => {
+                        loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
+                          if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
+                        });
+                      }}
+                    />
+                  </>
+                )}
                 {/* Reciter picker */}
                 <button
                   className={`ctrl-btn reciter-trigger${showRecitPanel ? " loop-on" : ""}`}

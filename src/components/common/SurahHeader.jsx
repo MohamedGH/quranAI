@@ -4,7 +4,8 @@ import { sel, uiActions, playerActions } from "../../store.js";
 import { masteryColor, computeMastery, computeDisplayedPartMastery } from "./Mastery.jsx";
 import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
-import { getUxProfile } from "../../utils/uxProfileManager.js";
+import { getUxProfile, isSimplifiedUxMode } from "../../utils/uxProfileManager.js";
+import { SurahAllOptionsModal } from "./SurahAllOptionsModal.jsx";
 
 export function SurahHeader({
   selectedSurah,
@@ -87,6 +88,7 @@ export function SurahHeader({
   const [showLangDrawer, setShowLangDrawer] = useState(false);
   const [showColorPickerModal, setShowColorPickerModal] = useState(false);
   const [showMasteryFilter, setShowMasteryFilter] = useState(false);
+  const [showAllOptionsModal, setShowAllOptionsModal] = useState(false);
 
   const dispatch = useDispatch();
   const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
@@ -440,117 +442,177 @@ export function SurahHeader({
         )}
       </div>
 
-      {/* ── Clean 4-Action Reading Bar ── */}
+      {/* ── Reading Actions Bar (Simplified for Child/Beginner, Full for Standard/Expert) ── */}
       <div className="m-surah-actions-bar">
-        {/* 1. Jump to Verse */}
-        <button
-          onClick={() => setShowAyatJump(v => !v)}
-          className={`m-action-btn jump ${showAyatJump ? 'active' : ''}`}
-        >
-          <span className="m-act-icon">🔎</span>
-          <span className="m-act-label">VERSET</span>
-        </button>
+        {isSimplifiedUxMode(uxMode) ? (
+          <>
+            {/* Quick Translation Toggle for Beginner / Child */}
+            <button
+              onClick={() => {
+                setShowLangDrawer(v => !v);
+                setShowTajweedDrawer(false);
+                setShowOptionsDrawer(false);
+              }}
+              className={`m-action-btn lang ${translationLang ? 'active' : ''}`}
+            >
+              <span className="m-act-icon">🌐</span>
+              <span className="m-act-label">{translationLang ? langLabel : "TRAD."}</span>
+            </button>
 
-        {/* 2. Tajweed */}
-        <button
-          onClick={() => {
-            setShowTajweedDrawer(v => !v);
-            setShowOptionsDrawer(false);
-            setShowLangDrawer(false);
-          }}
-          className={`m-action-btn tajweed ${activeTjCount > 0 ? 'active' : ''}`}
-        >
-          <span className="m-act-icon">🎨</span>
-          <span className="m-act-label">تجويد</span>
-          {activeTjCount > 0 && <span className="m-act-badge">{activeTjCount}</span>}
-        </button>
+            {/* UX Mode Interactive Badge */}
+            <button
+              id="surah-header-ux-badge"
+              onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
+              className={`m-action-btn ux-mode-btn ${uxMode}`}
+              title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
+              style={{
+                borderColor: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : 'rgba(201,168,76,.4)',
+                background: uxMode === 'beginner' ? 'rgba(46,196,182,0.18)' : uxMode === 'child' ? 'rgba(255,183,3,0.18)' : 'rgba(201,168,76,0.12)',
+                color: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : 'var(--gold2)',
+                fontWeight: 700,
+              }}
+            >
+              <span className="m-act-icon">{currentUx.icon}</span>
+              <span className="m-act-label">{currentUx.shortLabel.toUpperCase()}</span>
+              <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
+            </button>
 
-        {/* 3. Translation */}
-        <button
-          onClick={() => {
-            setShowLangDrawer(v => !v);
-            setShowTajweedDrawer(false);
-            setShowOptionsDrawer(false);
-          }}
-          className={`m-action-btn lang ${translationLang ? 'active' : ''}`}
-        >
-          <span className="m-act-icon">🌐</span>
-          <span className="m-act-label">{translationLang ? langLabel : "TRAD."}</span>
-        </button>
+            {/* All Options Modal Trigger for Child & Beginner Mode */}
+            <button
+              id="surah-header-all-options-btn"
+              onClick={() => setShowAllOptionsModal(true)}
+              className={`m-action-btn all-options-btn ${(showAllOptionsModal || activeTjCount > 0 || anyOpt || isAnyFilterActive) ? 'active' : ''}`}
+              title="Toutes les options de lecture (Tajweed, affichage, versets, filtres)"
+              style={{
+                borderColor: 'var(--gold)',
+                background: 'rgba(201, 168, 76, 0.16)',
+                color: 'var(--gold2)',
+                fontWeight: 700,
+              }}
+            >
+              <span className="m-act-icon">⚙️</span>
+              <span className="m-act-label">{uxMode === 'child' ? 'OPTIONS & TAJWID' : 'TOUTES LES OPTIONS'}</span>
+              <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
+              {(activeTjCount > 0 || activeOptCount > 0 || isAnyFilterActive) && (
+                <span className="m-act-badge" style={{ background: 'var(--gold)', color: '#000' }}>
+                  {(activeTjCount > 0 ? 1 : 0) + (activeOptCount > 0 ? 1 : 0) + (isAnyFilterActive ? 1 : 0)}
+                </span>
+              )}
+            </button>
+          </>
+        ) : (
+          <>
+            {/* 1. Jump to Verse */}
+            <button
+              onClick={() => setShowAyatJump(v => !v)}
+              className={`m-action-btn jump ${showAyatJump ? 'active' : ''}`}
+            >
+              <span className="m-act-icon">🔎</span>
+              <span className="m-act-label">VERSET</span>
+            </button>
 
-        {/* 3b. UX Mode Interactive Badge */}
-        <button
-          id="surah-header-ux-badge"
-          onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
-          className={`m-action-btn ux-mode-btn ${uxMode}`}
-          title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
-          style={{
-            borderColor: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'rgba(201,168,76,.4)',
-            background: uxMode === 'beginner' ? 'rgba(46,196,182,0.18)' : uxMode === 'child' ? 'rgba(255,183,3,0.18)' : uxMode === 'expert' ? 'rgba(200,120,255,0.18)' : 'rgba(201,168,76,0.12)',
-            color: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'var(--gold2)',
-            fontWeight: 700,
-          }}
-        >
-          <span className="m-act-icon">{currentUx.icon}</span>
-          <span className="m-act-label">{currentUx.shortLabel.toUpperCase()}</span>
-          <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
-        </button>
+            {/* 2. Tajweed */}
+            <button
+              onClick={() => {
+                setShowTajweedDrawer(v => !v);
+                setShowOptionsDrawer(false);
+                setShowLangDrawer(false);
+              }}
+              className={`m-action-btn tajweed ${activeTjCount > 0 ? 'active' : ''}`}
+            >
+              <span className="m-act-icon">🎨</span>
+              <span className="m-act-label">تجويد</span>
+              {activeTjCount > 0 && <span className="m-act-badge">{activeTjCount}</span>}
+            </button>
 
-        {/* 4. Reading Modes & Display Options */}
-        <button
-          onClick={() => {
-            setShowOptionsDrawer(v => !v);
-            setShowTajweedDrawer(false);
-            setShowLangDrawer(false);
-          }}
-          className={`m-action-btn options ${anyOpt || showTsBar ? 'active' : ''}`}
-        >
-          <span className="m-act-icon">⚙</span>
-          <span className="m-act-label">
-            {pageMode
-              ? `PAGE · ${displayPageMastery.masteryPct}%`
-              : hizbMode
-              ? `HIZB · ${displayHizbMastery.masteryPct}%`
-              : juzMode
-              ? `JUZ · ${displayJuzMastery.masteryPct}%`
-              : "AFFICHAGE"}
-          </span>
-          {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
-        </button>
+            {/* 3. Translation */}
+            <button
+              onClick={() => {
+                setShowLangDrawer(v => !v);
+                setShowTajweedDrawer(false);
+                setShowOptionsDrawer(false);
+              }}
+              className={`m-action-btn lang ${translationLang ? 'active' : ''}`}
+            >
+              <span className="m-act-icon">🌐</span>
+              <span className="m-act-label">{translationLang ? langLabel : "TRAD."}</span>
+            </button>
 
-        {/* 5. Filter Action Button (Custom Ayat Range & Mastery Level) */}
-        <button
-          onClick={() => {
-            setShowMasteryFilter(v => !v);
-            setShowTajweedDrawer(false);
-            setShowOptionsDrawer(false);
-            setShowLangDrawer(false);
-            setShowAyatJump(false);
-          }}
-          className={`m-action-btn mastery-filter ${isAnyFilterActive || showMasteryFilter ? 'active' : ''}`}
-          title={
-            isAnyFilterActive
-              ? `Filtre actif : ${ayatFilterActive ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}` : ''}${ayatFilterActive && masteryFilterActive ? ' · ' : ''}${masteryFilterActive ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%` : ''} (${matchingAyatsCount} versets)`
-              : "Filtrer les versets par plage de versets et/ou niveau de maîtrise"
-          }
-          style={isAnyFilterActive ? { borderColor: 'var(--teal)', color: 'var(--teal2)', background: 'rgba(62,184,160,0.18)' } : undefined}
-        >
-          <span className="m-act-icon">🎯</span>
-          <span className="m-act-label">
-            {ayatFilterActive && masteryFilterActive
-              ? `v.${currentAyatRange[0]}–${currentAyatRange[1]} · ${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
-              : ayatFilterActive
-              ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}`
-              : masteryFilterActive
-              ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
-              : "FILTRER"}
-          </span>
-          {isAnyFilterActive && (
-            <span className="m-act-badge" style={{ background: 'var(--teal)', color: '#000', fontWeight: 'bold' }}>
-              {matchingAyatsCount}
-            </span>
-          )}
-        </button>
+            {/* 3b. UX Mode Interactive Badge */}
+            <button
+              id="surah-header-ux-badge"
+              onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
+              className={`m-action-btn ux-mode-btn ${uxMode}`}
+              title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
+              style={{
+                borderColor: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'rgba(201,168,76,.4)',
+                background: uxMode === 'beginner' ? 'rgba(46,196,182,0.18)' : uxMode === 'child' ? 'rgba(255,183,3,0.18)' : uxMode === 'expert' ? 'rgba(200,120,255,0.18)' : 'rgba(201,168,76,0.12)',
+                color: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'var(--gold2)',
+                fontWeight: 700,
+              }}
+            >
+              <span className="m-act-icon">{currentUx.icon}</span>
+              <span className="m-act-label">{currentUx.shortLabel.toUpperCase()}</span>
+              <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
+            </button>
+
+            {/* 4. Reading Modes & Display Options */}
+            <button
+              onClick={() => {
+                setShowOptionsDrawer(v => !v);
+                setShowTajweedDrawer(false);
+                setShowLangDrawer(false);
+              }}
+              className={`m-action-btn options ${anyOpt || showTsBar ? 'active' : ''}`}
+            >
+              <span className="m-act-icon">⚙</span>
+              <span className="m-act-label">
+                {pageMode
+                  ? `PAGE · ${displayPageMastery.masteryPct}%`
+                  : hizbMode
+                  ? `HIZB · ${displayHizbMastery.masteryPct}%`
+                  : juzMode
+                  ? `JUZ · ${displayJuzMastery.masteryPct}%`
+                  : "AFFICHAGE"}
+              </span>
+              {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
+            </button>
+
+            {/* 5. Filter Action Button (Custom Ayat Range & Mastery Level) */}
+            <button
+              onClick={() => {
+                setShowMasteryFilter(v => !v);
+                setShowTajweedDrawer(false);
+                setShowOptionsDrawer(false);
+                setShowLangDrawer(false);
+                setShowAyatJump(false);
+              }}
+              className={`m-action-btn mastery-filter ${isAnyFilterActive || showMasteryFilter ? 'active' : ''}`}
+              title={
+                isAnyFilterActive
+                  ? `Filtre actif : ${ayatFilterActive ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}` : ''}${ayatFilterActive && masteryFilterActive ? ' · ' : ''}${masteryFilterActive ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%` : ''} (${matchingAyatsCount} versets)`
+                  : "Filtrer les versets par plage de versets et/ou niveau de maîtrise"
+              }
+              style={isAnyFilterActive ? { borderColor: 'var(--teal)', color: 'var(--teal2)', background: 'rgba(62,184,160,0.18)' } : undefined}
+            >
+              <span className="m-act-icon">🎯</span>
+              <span className="m-act-label">
+                {ayatFilterActive && masteryFilterActive
+                  ? `v.${currentAyatRange[0]}–${currentAyatRange[1]} · ${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
+                  : ayatFilterActive
+                  ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}`
+                  : masteryFilterActive
+                  ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
+                  : "FILTRER"}
+              </span>
+              {isAnyFilterActive && (
+                <span className="m-act-badge" style={{ background: 'var(--teal)', color: '#000', fontWeight: 'bold' }}>
+                  {matchingAyatsCount}
+                </span>
+              )}
+            </button>
+          </>
+        )}
       </div>
 
       {/* ── Custom Ayat Range & Mastery Filter Inline Panel ── */}
@@ -1436,6 +1498,49 @@ export function SurahHeader({
           )}
         </div>
       )}
+
+      {/* ── Surah All Options Modal (accessible for all UX modes, especially Child & Beginner) ── */}
+      <SurahAllOptionsModal
+        isOpen={showAllOptionsModal}
+        onClose={() => setShowAllOptionsModal(false)}
+        selectedSurah={selectedSurah}
+        ayats={ayats}
+        jumpToAyatNumber={jumpToAyatNumber}
+        tjToggleTajweedTone={tjToggleTajweedTone}
+        tjTajweedTone={tjTajweedTone}
+        tjToggleQalqala={tjToggleQalqala}
+        tjQalqala={tjQalqala}
+        tjToggleMadd={tjToggleMadd}
+        tjMadd={tjMadd}
+        tjToggleIzhar={tjToggleIzhar}
+        tjIzhar={tjIzhar}
+        tjToggleIdgham={tjToggleIdgham}
+        tjIdgham={tjIdgham}
+        tjToggleIkhfa={tjToggleIkhfa}
+        tjIkhfa={tjIkhfa}
+        tjToggleIqlab={tjToggleIqlab}
+        tjIqlab={tjIqlab}
+        tjToggleGhunnah={tjToggleGhunnah}
+        tjGhunnah={tjGhunnah}
+        onOpenColorPicker={() => setShowColorPickerModal(true)}
+        pageMode={pageMode}
+        setPageMode={setPageMode}
+        hizbMode={hizbMode}
+        setHizbMode={setHizbMode}
+        juzMode={juzMode}
+        setJuzMode={setJuzMode}
+        fullScreenSelectedAyat={fullScreenSelectedAyat}
+        toggleFullScreen={toggleFullScreen}
+        announceNum={announceNum}
+        toggleAnnounceNum={toggleAnnounceNum}
+        spellCheck={spellCheck}
+        toggleSpellCheck={toggleSpellCheck}
+        showParts={showParts}
+        toggleShowParts={toggleShowParts}
+        translationLang={translationLang}
+        setTranslationLang={setTranslationLang}
+        TRANS_LABELS={TRANS_LABELS}
+      />
 
       {/* ── Tajweed Color Customizer Modal ── */}
       <TajweedColorPickerModal

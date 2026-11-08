@@ -17,6 +17,12 @@ export const UX_PROFILES = Object.freeze({
     icon: "🔰",
     targetAudience: "Seniors, débutants en informatique ou personnes souhaitant une interface très simple",
     description: "Interface épurée avec très grands caractères, gros boutons tactiles avec texte explicite et aides pas-à-pas bienveillantes.",
+    featureFlags: Object.freeze({
+      simplifiedAudioPlayer: true,
+      simplifiedSurahHeader: true,
+      showBeginnerTooltips: true,
+      hideAdvancedMetrics: true,
+    }),
     features: Object.freeze([
       "Texte arabe agrandi (32px) et traduction en français très lisible",
       "Gros boutons avec icône ET libellé clair (pas de symboles mystérieux)",
@@ -45,6 +51,12 @@ export const UX_PROFILES = Object.freeze({
     icon: "⚖️",
     targetAudience: "Pratique quotidienne pour la majorité des lecteurs et étudiants du Coran",
     description: "L'expérience complète et équilibrée avec lecture, audio synchronisé, quiz, règles de Tajweed et suivi de révision.",
+    featureFlags: Object.freeze({
+      simplifiedAudioPlayer: false,
+      simplifiedSurahHeader: false,
+      showBeginnerTooltips: false,
+      hideAdvancedMetrics: false,
+    }),
     features: Object.freeze([
       "Équilibre optimal entre lisibilité et richesse d'outils",
       "Accès aux modes Coran, Quiz, Prononciation, Concordance et Révision",
@@ -72,6 +84,12 @@ export const UX_PROFILES = Object.freeze({
     icon: "⚡",
     targetAudience: "Mémorisateurs (Hafiz), imams, étudiants avancés et utilisateurs technophiles",
     description: "Outils de précision : synchronisation mot à mot, réglages fins des silences, raccourcis clavier pro et métadonnées complètes.",
+    featureFlags: Object.freeze({
+      simplifiedAudioPlayer: false,
+      simplifiedSurahHeader: false,
+      showBeginnerTooltips: false,
+      hideAdvancedMetrics: false,
+    }),
     features: Object.freeze([
       "Raccourcis clavier (Espace, 1-4 pour quiz, R pour indice, T pour verset complet)",
       "Gestion au millième de seconde des pauses et silences de révision",
@@ -101,6 +119,12 @@ export const UX_PROFILES = Object.freeze({
     icon: "🌟",
     targetAudience: "Enfants et jeunes apprenants découvrant le Coran",
     description: "Affichage chaleureux et stimulant avec textes très grands, encouragements visuels et mode quiz motivant.",
+    featureFlags: Object.freeze({
+      simplifiedAudioPlayer: true,
+      simplifiedSurahHeader: true,
+      showBeginnerTooltips: true,
+      hideAdvancedMetrics: true,
+    }),
     features: Object.freeze([
       "Très grands caractères arabes (34px) aérés",
       "Surlignage dynamique lettre par lettre captivant",
@@ -126,6 +150,12 @@ export const UX_PROFILES = Object.freeze({
  */
 export const isValidUxMode = (mode) =>
   typeof mode === "string" && Object.values(UX_MODES).includes(mode);
+
+/**
+ * Pure helper sanitizing any input mode into a valid UX mode (fallback to STANDARD).
+ */
+export const sanitizeUxMode = (mode) =>
+  isValidUxMode(mode) ? mode : UX_MODES.STANDARD;
 
 /**
  * Pure getter retrieving UX profile metadata with fallback to STANDARD.
@@ -160,16 +190,35 @@ export const applyUxProfileToSettings = (currentSettings = {}, targetMode = UX_M
   ).value;
 
 /**
- * Pure helper providing contextual guidance tips for beginner and child modes.
+ * Pure predicate checking whether a mode is a simplified UX (beginner or child).
  */
-export const getBeginnerTip = (context = "general") => {
+export const isSimplifiedUxMode = (mode) =>
+  mode === UX_MODES.BEGINNER || mode === UX_MODES.CHILD;
+
+/**
+ * Pure helper providing contextual guidance tips for beginner and child modes.
+ * Accurately references real UI elements (the ▶ button, the top badge, etc.).
+ */
+export const getBeginnerTip = (context = "general", uxMode = "beginner") => {
+  if (uxMode === UX_MODES.CHILD) {
+    const childTips = {
+      general: "🌟 Clique sur un verset ou sur le bouton de lecture ▶ pour écouter la belle voix du récitateur !",
+      quran: "🌟 Fais défiler vers le bas pour lire la suite. Clique sur le bouton de lecture ▶ (en bas ou devant un verset) pour écouter !",
+      audio: "🎧 Les mots en arabe se colorent au fur et à mesure que le récitateur lit. Répète après lui !",
+      quiz: "🌟 Choisis la bonne réponse parmi les choix proposés. Prends tout ton temps !",
+      prononciation: "🎤 Écoute bien chaque lettre pour bien prononcer avec les couleurs du Tajweed !",
+      revision: "🔁 Retrouve ici tes versets favoris pour les réviser et les garder dans ton cœur !",
+    };
+    return childTips[context] || childTips.general;
+  }
+
   const tips = {
-    general: "💡 Astuce : Cliquez sur n'importe quel verset pour l'écouter. Vous pouvez changer de mode à tout moment via le bouton en haut.",
-    quran: "📖 Pour lire : Faites défiler vers le bas pour continuer votre lecture. Cliquez sur le bouton vert 'Écouter' pour entendre la récitation.",
-    audio: "🎧 Écoute audio : Le texte en arabe se colore au fur et à mesure que le récitateur parle pour vous guider.",
-    quiz: "🎯 Quiz d'apprentissage : Choisissez la bonne réponse parmi les choix proposés. Prenez votre temps, aucune pression !",
-    prononciation: "🎤 Prononciation : Écoutez attentivement chaque lettre pour apprendre la bonne articulation avec le Tajweed.",
-    revision: "🔁 Révision : Vos versets à réviser sont regroupés ici pour vous aider à les mémoriser durablement.",
+    general: "💡 Astuce : Cliquez sur un verset ou sur le bouton de lecture ▶ en bas pour lancer la récitation. Changez de mode via le badge en haut.",
+    quran: "📖 Pour lire : Faites défiler vers le bas pour continuer votre lecture. Cliquez sur le bouton de lecture ▶ (en bas ou devant un verset) pour écouter la récitation.",
+    audio: "🎧 Écoute audio : Le texte arabe se colore mot à mot avec la récitation pour vous repérer facilement.",
+    quiz: "🎯 Quiz d'apprentissage : Choisissez la bonne réponse parmi les options. Prenez votre temps, sans limite de temps.",
+    prononciation: "🎤 Prononciation : Écoutez attentivement chaque lettre pour apprendre la bonne articulation avec les règles de Tajweed.",
+    revision: "🔁 Révision : Vos versets à réviser sont regroupés ici pour vous aider à les mémoriser pas à pas.",
   };
   return tips[context] || tips.general;
 };

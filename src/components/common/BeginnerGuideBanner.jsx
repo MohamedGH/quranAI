@@ -15,7 +15,7 @@ export function BeginnerGuideBanner({ context = "general" }) {
   }
 
   const profile = getUxProfile(uxMode);
-  const tipText = getBeginnerTip(context);
+  const tipText = getBeginnerTip(context, uxMode);
 
   return (
     <div

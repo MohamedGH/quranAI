@@ -2286,16 +2286,18 @@ function AppInner({ currentUser, onSignOut }) {
             {/* In-app PWA install button */}
             <PWAInstallButton />
 
-            {/* Voice Command Mic */}
-            <button
-              id="header-voice-btn"
-              className={`voice-btn${listening ? ' listening' : ''}`}
-              onClick={toggleVoice}
-              title={listening ? "Arrêter écoute vocale" : "Commande vocale (Micro)"}
-              aria-label="Commande vocale"
-            >
-              🎤
-            </button>
+            {/* Voice Command Mic (hidden in simplified child/beginner modes to prevent clutter) */}
+            {!isSimplifiedUxMode(uxMode) && (
+              <button
+                id="header-voice-btn"
+                className={`voice-btn${listening ? ' listening' : ''}`}
+                onClick={toggleVoice}
+                title={listening ? "Arrêter écoute vocale" : "Commande vocale (Micro)"}
+                aria-label="Commande vocale"
+              >
+                🎤
+              </button>
+            )}
 
             {/* Interactive UX Mode Badge: ALWAYS visible, never squished */}
             <button
@@ -4716,19 +4718,21 @@ function AppInner({ currentUser, onSignOut }) {
                   const i = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
                   playMainAyat(i); if (isMainPlaying) playWhenReady();
                 }}>{playerConfig.nextBtnText()}</button>
-                <button
-                  className={`ctrl-btn${loopActive || showLoopBar ? " loop-on" : ""}`}
-                  title={showLoopBar ? "Fermer les réglages de boucle" : "Boucle de versets (configurer / activer)"}
-                  onClick={() => {
-                    if (!loopActive && !showLoopBar) {
-                      setLoopActive(true);
-                      setLoopCount(0);
-                      setShowLoopBar(true);
-                    } else {
-                      setShowLoopBar(!showLoopBar);
-                    }
-                  }}
-                  style={{ fontSize: 12 }}>{playerConfig.loopBtnText()}</button>
+                {playerConfig.showLoopButton && (
+                  <button
+                    className={`ctrl-btn${loopActive || showLoopBar ? " loop-on" : ""}`}
+                    title={showLoopBar ? "Fermer les réglages de boucle" : "Boucle de versets (configurer / activer)"}
+                    onClick={() => {
+                      if (!loopActive && !showLoopBar) {
+                        setLoopActive(true);
+                        setLoopCount(0);
+                        setShowLoopBar(true);
+                      } else {
+                        setShowLoopBar(!showLoopBar);
+                      }
+                    }}
+                    style={{ fontSize: 12 }}>{playerConfig.loopBtnText()}</button>
+                )}
                 {/* Options Tajwid & Audio : Mode simplifié (enfant, débutant) regroupe dans une modal dédiée */}
                 {isSimplifiedUxMode(uxMode) ? (
                   <button
@@ -4745,9 +4749,9 @@ function AppInner({ currentUser, onSignOut }) {
                       fontSize: 11,
                       fontWeight: 700,
                       borderRadius: 12,
-                      background: (isCoachEnabled || silenceWordsToRevise) ? "rgba(16, 185, 129, 0.2)" : isChild ? "rgba(255, 183, 3, 0.18)" : "rgba(255, 255, 255, 0.08)",
-                      border: (isCoachEnabled || silenceWordsToRevise) ? "1px solid #10b981" : isChild ? "1px solid rgba(255, 183, 3, 0.45)" : "1px solid rgba(255, 255, 255, 0.15)",
-                      color: (isCoachEnabled || silenceWordsToRevise) ? "#34d399" : isChild ? "#ffb703" : "#e2e8f0",
+                      background: (isCoachEnabled || silenceWordsToRevise) ? "rgba(16, 185, 129, 0.2)" : isChild ? "rgba(255, 183, 3, 0.18)" : isBeginner ? "rgba(245, 158, 11, 0.20)" : "rgba(255, 255, 255, 0.08)",
+                      border: (isCoachEnabled || silenceWordsToRevise) ? "1px solid #10b981" : isChild ? "1px solid rgba(255, 183, 3, 0.45)" : isBeginner ? "1px solid rgba(245, 158, 11, 0.45)" : "1px solid rgba(255, 255, 255, 0.15)",
+                      color: (isCoachEnabled || silenceWordsToRevise) ? "#34d399" : isChild ? "#ffb703" : isBeginner ? "#f59e0b" : "#e2e8f0",
                       cursor: "pointer",
                       whiteSpace: "nowrap",
                     }}
@@ -4798,17 +4802,19 @@ function AppInner({ currentUser, onSignOut }) {
                     />
                   </>
                 )}
-                {/* Reciter picker */}
-                <button
-                  className={`ctrl-btn reciter-trigger${showRecitPanel ? " loop-on" : ""}`}
-                  aria-haspopup="dialog"
-                  aria-expanded={showRecitPanel}
-                  aria-label={`Choisir le récitateur. Actuel : ${activeRecitator?.label || recitatorId}`}
-                  title={`Récitateur : ${activeRecitator?.label || recitatorId}`}
-                  onClick={() => { setRecitatorSearch(""); setShowRecitPanel(v => !v); }}>
-                  <span>{activeRecitator?.flag || '🎙️'}</span>
-                  <span className="reciter-trigger-label">{activeRecitator?.label || 'Récitateur'}</span>
-                </button>
+                {/* Reciter picker (available in standard & expert, or inside Options modal in simplified modes) */}
+                {playerConfig.showStandaloneReciter && (
+                  <button
+                    className={`ctrl-btn reciter-trigger${showRecitPanel ? " loop-on" : ""}`}
+                    aria-haspopup="dialog"
+                    aria-expanded={showRecitPanel}
+                    aria-label={`Choisir le récitateur. Actuel : ${activeRecitator?.label || recitatorId}`}
+                    title={`Récitateur : ${activeRecitator?.label || recitatorId}`}
+                    onClick={() => { setRecitatorSearch(""); setShowRecitPanel(v => !v); }}>
+                    <span>{activeRecitator?.flag || '🎙️'}</span>
+                    <span className="reciter-trigger-label">{activeRecitator?.label || 'Récitateur'}</span>
+                  </button>
+                )}
               </div>
 
               {showRecitPanel && createPortal(

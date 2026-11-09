@@ -11,12 +11,12 @@ export const UX_MODES = Object.freeze({
 export const UX_PROFILES = Object.freeze({
   [UX_MODES.BEGINNER]: Object.freeze({
     id: UX_MODES.BEGINNER,
-    name: "Débutant informatique",
-    shortLabel: "Simple",
-    badge: "Débutant",
-    icon: "🔰",
-    targetAudience: "Seniors, débutants en informatique ou personnes souhaitant une interface très simple",
-    description: "Interface épurée avec très grands caractères, gros boutons tactiles avec texte explicite et aides pas-à-pas bienveillantes.",
+    name: "Novice / Débutant",
+    shortLabel: "Novice",
+    badge: "Novice",
+    icon: "🌱",
+    targetAudience: "Débutants, personnes souhaitant une interface chaleureuse, épurée et sans surcharge de boutons",
+    description: "Interface chaleureuse aux teintes ambrées douces avec très grands caractères, 4 onglets essentiels et seulement les boutons indispensables.",
     featureFlags: Object.freeze({
       simplifiedAudioPlayer: true,
       simplifiedSurahHeader: true,
@@ -24,11 +24,11 @@ export const UX_PROFILES = Object.freeze({
       hideAdvancedMetrics: true,
     }),
     features: Object.freeze([
-      "Texte arabe agrandi (32px) et traduction en français très lisible",
-      "Gros boutons avec icône ET libellé clair (pas de symboles mystérieux)",
-      "Bannière d'aide et conseils contextuels pas-à-pas",
-      "Masquage des réglages techniques complexes pour éviter toute fausse manipulation",
-      "Lecteur audio grand format avec commandes simples : Écouter / Pause"
+      "Palette ambrée et chaleureuse, très douce pour les yeux",
+      "Texte arabe agrandi (32px) et traduction française mise en valeur",
+      "Interface épurée avec seulement 4 onglets et commandes essentielles",
+      "Boutons grand format explicites sans boutons superflus",
+      "Bannière d'aide et conseils contextuels pas-à-pas"
     ]),
     defaultSettings: Object.freeze({
       ayatFontSize: 32,
@@ -270,10 +270,7 @@ export const getNavigationTabs = (uxMode = UX_MODES.STANDARD) => {
       { id: "quran",         icon: "📖", label: "CORAN",          title: "Lecture du Saint Coran" },
       { id: "prononciation", icon: "🔤", label: "PRONONCIATION",  title: "Guide de prononciation pas-à-pas" },
       { id: "dashboard",     icon: "📊", label: "PROGRESSION",    title: "Suivi de votre apprentissage" },
-      { id: "collections",   icon: "🗂", label: "COLLECTIONS",    title: "Vos listes thématiques de versets" },
       { id: "revision",      icon: "🔁", label: "RÉVISION",       title: "Réviser vos versets mémorisés" },
-      { id: "recordings",    icon: "🎙", label: "ENREGISTREMENTS",title: "Enregistrements de votre voix" },
-      { id: "offline",       icon: "💾", label: "HORS-LIGNE",     title: "Consulter sans connexion internet" },
     ]);
   }
 
@@ -332,7 +329,9 @@ export const getPlayerConfig = (uxMode = UX_MODES.STANDARD) => {
       if (mode === UX_MODES.BEGINNER) return "🔁 Répéter";
       return "↺";
     },
-    showFastBackward: mode !== UX_MODES.CHILD,
+    showFastBackward: mode !== UX_MODES.CHILD && mode !== UX_MODES.BEGINNER,
+    showLoopButton: mode !== UX_MODES.CHILD && mode !== UX_MODES.BEGINNER,
+    showStandaloneReciter: mode !== UX_MODES.CHILD && mode !== UX_MODES.BEGINNER,
     tajweedBtnLabel: mode === UX_MODES.CHILD ? "🎨 TAJWID & AUDIO" : mode === UX_MODES.BEGINNER ? "🎨 OPTIONS & TAJWID" : "TAJWID",
     surahTitleFormat: (surah) => {
       if (!surah) return "";

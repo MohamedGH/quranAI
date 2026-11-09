@@ -466,9 +466,9 @@ export function SurahHeader({
               className={`m-action-btn ux-mode-btn ${uxMode}`}
               title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
               style={{
-                borderColor: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : 'rgba(201,168,76,.4)',
-                background: uxMode === 'beginner' ? 'rgba(46,196,182,0.18)' : uxMode === 'child' ? 'rgba(255,183,3,0.18)' : 'rgba(201,168,76,0.12)',
-                color: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : 'var(--gold2)',
+                borderColor: uxMode === 'beginner' ? 'rgba(245, 158, 11, 0.55)' : uxMode === 'child' ? '#ffb703' : 'rgba(201,168,76,.4)',
+                background: uxMode === 'beginner' ? 'rgba(245, 158, 11, 0.18)' : uxMode === 'child' ? 'rgba(255,183,3,0.18)' : 'rgba(201,168,76,0.12)',
+                color: uxMode === 'beginner' ? '#f59e0b' : uxMode === 'child' ? '#ffb703' : 'var(--gold2)',
                 fontWeight: 700,
               }}
             >

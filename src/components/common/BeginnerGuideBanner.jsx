@@ -32,10 +32,10 @@ export function BeginnerGuideBanner({ context = "general" }) {
         borderRadius: 10,
         background: isChild
           ? "linear-gradient(90deg, rgba(255, 183, 3, 0.14) 0%, rgba(251, 133, 0, 0.08) 100%)"
-          : "linear-gradient(90deg, rgba(46, 196, 182, 0.12) 0%, rgba(201, 168, 76, 0.10) 100%)",
+          : "linear-gradient(90deg, rgba(245, 158, 11, 0.16) 0%, rgba(217, 119, 6, 0.09) 100%)",
         border: isChild
           ? "1px solid rgba(255, 183, 3, 0.35)"
-          : "1px solid rgba(46, 196, 182, 0.3)",
+          : "1px solid rgba(245, 158, 11, 0.38)",
         boxSizing: "border-box",
         animation: "fadeIn .2s ease-out",
       }}
@@ -47,7 +47,7 @@ export function BeginnerGuideBanner({ context = "general" }) {
             style={{
               fontSize: 11,
               fontWeight: 700,
-              color: isChild ? "#ffb703" : "var(--teal2)",
+              color: isChild ? "#ffb703" : "#f59e0b",
               letterSpacing: 0.5,
               textTransform: "uppercase",
               display: "flex",

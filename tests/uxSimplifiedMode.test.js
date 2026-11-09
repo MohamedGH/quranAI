@@ -171,4 +171,42 @@ describe("Simplified UX Mode (Child & Beginner) & Tooltip Accuracy", () => {
       expect(sel.fullScreenSelectedAyat(store.getState())).toBe(true);
     });
   });
+
+  describe("Novice / Débutant Profile Enhancements: Warmer colors & uncluttered buttons", () => {
+    it("beginner profile has warm metadata, icon, and description", () => {
+      const profile = getUxProfile("beginner");
+      expect(profile.name).toBe("Novice / Débutant");
+      expect(profile.shortLabel).toBe("Novice");
+      expect(profile.badge).toBe("Novice");
+      expect(profile.icon).toBe("🌱");
+      expect(profile.description).toContain("chaleureuse");
+      expect(profile.description).toContain("ambrées");
+      expect(profile.features.some(f => f.toLowerCase().includes("ambrée"))).toBe(true);
+      expect(profile.features.some(f => f.toLowerCase().includes("4 onglets"))).toBe(true);
+    });
+
+    it("beginner profile navigation is reduced from 7 to 4 essential tabs", async () => {
+      const { getNavigationTabs } = await import("../src/utils/uxProfileManager.js");
+      const beginnerTabs = getNavigationTabs("beginner");
+      expect(beginnerTabs).toHaveLength(4);
+      expect(beginnerTabs.map(t => t.id)).toEqual(["quran", "prononciation", "dashboard", "revision"]);
+
+      // In contrast, standard has 7 tabs
+      const standardTabs = getNavigationTabs("standard");
+      expect(standardTabs.length).toBe(7);
+    });
+
+    it("beginner player hides fast backward, loop button, and standalone reciter for a clean 4-button player", async () => {
+      const { getPlayerConfig } = await import("../src/utils/uxProfileManager.js");
+      const cfg = getPlayerConfig("beginner");
+      expect(cfg.showFastBackward).toBe(false);
+      expect(cfg.showLoopButton).toBe(false);
+      expect(cfg.showStandaloneReciter).toBe(false);
+      expect(cfg.tajweedBtnLabel).toBe("🎨 OPTIONS & TAJWID");
+      expect(cfg.playBtnText(false)).toBe("▶ Écouter");
+      expect(cfg.playBtnText(true)).toBe("⏸ Pause");
+      expect(cfg.prevBtnText()).toBe("⏮ Préc.");
+      expect(cfg.nextBtnText()).toBe("Suiv. ⏭");
+    });
+  });
 });

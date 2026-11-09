@@ -139,9 +139,9 @@ export const CSS = `
     transform: scale(0.96);
   }
   .header-ux-badge.ux-beginner {
-    border-color: rgba(46, 196, 182, 0.6) !important;
-    background: rgba(46, 196, 182, 0.18) !important;
-    color: var(--teal2) !important;
+    border-color: rgba(245, 158, 11, 0.6) !important;
+    background: rgba(245, 158, 11, 0.18) !important;
+    color: #f59e0b !important;
   }
   .header-ux-badge.ux-child {
     border-color: rgba(255, 183, 3, 0.6) !important;
@@ -2693,26 +2693,49 @@ export const CSS = `
 
   /* ── UX Profile Enhancements & Ayat Responsive Design ── */
   .ux-profile-beginner .ayat-row {
-    margin: 4px 10px 8px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    background: rgba(255, 255, 255, 0.015);
+    margin: 6px 12px 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(245, 158, 11, 0.22);
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.05) 0%, rgba(20, 24, 33, 0.85) 100%);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .ux-profile-beginner .ayat-row:hover,
+  .ux-profile-beginner .ayat-row.active {
+    border-color: rgba(245, 158, 11, 0.45);
+    box-shadow: 0 4px 18px rgba(245, 158, 11, 0.15);
   }
   .ux-profile-beginner .ayat-main {
-    padding: 12px 14px;
-    gap: 12px;
+    padding: 14px 16px;
+    gap: 14px;
   }
   .ux-profile-beginner .ayat-arabic {
-    line-height: 2.2;
+    line-height: 2.25;
     font-size: min(var(--ayat-font-size, 32px), 32px);
+    color: #fef3c7;
   }
   .ux-profile-beginner .ayat-trans {
-    font-size: 15px;
-    line-height: 1.6;
-    color: var(--text);
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: #fde68a;
+    background: rgba(245, 158, 11, 0.07);
+    padding: 10px 14px;
+    border-radius: 8px;
+    border-left: 3px solid #f59e0b;
   }
   .ux-profile-beginner button {
-    min-height: 40px;
+    min-height: 42px;
+  }
+  .ux-profile-beginner .ctrl-btn {
+    border-color: rgba(245, 158, 11, 0.35);
+    color: #fde68a;
+  }
+  .ux-profile-beginner .beginner-play-btn {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+    border-color: #fbbf24 !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35) !important;
   }
 
   .ux-profile-child .ayat-row {

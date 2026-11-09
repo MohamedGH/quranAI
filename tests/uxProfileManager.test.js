@@ -127,16 +127,17 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
       expect(prononTab.label).toBe("LETTRES");
     });
 
-    it("provides explicit non-abbreviated labels for beginner profile", () => {
+    it("provides 4 clear and essential tabs for beginner profile without button overload", () => {
       const tabs = getNavigationTabs("beginner");
+      expect(tabs).toHaveLength(4);
+      const tabIds = tabs.map((t) => t.id);
+      expect(tabIds).toEqual(["quran", "prononciation", "dashboard", "revision"]);
+
       const prononTab = tabs.find((t) => t.id === "prononciation");
       expect(prononTab.label).toBe("PRONONCIATION");
 
       const dashTab = tabs.find((t) => t.id === "dashboard");
       expect(dashTab.label).toBe("PROGRESSION");
-
-      const recTab = tabs.find((t) => t.id === "recordings");
-      expect(recTab.label).toBe("ENREGISTREMENTS");
     });
 
     it("provides advanced pro tabs for expert profile", () => {
@@ -159,13 +160,15 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
       expect(cfg.nextBtnText()).toBe("SUIV. ⏭");
       expect(cfg.loopBtnText()).toBe("🔁 RÉPÉTER");
       expect(cfg.showFastBackward).toBe(false);
+      expect(cfg.showLoopButton).toBe(false);
+      expect(cfg.showStandaloneReciter).toBe(false);
       expect(cfg.tajweedBtnLabel).toBe("🎨 TAJWID & AUDIO");
 
       const status = cfg.verseCounterFormat(3, 7);
       expect(status).toContain("Verset 3 sur 7");
     });
 
-    it("provides clear guided controls for beginner profile", () => {
+    it("provides clear guided controls and uncluttered player for beginner profile", () => {
       const cfg = getPlayerConfig("beginner");
       expect(cfg.isBeginner).toBe(true);
       expect(cfg.isSimplified).toBe(true);
@@ -174,7 +177,10 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
       expect(cfg.prevBtnText()).toBe("⏮ Préc.");
       expect(cfg.nextBtnText()).toBe("Suiv. ⏭");
       expect(cfg.loopBtnText()).toBe("🔁 Répéter");
-      expect(cfg.showFastBackward).toBe(true);
+      expect(cfg.showFastBackward).toBe(false);
+      expect(cfg.showLoopButton).toBe(false);
+      expect(cfg.showStandaloneReciter).toBe(false);
+      expect(cfg.tajweedBtnLabel).toBe("🎨 OPTIONS & TAJWID");
     });
 
     it("provides concise symbols for expert and standard profiles", () => {

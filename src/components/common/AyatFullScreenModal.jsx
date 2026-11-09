@@ -10,6 +10,7 @@ import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
 import { masteryColor } from "./Mastery.jsx";
 import { SilenceReviseControl } from "../audio/SilenceReviseControl.jsx";
 import { TajweedAudioCoachControl } from "../audio/TajweedAudioCoachControl.jsx";
+import { isSimplifiedUxMode, getUxProfile } from "../../utils/uxProfileManager.js";
 
 // Helper for Arabic Eastern digits: e.g. 108 -> ۱۰۸
 function toArabicDigits(num) {
@@ -95,6 +96,9 @@ export function AyatFullScreenModal({
 }) {
   // Detect mobile screen width
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 640 : false));
+  const uxMode = useSelector(sel.uxMode || ((s) => s?.ui?.uxMode || "standard"));
+  const isChild = uxMode === "child";
+  const isBeginner = uxMode === "beginner";
 
   useEffect(() => {
     const handleResize = () => {
@@ -888,7 +892,7 @@ export function AyatFullScreenModal({
                 whiteSpace: "nowrap",
               }}
             >
-              {selectedSurah.number}. {selectedSurah.englishName}
+              {isChild ? `🌟 ${selectedSurah.name} · ${selectedSurah.englishName}` : `${selectedSurah.number}. ${selectedSurah.englishName}`}
             </span>
             <span
               style={{
@@ -899,7 +903,7 @@ export function AyatFullScreenModal({
                 flexShrink: 0,
               }}
             >
-              · V.{currentAyatNum}
+              {isChild ? ` · Verset ${currentAyatNum}/${totalAyats}` : ` · V.${currentAyatNum}`}
             </span>
           </div>
 
@@ -2876,28 +2880,31 @@ export function AyatFullScreenModal({
             </button>
           )}
 
-          {/* Silence mots à réviser (bouton discret 1-clic) */}
-          <SilenceReviseControl
-            compact={true}
-            buttonSize={isMobile ? 38 : 36}
-            timestamps={timestamps}
-            ld={ld}
-            ayatText={ayat?.text || ""}
-            surahNum={selectedSurah?.number}
-            ayatNum={currentAyatNum}
-            isPlaying={isPlaying}
-            onLoadTimestamps={onLoadTimestamps}
-          />
+          {/* Silence mots à réviser & Coach Tajwid (uniquement pour profils standards et experts) */}
+          {!isSimplifiedUxMode(uxMode) && (
+            <>
+              <SilenceReviseControl
+                compact={true}
+                buttonSize={isMobile ? 38 : 36}
+                timestamps={timestamps}
+                ld={ld}
+                ayatText={ayat?.text || ""}
+                surahNum={selectedSurah?.number}
+                ayatNum={currentAyatNum}
+                isPlaying={isPlaying}
+                onLoadTimestamps={onLoadTimestamps}
+              />
 
-          {/* Coach Vocal Tajwid */}
-          <TajweedAudioCoachControl
-            compact={true}
-            timestamps={timestamps}
-            ayatText={ayat?.text || ""}
-            surahNum={selectedSurah?.number}
-            ayatNum={currentAyatNum}
-            onLoadTimestamps={onLoadTimestamps}
-          />
+              <TajweedAudioCoachControl
+                compact={true}
+                timestamps={timestamps}
+                ayatText={ayat?.text || ""}
+                surahNum={selectedSurah?.number}
+                ayatNum={currentAyatNum}
+                onLoadTimestamps={onLoadTimestamps}
+              />
+            </>
+          )}
 
           {/* Main Play / Pause Trigger */}
           <button
@@ -2905,23 +2912,26 @@ export function AyatFullScreenModal({
             onClick={onTogglePlay}
             title={isPlaying ? "Mettre en pause (Espace)" : "Écouter la récitation (Espace)"}
             style={{
-              width: isMobile ? 48 : 52,
+              minWidth: isChild ? 130 : isBeginner ? 110 : (isMobile ? 48 : 52),
               height: isMobile ? 48 : 52,
-              borderRadius: "50%",
-              border: `2px solid ${isPlaying ? "var(--teal)" : "var(--gold)"}`,
-              background: isPlaying ? "var(--teal)" : "linear-gradient(135deg, var(--gold) 0%, #b8933b 100%)",
+              borderRadius: (isChild || isBeginner) ? 24 : "50%",
+              padding: (isChild || isBeginner) ? "0 18px" : 0,
+              gap: 6,
+              border: `2px solid ${isPlaying ? "var(--teal)" : isChild ? "#ffb703" : "var(--gold)"}`,
+              background: isPlaying ? "var(--teal)" : isChild ? "linear-gradient(135deg, #ffb703 0%, #fb8500 100%)" : "linear-gradient(135deg, var(--gold) 0%, #b8933b 100%)",
               color: "#fff",
-              fontSize: isMobile ? 16 : 18,
+              fontSize: (isChild || isBeginner) ? 13 : (isMobile ? 16 : 18),
+              fontWeight: 700,
+              fontFamily: (isChild || isBeginner) ? "'Cinzel', sans-serif" : "inherit",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               boxShadow: isPlaying ? "0 0 24px rgba(62,184,160,0.5)" : "0 0 20px rgba(201,168,76,0.35)",
               transition: "all .2s",
-              paddingLeft: isPlaying ? 0 : 2,
             }}
           >
-            {isPlaying ? "❚❚" : "▶"}
+            {isChild ? (isPlaying ? "⏸ PAUSE" : "▶ ÉCOUTER") : isBeginner ? (isPlaying ? "⏸ Pause" : "▶ Écouter") : (isPlaying ? "❚❚" : "▶")}
           </button>
         </div>
 

@@ -6,6 +6,7 @@ import App from "./App.jsx";
 // Clean up any stale service workers and old caches so updates load immediately
 if (typeof window !== "undefined" && "serviceWorker" in navigator) {
   const isDevHost = window.location.hostname.includes("ais-dev") ||
+                    window.location.hostname.includes("ais-pre") ||
                     window.location.hostname === "localhost" ||
                     window.location.hostname === "127.0.0.1";
   if (isDevHost) {

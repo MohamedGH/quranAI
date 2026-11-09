@@ -2,7 +2,7 @@ import { isQalqala, getMaddType, isIzhar, isIdgham, getTajweedStyleForChar } fro
 import { createPortal } from "react-dom";
 const normalizeAr = (s) => (s ? s.replace(/[ً-ٰٟ]/g, "").replace(/آ|أ|إ|ٱ/g, "ا").replace(/ى/g, "ي").trim() : "");
 import { masteryColor } from "./components/common/Mastery.jsx";
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense, lazy } from "react";
 import { Provider, useSelector, useDispatch, shallowEqual } from "react-redux";
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -20,7 +20,7 @@ import { HeaderToolsModal } from "./components/common/HeaderToolsModal.jsx";
 import { UxModeSelectorModal } from "./components/common/UxModeSelectorModal.jsx";
 import { PlayerAudioOptionsModal } from "./components/common/PlayerAudioOptionsModal.jsx";
 import { BeginnerGuideBanner } from "./components/common/BeginnerGuideBanner.jsx";
-import { getUxProfile, getUxModeClassName, isSimplifiedUxMode } from "./utils/uxProfileManager.js";
+import { getUxProfile, getUxModeClassName, isSimplifiedUxMode, getNavigationTabs, getPlayerConfig, getSidebarConfig } from "./utils/uxProfileManager.js";
 import { NotificationToast } from "./components/common/NotificationToast.jsx";
 import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
@@ -28,7 +28,7 @@ import { PWAInstallButton } from "./components/common/PWAInstallButton.jsx";
 import { OfflineIndicator } from "./components/common/OfflineIndicator.jsx";
 import { getPlayableAudioUrl, getStorageUsage, getAllSurahsOfflineStatus } from "./utils/offlineManager.js";
 import { AyatFullScreenModal } from "./components/common/AyatFullScreenModal.jsx";
-import { ArchitecturePdfModal } from "./components/common/ArchitecturePdfModal.jsx";
+const ArchitecturePdfModal = lazy(() => import("./components/common/ArchitecturePdfModal.jsx").then(m => ({ default: m.ArchitecturePdfModal })));
 import { SurahHeader } from "./components/common/SurahHeader.jsx";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "./utils/safeStorage.js";
@@ -49,7 +49,7 @@ import { LearningMapPage } from "./components/pages/LearningMapPage.jsx";
 import { QuestionsModePage } from "./components/pages/QuestionsModePage.jsx";
 import { ConcordancePage } from "./components/pages/ConcordancePage.jsx";
 import { QuranBookPage } from "./components/pages/QuranBookPage.jsx";
-import { QuranBook3DPage } from "./components/pages/QuranBook3DPage.jsx";
+const QuranBook3DPage = lazy(() => import("./components/pages/QuranBook3DPage.jsx").then(m => ({ default: m.QuranBook3DPage })));
 import { PrononciationPage } from "./components/pages/PrononciationPage.jsx";
 import { RecordingsPage } from "./components/pages/RecordingsPage.jsx";
 import { OfflinePage } from "./components/pages/OfflinePage.jsx";
@@ -145,6 +145,9 @@ function AppInner({ currentUser, onSignOut }) {
   const isChild         = useSelector(sel.isChildUx || ((s) => (s?.ui?.uxMode || "standard") === "child"));
   const showUxModeModal = useSelector(sel.showUxModeModal || ((s) => Boolean(s?.ui?.showUxModeModal)));
   const currentUxProfile = useMemo(() => getUxProfile(uxMode), [uxMode]);
+  const navTabs          = useMemo(() => getNavigationTabs(uxMode), [uxMode]);
+  const playerConfig     = useMemo(() => getPlayerConfig(uxMode), [uxMode]);
+  const sidebarConfig    = useMemo(() => getSidebarConfig(uxMode), [uxMode]);
   // ── High-frequency play state → refs + version counter (avoids full re-render) ──
   const playingAyatNumRef = useRef(null);
   const isMainPlayingRef  = useRef(false);
@@ -219,7 +222,7 @@ function AppInner({ currentUser, onSignOut }) {
       setSelectedSurah(s);
     } else if (s && s.number === selectedSurah?.number) {
       // Same surah — back navigation: restore openAyatNum from URL or lastAyatBySurah
-      const targetAyat = !isNaN(urlAyatNum) ? urlAyatNum : (lastAyatBySurah[urlSurahNum] ?? null);
+      const targetAyat = !isNaN(urlAyatNum) ? urlAyatNum : (lastAyatBySurah[urlSurahNum] ?? (fullScreenSelectedAyat ? 1 : null));
       if (targetAyat != null) {
         setOpenAyatNum(targetAyat);
         const tryScroll = (attempts = 0) => {
@@ -435,6 +438,25 @@ function AppInner({ currentUser, onSignOut }) {
     fetchOfficialBitrates(recitatorId).then(() => { if (!cancelled) setBitrateVersion(v => v + 1); });
     return () => { cancelled = true; };
   }, [recitatorId]);
+
+  // Default to Surah 1 for child and beginner modes if no surah is selected on /quran
+  useEffect(() => {
+    if ((isChild || isBeginner) && !selectedSurah && surahs && surahs.length > 0 && activePage === 'quran' && isNaN(urlSurahNum)) {
+      const s1 = surahs[0];
+      setSelectedSurah(s1);
+      setOpenAyatNum(1);
+    }
+  }, [isChild, isBeginner, selectedSurah, surahs, activePage, urlSurahNum]);
+
+  // When fullScreenSelectedAyat is active (default in child/beginner), auto-open Ayat 1 or last read verse
+  useEffect(() => {
+    if (fullScreenSelectedAyat && selectedSurah && openAyatNum == null && ayats && ayats.length > 0) {
+      const defaultAyat = (!isNaN(urlAyatNum) && urlAyatNum >= 1 && urlAyatNum <= ayats.length)
+        ? urlAyatNum
+        : (lastAyatBySurah[selectedSurah.number] || 1);
+      setOpenAyatNum(defaultAyat);
+    }
+  }, [fullScreenSelectedAyat, selectedSurah?.number, openAyatNum, ayats?.length, urlAyatNum, lastAyatBySurah]);
 
   // Warm the same cache for every other reciter in the background (staggered, one at a time)
   // so the picker panel can show everyone's real bitrate without waiting for each to be selected.
@@ -1347,9 +1369,10 @@ function AppInner({ currentUser, onSignOut }) {
 
   useEffect(() => {
     fetchSurahs().then(d => { setSurahs(d); }); // setSurahs already sets loadingSurahs:false in reducer
-    // Register service worker only in production; in dev, clean up registrations to prevent stale caching
+    // Register service worker only in production; in dev/preview, clean up registrations to prevent stale caching
     if ('serviceWorker' in navigator) {
       const isDevHost = window.location.hostname.includes("ais-dev") ||
+                        window.location.hostname.includes("ais-pre") ||
                         window.location.hostname === "localhost" ||
                         window.location.hostname === "127.0.0.1";
       if (isDevHost) {
@@ -1367,11 +1390,16 @@ function AppInner({ currentUser, onSignOut }) {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial background scan for storage usage & cached surahs
-    getStorageUsage().then(u => dispatch(offlineActions.setStorageEstimate(u))).catch(() => {});
-    getAllSurahsOfflineStatus().then(res => {
-      if (res?.surahsMap) dispatch(offlineActions.setCachedSurahsMap(res.surahsMap));
-    }).catch(() => {});
+    // Non-blocking deferred check for storage usage
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => {
+        getStorageUsage().then(u => dispatch(offlineActions.setStorageEstimate(u))).catch(() => {});
+      });
+    } else {
+      setTimeout(() => {
+        getStorageUsage().then(u => dispatch(offlineActions.setStorageEstimate(u))).catch(() => {});
+      }, 2500);
+    }
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -2238,22 +2266,14 @@ function AppInner({ currentUser, onSignOut }) {
             </div>
           </div>
 
-          {/* Page nav tabs — Segmented pill control */}
+          {/* Page nav tabs — Profile-adapted Segmented pill control */}
           <nav className="header-nav" aria-label="Navigation principale">
-            {[
-              { id: "quran",         icon: "📖", label: "CORAN" },
-              { id: "prononciation", icon: "🔤", label: "PRONON." },
-              { id: "dashboard",     icon: "📊", label: "DASH" },
-              { id: "collections",   icon: "🗂", label: "COLL." },
-              { id: "revision",      icon: "✏",  label: "RÉVISION" },
-              { id: "recordings",    icon: "🎙",  label: "ENREG." },
-              { id: "offline",       icon: "💾", label: "OFFLINE" },
-            ].map(({ id, icon, label }) => (
+            {navTabs.map(({ id, icon, label, title }) => (
               <button
                 key={id}
                 className={`header-nav-btn${activePage === id ? ` active-${id}` : ""}`}
                 onClick={() => setActivePage(id)}
-                title={label}
+                title={title || label}
               >
                 <span className="nav-icon">{icon}</span>
                 <span className="nav-label">{label}</span>
@@ -2414,7 +2434,7 @@ function AppInner({ currentUser, onSignOut }) {
           <aside className={`sidebar${sidebarOpen ? ' open' : ''}${activePage !== 'quran' ? ' sidebar-floating' : ''}`}>
             <div className="sidebar-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input
-                placeholder="RECHERCHER (NOM, N°)..."
+                placeholder={sidebarConfig.searchPlaceholder}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 style={{ paddingRight: search ? 30 : 12 }}
@@ -2459,10 +2479,10 @@ function AppInner({ currentUser, onSignOut }) {
                   <div key={s.number}
                     className={`surah-item${selectedSurah?.number === s.number ? " active surah-active" : ""}${(surahStats[s.number]?.learned >= s.numberOfAyahs && s.numberOfAyahs > 0) ? " fully-learned" : ""}`}
                     onClick={() => { setSelectedSurah(s); setSidebarOpen(false); if (activePage !== 'quran') setActivePage('quran'); }}>
-                    <div className="surah-num">{s.number}</div>
+                    <div className="surah-num">{sidebarConfig.showStars ? "⭐ " : ""}{s.number}</div>
                     <div className="surah-info">
                       <div className="surah-name-en">{s.englishName}</div>
-                      <div className="surah-meta">{s.revelationType} · {s.numberOfAyahs} AYATS{surahStats[s.number]?.learned > 0 ? ` · ${surahStats[s.number].learned}✓` : ''}</div>
+                      <div className="surah-meta">{sidebarConfig.revelationLabel(s.revelationType)} · {sidebarConfig.versesLabel(s.numberOfAyahs)}{surahStats[s.number]?.learned > 0 ? ` · ${surahStats[s.number].learned}✓` : ''}</div>
                       {(() => { const st = surahStats[s.number]; const total = s.numberOfAyahs || 0; const pct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0; return (
                         <div style={{marginTop:3,display:'flex',alignItems:'center',gap:6}}>
                           <div style={{flex:1,height:2,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
@@ -2477,31 +2497,33 @@ function AppInner({ currentUser, onSignOut }) {
                 ))}
             </div>
 
-            <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)", background: "rgba(15, 23, 42, 0.5)" }}>
-              <button
-                type="button"
-                onClick={() => { setShowArchitectureModal(true); setSidebarOpen(false); }}
-                style={{
-                  width: "100%",
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  background: "rgba(45, 212, 191, 0.12)",
-                  border: "1px solid rgba(45, 212, 191, 0.4)",
-                  color: "#2dd4bf",
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  cursor: "pointer",
-                  letterSpacing: 0.5
-                }}
-              >
-                <span>📐</span>
-                <span>DOSSIER D'ARCHITECTURE & PATTERNS (PDF)</span>
-              </button>
-            </div>
+            {sidebarConfig.showArchitectureDoc && (
+              <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)", background: "rgba(15, 23, 42, 0.5)" }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowArchitectureModal(true); setSidebarOpen(false); }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    background: "rgba(45, 212, 191, 0.12)",
+                    border: "1px solid rgba(45, 212, 191, 0.4)",
+                    color: "#2dd4bf",
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    cursor: "pointer",
+                    letterSpacing: 0.5
+                  }}
+                >
+                  <span>📐</span>
+                  <span>DOSSIER D'ARCHITECTURE & PATTERNS (PDF)</span>
+                </button>
+              </div>
+            )}
           </aside>
 
           <Routes>
@@ -2646,29 +2668,31 @@ function AppInner({ currentUser, onSignOut }) {
             <Route path="/book" element={<Navigate to="/quran/book" replace />} />
             <Route path="/quran/book3d" element={
               <AnimatedPage pageKey="quran-book3d">
-                <QuranBook3DPage
-                  surahs={surahs}
-                  learnData={learnData}
-                  setLData={setLData}
-                  collections={collections}
-                  onToggleAyat={toggleAyatInCollection}
-                  showQalqala={showQalqala}
-                  showMadd={showMadd}
-                  showIzhar={showIzhar}
-                  showIdgham={showIdgham}
-                  showIkhfa={showIkhfa}
-                  showIqlab={showIqlab}
-                  showGhunnah={showGhunnah}
-                  showTajweedTone={showTajweedTone}
-                  toggleQalqala={toggleQalqala}
-                  toggleMadd={toggleMadd}
-                  toggleIzhar={toggleIzhar}
-                  toggleIdgham={toggleIdgham}
-                  toggleIkhfa={toggleIkhfa}
-                  toggleIqlab={toggleIqlab}
-                  toggleGhunnah={toggleGhunnah}
-                  toggleTajweedTone={toggleTajweedTone}
-                />
+                <Suspense fallback={<div className="loading"><div className="loading-ring" /><span>CHARGEMENT DU LIVRE 3D...</span></div>}>
+                  <QuranBook3DPage
+                    surahs={surahs}
+                    learnData={learnData}
+                    setLData={setLData}
+                    collections={collections}
+                    onToggleAyat={toggleAyatInCollection}
+                    showQalqala={showQalqala}
+                    showMadd={showMadd}
+                    showIzhar={showIzhar}
+                    showIdgham={showIdgham}
+                    showIkhfa={showIkhfa}
+                    showIqlab={showIqlab}
+                    showGhunnah={showGhunnah}
+                    showTajweedTone={showTajweedTone}
+                    toggleQalqala={toggleQalqala}
+                    toggleMadd={toggleMadd}
+                    toggleIzhar={toggleIzhar}
+                    toggleIdgham={toggleIdgham}
+                    toggleIkhfa={toggleIkhfa}
+                    toggleIqlab={toggleIqlab}
+                    toggleGhunnah={toggleGhunnah}
+                    toggleTajweedTone={toggleTajweedTone}
+                  />
+                </Suspense>
               </AnimatedPage>
             } />
             <Route path="/book3d" element={<Navigate to="/quran/book3d" replace />} />
@@ -4329,65 +4353,71 @@ function AppInner({ currentUser, onSignOut }) {
         )}
 
         {/* HEADER TOOLS & ACCOUNT MODAL */}
-        <HeaderToolsModal
-          isOpen={showHeaderToolsModal}
-          onClose={() => setShowHeaderToolsModal(false)}
-          currentUser={currentUser}
-          onSignOut={onSignOut}
-          showArabicKeyboard={showArabicKeyboard}
-          setShowArabicKeyboard={setShowArabicKeyboard}
-          showRappel={showRappel}
-          setShowRappel={setShowRappel}
-          onOpenScheduledReminders={() => setShowScheduledReminders(true)}
-          onOpenOptionsModal={() => setShowOptionsModal(true)}
-          toggleVoice={toggleVoice}
-          listening={listening}
-          selectedSurah={selectedSurah}
-          activeHizb={resolvedActiveHizb || activeHizbCoran}
-          initialTab={headerToolsInitialTab}
-        />
+        {showHeaderToolsModal && (
+          <HeaderToolsModal
+            isOpen={showHeaderToolsModal}
+            onClose={() => setShowHeaderToolsModal(false)}
+            currentUser={currentUser}
+            onSignOut={onSignOut}
+            showArabicKeyboard={showArabicKeyboard}
+            setShowArabicKeyboard={setShowArabicKeyboard}
+            showRappel={showRappel}
+            setShowRappel={setShowRappel}
+            onOpenScheduledReminders={() => setShowScheduledReminders(true)}
+            onOpenOptionsModal={() => setShowOptionsModal(true)}
+            toggleVoice={toggleVoice}
+            listening={listening}
+            selectedSurah={selectedSurah}
+            activeHizb={resolvedActiveHizb || activeHizbCoran}
+            initialTab={headerToolsInitialTab}
+          />
+        )}
 
         {/* UX MODE SELECTOR MODAL */}
-        <UxModeSelectorModal
-          isOpen={showUxModeModal}
-          onClose={() => dispatch(uiActions.setShowUxModeModal(false))}
-        />
+        {showUxModeModal && (
+          <UxModeSelectorModal
+            isOpen={showUxModeModal}
+            onClose={() => dispatch(uiActions.setShowUxModeModal(false))}
+          />
+        )}
 
         {/* PLAYER AUDIO & TAJWEED OPTIONS MODAL */}
-        <PlayerAudioOptionsModal
-          isOpen={showPlayerAudioModal}
-          onClose={() => setShowPlayerAudioModal(false)}
-          currentMainAyat={currentMainAyat}
-          selectedSurah={selectedSurah}
-          timestampsMap={timestampsMapRef.current || timestampsMap}
-          learnData={learnData}
-          mainCurrentMs={mainCurrentMsRef.current}
-          isPlaying={isMainPlaying}
-          onLoadTimestamps={() => {
-            if (selectedSurah?.number) {
-              loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
-                if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
-              });
-            }
-          }}
-          loopActive={loopActive}
-          setLoopActive={setLoopActive}
-          loopStart={loopStart}
-          setLoopStart={setLoopStart}
-          loopEnd={loopEnd}
-          setLoopEnd={setLoopEnd}
-          loopMax={loopMax}
-          setLoopMax={setLoopMax}
-          loopCount={loopCount}
-          setLoopCount={setLoopCount}
-          activeRecitator={activeRecitator}
-          recitatorId={recitatorId}
-          onOpenReciterPicker={() => {
-            setShowRecitPanel(true);
-            setShowPlayerAudioModal(false);
-          }}
-          totalAyahs={ayats.length}
-        />
+        {showPlayerAudioModal && (
+          <PlayerAudioOptionsModal
+            isOpen={showPlayerAudioModal}
+            onClose={() => setShowPlayerAudioModal(false)}
+            currentMainAyat={currentMainAyat}
+            selectedSurah={selectedSurah}
+            timestampsMap={timestampsMapRef.current || timestampsMap}
+            learnData={learnData}
+            mainCurrentMs={mainCurrentMsRef.current}
+            isPlaying={isMainPlaying}
+            onLoadTimestamps={() => {
+              if (selectedSurah?.number) {
+                loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
+                  if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
+                });
+              }
+            }}
+            loopActive={loopActive}
+            setLoopActive={setLoopActive}
+            loopStart={loopStart}
+            setLoopStart={setLoopStart}
+            loopEnd={loopEnd}
+            setLoopEnd={setLoopEnd}
+            loopMax={loopMax}
+            setLoopMax={setLoopMax}
+            loopCount={loopCount}
+            setLoopCount={setLoopCount}
+            activeRecitator={activeRecitator}
+            recitatorId={recitatorId}
+            onOpenReciterPicker={() => {
+              setShowRecitPanel(true);
+              setShowPlayerAudioModal(false);
+            }}
+            totalAyahs={ayats.length}
+          />
+        )}
 
         {/* AYAT FULL SCREEN (FOCUS) MODAL */}
         {((fullScreenSelectedAyat || explicitFullScreen) && openAyatNum != null && selectedSurah) && (() => {
@@ -4661,13 +4691,9 @@ function AppInner({ currentUser, onSignOut }) {
 
             <div className="player-row">
               <div className="player-info">
-                <div className="player-surah">{selectedSurah.englishName.toUpperCase()}</div>
+                <div className="player-surah">{playerConfig.surahTitleFormat(selectedSurah)}</div>
                 <div className="player-ayah">
-                  AYAT {currentMainAyat?.numberInSurah || 1} / {ayats.length}
-                  {loopActive && <span style={{ color: "var(--teal)", marginLeft: 8 }}>
-                    ↺ {loopStartNum}–{loopEndNum}
-                    {loopMax > 0 && <span style={{ color: "var(--text3)" }}> · {loopCount + 1}/{loopMax}</span>}
-                  </span>}
+                  {playerConfig.verseCounterFormat(currentMainAyat?.numberInSurah || 1, ayats.length, loopActive ? `${loopStartNum}–${loopEndNum}${loopMax > 0 ? ` · ${loopCount + 1}/${loopMax}` : ''}` : '')}
                 </div>
               </div>
 
@@ -4675,19 +4701,21 @@ function AppInner({ currentUser, onSignOut }) {
                 <button className="ctrl-btn" title="Verset précédent" onClick={() => {
                   const i = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
                   playMainAyat(i); if (isMainPlaying) playWhenReady();
-                }}>⏮</button>
-                <button
-                  className="ctrl-btn"
-                  title="Reculer de 5 secondes (Retour rapide / Fast backward)"
-                  onClick={handleFastBackward}>⏪</button>
-                <button className="ctrl-btn play-btn" title={isMainPlaying ? "Pause" : "Lecture"} onClick={() => {
+                }}>{playerConfig.prevBtnText()}</button>
+                {playerConfig.showFastBackward && (
+                  <button
+                    className="ctrl-btn"
+                    title="Reculer de 5 secondes (Retour rapide / Fast backward)"
+                    onClick={handleFastBackward}>⏪</button>
+                )}
+                <button className={`ctrl-btn play-btn${isChild ? ' child-play-btn' : isBeginner ? ' beginner-play-btn' : ''}`} title={isMainPlaying ? "Pause" : "Lecture"} onClick={() => {
                   if (!isMainPlaying) { playMainAyat(loopActive ? loopStart : mainAyatIdx); setIsMainPlaying(true); playWhenReady(); }
                   else { setIsMainPlaying(false); setPlayingAyatNum(null); safePauseAudio(mainAudioRef.current); }
-                }}>{isMainPlaying ? "⏸" : "▶"}</button>
+                }}>{playerConfig.playBtnText(isMainPlaying)}</button>
                 <button className="ctrl-btn" title="Verset suivant" onClick={() => {
                   const i = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
                   playMainAyat(i); if (isMainPlaying) playWhenReady();
-                }}>⏭</button>
+                }}>{playerConfig.nextBtnText()}</button>
                 <button
                   className={`ctrl-btn${loopActive || showLoopBar ? " loop-on" : ""}`}
                   title={showLoopBar ? "Fermer les réglages de boucle" : "Boucle de versets (configurer / activer)"}
@@ -4700,7 +4728,7 @@ function AppInner({ currentUser, onSignOut }) {
                       setShowLoopBar(!showLoopBar);
                     }
                   }}
-                  style={{ fontSize: 12 }}>↺</button>
+                  style={{ fontSize: 12 }}>{playerConfig.loopBtnText()}</button>
                 {/* Options Tajwid & Audio : Mode simplifié (enfant, débutant) regroupe dans une modal dédiée */}
                 {isSimplifiedUxMode(uxMode) ? (
                   <button
@@ -4717,15 +4745,15 @@ function AppInner({ currentUser, onSignOut }) {
                       fontSize: 11,
                       fontWeight: 700,
                       borderRadius: 12,
-                      background: (isCoachEnabled || silenceWordsToRevise) ? "rgba(16, 185, 129, 0.2)" : "rgba(255, 255, 255, 0.08)",
-                      border: (isCoachEnabled || silenceWordsToRevise) ? "1px solid #10b981" : "1px solid rgba(255, 255, 255, 0.15)",
-                      color: (isCoachEnabled || silenceWordsToRevise) ? "#34d399" : "#e2e8f0",
+                      background: (isCoachEnabled || silenceWordsToRevise) ? "rgba(16, 185, 129, 0.2)" : isChild ? "rgba(255, 183, 3, 0.18)" : "rgba(255, 255, 255, 0.08)",
+                      border: (isCoachEnabled || silenceWordsToRevise) ? "1px solid #10b981" : isChild ? "1px solid rgba(255, 183, 3, 0.45)" : "1px solid rgba(255, 255, 255, 0.15)",
+                      color: (isCoachEnabled || silenceWordsToRevise) ? "#34d399" : isChild ? "#ffb703" : "#e2e8f0",
                       cursor: "pointer",
                       whiteSpace: "nowrap",
                     }}
                   >
                     <span>🎨</span>
-                    <span>TAJWID</span>
+                    <span>{playerConfig.tajweedBtnLabel}</span>
                     {(isCoachEnabled || silenceWordsToRevise) && (
                       <span style={{
                         width: 6,
@@ -4969,10 +4997,14 @@ function AppInner({ currentUser, onSignOut }) {
           isSpeaking={isTajweedSpeaking}
         />
       )}
-      <ArchitecturePdfModal
-        isOpen={showArchitectureModal}
-        onClose={() => setShowArchitectureModal(false)}
-      />
+      {showArchitectureModal && (
+        <Suspense fallback={null}>
+          <ArchitecturePdfModal
+            isOpen={showArchitectureModal}
+            onClose={() => setShowArchitectureModal(false)}
+          />
+        </Suspense>
+      )}
     </>
     </ArabicKeyboardContext.Provider>
   );

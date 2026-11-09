@@ -9,6 +9,9 @@ import {
   getBeginnerTip,
   getUxModeClassName,
   formatFriendlyErrorMessage,
+  getNavigationTabs,
+  getPlayerConfig,
+  getSidebarConfig,
 } from "../src/utils/uxProfileManager.js";
 import { parseQuranRoute, buildQuranRoute, setRouteUxMode } from "../src/utils/routeManager.js";
 import { ERROR_CODES, createAppError } from "../src/utils/errorManager.js";
@@ -67,6 +70,7 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
     expect(beginnerSettings.ayatFontSize).toBe(32);
     expect(beginnerSettings.enableAnimations).toBe(false);
     expect(beginnerSettings.showBeginnerGuides).toBe(true);
+    expect(beginnerSettings.fullScreenSelectedAyat).toBe(true);
     // Original settings preserved
     expect(beginnerSettings.currentTheme).toBe("dark");
 
@@ -74,6 +78,7 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
     expect(expertSettings.uxMode).toBe("expert");
     expect(expertSettings.ayatFontSize).toBe(24);
     expect(expertSettings.enableHeavyCompute).toBe(true);
+    expect(expertSettings.fullScreenSelectedAyat).toBe(false);
   });
 
   it("provides contextual tips for beginner and child guidance", () => {
@@ -103,6 +108,110 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
     // Standard mode receives standard error message
     const standardMsg = formatFriendlyErrorMessage(netErr, "standard");
     expect(standardMsg).toBe("Failed to fetch surah data");
+  });
+
+  describe("getNavigationTabs - Profile-adapted menu navigation", () => {
+    it("provides kid-friendly tabs and labels for child profile", () => {
+      const tabs = getNavigationTabs("child");
+      const ids = tabs.map((t) => t.id);
+      expect(ids).toContain("quran");
+      expect(ids).toContain("prononciation");
+      expect(ids).toContain("dashboard");
+      expect(ids).toContain("revision");
+
+      const quranTab = tabs.find((t) => t.id === "quran");
+      expect(quranTab.label).toBe("LECTURE");
+      expect(quranTab.title).toContain("belles sourates");
+
+      const prononTab = tabs.find((t) => t.id === "prononciation");
+      expect(prononTab.label).toBe("LETTRES");
+    });
+
+    it("provides explicit non-abbreviated labels for beginner profile", () => {
+      const tabs = getNavigationTabs("beginner");
+      const prononTab = tabs.find((t) => t.id === "prononciation");
+      expect(prononTab.label).toBe("PRONONCIATION");
+
+      const dashTab = tabs.find((t) => t.id === "dashboard");
+      expect(dashTab.label).toBe("PROGRESSION");
+
+      const recTab = tabs.find((t) => t.id === "recordings");
+      expect(recTab.label).toBe("ENREGISTREMENTS");
+    });
+
+    it("provides advanced pro tabs for expert profile", () => {
+      const tabs = getNavigationTabs("expert");
+      const prononTab = tabs.find((t) => t.id === "prononciation");
+      expect(prononTab.label).toBe("TAJWEE" + "D");
+      const dashTab = tabs.find((t) => t.id === "dashboard");
+      expect(dashTab.label).toBe("MÉTRIQUES");
+    });
+  });
+
+  describe("getPlayerConfig - Profile-adapted audio player", () => {
+    it("provides child-friendly audio controls and labels", () => {
+      const cfg = getPlayerConfig("child");
+      expect(cfg.isChild).toBe(true);
+      expect(cfg.isSimplified).toBe(true);
+      expect(cfg.playBtnText(false)).toBe("▶ ÉCOUTER");
+      expect(cfg.playBtnText(true)).toBe("⏸ PAUSE");
+      expect(cfg.prevBtnText()).toBe("⏮ PRÉC.");
+      expect(cfg.nextBtnText()).toBe("SUIV. ⏭");
+      expect(cfg.loopBtnText()).toBe("🔁 RÉPÉTER");
+      expect(cfg.showFastBackward).toBe(false);
+      expect(cfg.tajweedBtnLabel).toBe("🎨 TAJWID & AUDIO");
+
+      const status = cfg.verseCounterFormat(3, 7);
+      expect(status).toContain("Verset 3 sur 7");
+    });
+
+    it("provides clear guided controls for beginner profile", () => {
+      const cfg = getPlayerConfig("beginner");
+      expect(cfg.isBeginner).toBe(true);
+      expect(cfg.isSimplified).toBe(true);
+      expect(cfg.playBtnText(false)).toBe("▶ Écouter");
+      expect(cfg.playBtnText(true)).toBe("⏸ Pause");
+      expect(cfg.prevBtnText()).toBe("⏮ Préc.");
+      expect(cfg.nextBtnText()).toBe("Suiv. ⏭");
+      expect(cfg.loopBtnText()).toBe("🔁 Répéter");
+      expect(cfg.showFastBackward).toBe(true);
+    });
+
+    it("provides concise symbols for expert and standard profiles", () => {
+      const cfg = getPlayerConfig("standard");
+      expect(cfg.playBtnText(false)).toBe("▶");
+      expect(cfg.playBtnText(true)).toBe("⏸");
+      expect(cfg.prevBtnText()).toBe("⏮");
+      expect(cfg.nextBtnText()).toBe("⏭");
+      expect(cfg.loopBtnText()).toBe("↺");
+    });
+  });
+
+  describe("getSidebarConfig - Profile-adapted surah selector menu", () => {
+    it("provides kid-friendly placeholder and hides technical documentation", () => {
+      const cfg = getSidebarConfig("child");
+      expect(cfg.searchPlaceholder).toContain("🌟");
+      expect(cfg.showArchitectureDoc).toBe(false);
+      expect(cfg.revelationLabel("Meccan")).toBe("Mecquoise");
+      expect(cfg.revelationLabel("Medinan")).toBe("Médinoise");
+      expect(cfg.versesLabel(7)).toBe("7 versets");
+      expect(cfg.showStars).toBe(true);
+    });
+
+    it("provides beginner-friendly placeholder and clear labels", () => {
+      const cfg = getSidebarConfig("beginner");
+      expect(cfg.searchPlaceholder).toContain("Rechercher une sourate");
+      expect(cfg.showArchitectureDoc).toBe(false);
+      expect(cfg.revelationLabel("Meccan")).toBe("Mecquoise");
+      expect(cfg.versesLabel(114)).toBe("114 versets");
+    });
+
+    it("shows architecture doc and raw meta for expert and standard", () => {
+      const expertCfg = getSidebarConfig("expert");
+      expect(expertCfg.showArchitectureDoc).toBe(true);
+      expect(expertCfg.revelationLabel("Meccan")).toBe("Meccan");
+      expect(expertCfg.versesLabel(286)).toBe("286 AYATS");
+    });
   });
 });
 
@@ -174,6 +283,7 @@ describe("store - UX mode Redux state management", () => {
     expect(sel.ayatFontSize(state)).toBe(32); // font increased for comfortable reading
     expect(sel.enableAnimations(state)).toBe(false);
     expect(sel.showBeginnerGuides(state)).toBe(true);
+    expect(sel.fullScreenSelectedAyat(state)).toBe(true);
   });
 
   it("switches to child UX mode and updates typography defaults", () => {
@@ -184,6 +294,7 @@ describe("store - UX mode Redux state management", () => {
     expect(sel.isChildUx(state)).toBe(true);
     expect(sel.ayatFontSize(state)).toBe(34);
     expect(sel.showBeginnerGuides(state)).toBe(true);
+    expect(sel.fullScreenSelectedAyat(state)).toBe(true);
   });
 
   it("switches to expert UX mode and enables advanced compute", () => {
@@ -194,6 +305,7 @@ describe("store - UX mode Redux state management", () => {
     expect(sel.isExpertUx(state)).toBe(true);
     expect(sel.enableHeavyCompute(state)).toBe(true);
     expect(sel.showBeginnerGuides(state)).toBe(false);
+    expect(sel.fullScreenSelectedAyat(state)).toBe(false);
   });
 
   it("manages UX mode selector modal visibility", () => {

@@ -181,31 +181,33 @@ export async function getAllSurahsOfflineStatus(customIndexedDB = null) {
   let totalDownloadedSurahs = 0;
   let totalCachedAudio = 0;
 
+  let cachedKeysSet = new Set();
+  if (db) {
+    try {
+      const tx = db.transaction(IDB_AUDIO_STORE, "readonly");
+      const store = tx.objectStore(IDB_AUDIO_STORE);
+      const allKeys = await new Promise((resolve) => {
+        const req = store.getAllKeys ? store.getAllKeys() : null;
+        if (!req) return resolve([]);
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+      cachedKeysSet = new Set(allKeys);
+    } catch {}
+  }
+
   for (let s = 1; s <= 114; s++) {
     const count = SURAH_INFO[s - 1]?.count || 0;
     let audioCount = 0;
 
-    if (db) {
-      try {
-        const tx = db.transaction(IDB_AUDIO_STORE, "readonly");
-        const store = tx.objectStore(IDB_AUDIO_STORE);
-        const checks = [];
-        for (let an = 1; an <= count; an++) {
-          const globalNum = getGlobalVerseNum(s, an);
-          const url = `${audioBase}/${globalNum}.mp3`;
-          const key = getAudioCacheKey(url);
-          checks.push(
-            new Promise((resolve) => {
-              const req = store.get(key);
-              req.onsuccess = () => resolve(req.result ? 1 : 0);
-              req.onerror = () => resolve(0);
-            })
-          );
+    if (cachedKeysSet.size > 0) {
+      for (let an = 1; an <= count; an++) {
+        const globalNum = getGlobalVerseNum(s, an);
+        const url = `${audioBase}/${globalNum}.mp3`;
+        const key = getAudioCacheKey(url);
+        if (cachedKeysSet.has(key)) {
+          audioCount++;
         }
-        const results = await Promise.all(checks);
-        audioCount = results.reduce((sum, c) => sum + c, 0);
-      } catch {
-        audioCount = 0;
       }
     }
 

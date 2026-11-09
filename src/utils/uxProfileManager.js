@@ -39,7 +39,7 @@ export const UX_PROFILES = Object.freeze({
       showBeginnerGuides: true,
       announceNum: false,
       spellCheck: true,
-      fullScreenSelectedAyat: false,
+      fullScreenSelectedAyat: true,
     }),
   }),
 
@@ -140,7 +140,7 @@ export const UX_PROFILES = Object.freeze({
       showBeginnerGuides: true,
       announceNum: false,
       spellCheck: true,
-      fullScreenSelectedAyat: false,
+      fullScreenSelectedAyat: true,
     }),
   }),
 });
@@ -247,3 +247,138 @@ export const formatFriendlyErrorMessage = (error, uxMode = UX_MODES.STANDARD) =>
   }
   return "Une petite difficulté technique est survenue. Tout va bien, vous pouvez continuer votre lecture tranquillement.";
 };
+
+/**
+ * Pure getter returning navigation tabs tailored to the user profile.
+ */
+export const getNavigationTabs = (uxMode = UX_MODES.STANDARD) => {
+  const mode = sanitizeUxMode(uxMode);
+
+  if (mode === UX_MODES.CHILD) {
+    return Object.freeze([
+      { id: "quran",         icon: "📖", label: "LECTURE",        title: "Lire et écouter les belles sourates" },
+      { id: "prononciation", icon: "🌟", label: "LETTRES",        title: "Apprendre à bien prononcer les lettres" },
+      { id: "dashboard",     icon: "🏆", label: "PROGRÈS",        title: "Mes étoiles et récompenses" },
+      { id: "revision",      icon: "⭐", label: "FAVORIS",        title: "Mes versets préférés à réviser" },
+      { id: "recordings",    icon: "🎙️", label: "MA VOIX",        title: "Écouter mes enregistrements" },
+      { id: "offline",       icon: "💾", label: "SANS INTERNET",  title: "Lire même sans connexion" },
+    ]);
+  }
+
+  if (mode === UX_MODES.BEGINNER) {
+    return Object.freeze([
+      { id: "quran",         icon: "📖", label: "CORAN",          title: "Lecture du Saint Coran" },
+      { id: "prononciation", icon: "🔤", label: "PRONONCIATION",  title: "Guide de prononciation pas-à-pas" },
+      { id: "dashboard",     icon: "📊", label: "PROGRESSION",    title: "Suivi de votre apprentissage" },
+      { id: "collections",   icon: "🗂", label: "COLLECTIONS",    title: "Vos listes thématiques de versets" },
+      { id: "revision",      icon: "🔁", label: "RÉVISION",       title: "Réviser vos versets mémorisés" },
+      { id: "recordings",    icon: "🎙", label: "ENREGISTREMENTS",title: "Enregistrements de votre voix" },
+      { id: "offline",       icon: "💾", label: "HORS-LIGNE",     title: "Consulter sans connexion internet" },
+    ]);
+  }
+
+  if (mode === UX_MODES.EXPERT) {
+    return Object.freeze([
+      { id: "quran",         icon: "📖", label: "CORAN",   title: "Coran (Texte, Audio, Synchronisation mot à mot)" },
+      { id: "prononciation", icon: "🔤", label: "TAJWEED", title: "Analyse acoustique et règles de Tajweed" },
+      { id: "dashboard",     icon: "📊", label: "MÉTRIQUES",title: "Analytique détaillée de mémorisation" },
+      { id: "collections",   icon: "🗂", label: "COLL.",   title: "Collections et concordances thématiques" },
+      { id: "revision",      icon: "⚡", label: "RÉVISION",title: "Révision active avec silences paramétrables" },
+      { id: "recordings",    icon: "🎙", label: "ENREG.",  title: "Studio d'enregistrement et spectrogramme" },
+      { id: "offline",       icon: "💾", label: "OFFLINE", title: "Gestion avancée du cache et stockage hors-ligne" },
+    ]);
+  }
+
+  // Standard / Balanced
+  return Object.freeze([
+    { id: "quran",         icon: "📖", label: "CORAN",    title: "Lecture du Saint Coran" },
+    { id: "prononciation", icon: "🔤", label: "PRONON.",  title: "Prononciation et Tajweed" },
+    { id: "dashboard",     icon: "📊", label: "DASH",     title: "Tableau de bord" },
+    { id: "collections",   icon: "🗂", label: "COLL.",    title: "Collections de versets" },
+    { id: "revision",      icon: "✏",  label: "RÉVISION", title: "Révision et mémorisation" },
+    { id: "recordings",    icon: "🎙",  label: "ENREG.",   title: "Enregistrements audio" },
+    { id: "offline",       icon: "💾", label: "OFFLINE",  title: "Mode hors-ligne" },
+  ]);
+};
+
+/**
+ * Pure getter returning player UI configuration tailored to the user profile.
+ */
+export const getPlayerConfig = (uxMode = UX_MODES.STANDARD) => {
+  const mode = sanitizeUxMode(uxMode);
+
+  return Object.freeze({
+    isChild: mode === UX_MODES.CHILD,
+    isBeginner: mode === UX_MODES.BEGINNER,
+    isExpert: mode === UX_MODES.EXPERT,
+    isSimplified: isSimplifiedUxMode(mode),
+    playBtnText: (isPlaying) => {
+      if (mode === UX_MODES.CHILD) return isPlaying ? "⏸ PAUSE" : "▶ ÉCOUTER";
+      if (mode === UX_MODES.BEGINNER) return isPlaying ? "⏸ Pause" : "▶ Écouter";
+      return isPlaying ? "⏸" : "▶";
+    },
+    prevBtnText: () => {
+      if (mode === UX_MODES.CHILD) return "⏮ PRÉC.";
+      if (mode === UX_MODES.BEGINNER) return "⏮ Préc.";
+      return "⏮";
+    },
+    nextBtnText: () => {
+      if (mode === UX_MODES.CHILD) return "SUIV. ⏭";
+      if (mode === UX_MODES.BEGINNER) return "Suiv. ⏭";
+      return "⏭";
+    },
+    loopBtnText: () => {
+      if (mode === UX_MODES.CHILD) return "🔁 RÉPÉTER";
+      if (mode === UX_MODES.BEGINNER) return "🔁 Répéter";
+      return "↺";
+    },
+    showFastBackward: mode !== UX_MODES.CHILD,
+    tajweedBtnLabel: mode === UX_MODES.CHILD ? "🎨 TAJWID & AUDIO" : mode === UX_MODES.BEGINNER ? "🎨 OPTIONS & TAJWID" : "TAJWID",
+    surahTitleFormat: (surah) => {
+      if (!surah) return "";
+      if (mode === UX_MODES.CHILD) return `🌟 ${surah.englishName}`;
+      if (mode === UX_MODES.BEGINNER) return `${surah.englishName}`;
+      return surah.englishName.toUpperCase();
+    },
+    verseCounterFormat: (currentAyatNum, totalAyats, loopDetails = "") => {
+      if (mode === UX_MODES.CHILD) {
+        return `Verset ${currentAyatNum} sur ${totalAyats}${loopDetails ? ` · 🔁 ${loopDetails}` : ""}`;
+      }
+      if (mode === UX_MODES.BEGINNER) {
+        return `Verset ${currentAyatNum} / ${totalAyats}${loopDetails ? ` (${loopDetails})` : ""}`;
+      }
+      return `AYAT ${currentAyatNum} / ${totalAyats}`;
+    },
+  });
+};
+
+/**
+ * Pure getter returning sidebar configuration tailored to the user profile.
+ */
+export const getSidebarConfig = (uxMode = UX_MODES.STANDARD) => {
+  const mode = sanitizeUxMode(uxMode);
+
+  return Object.freeze({
+    searchPlaceholder:
+      mode === UX_MODES.CHILD
+        ? "🌟 Chercher une sourate..."
+        : mode === UX_MODES.BEGINNER
+        ? "Rechercher une sourate (nom ou n°)..."
+        : mode === UX_MODES.EXPERT
+        ? "Rechercher (nom, n°, thème, Juz)..."
+        : "RECHERCHER (NOM, N°)...",
+    revelationLabel: (type) => {
+      if (mode === UX_MODES.CHILD || mode === UX_MODES.BEGINNER) {
+        return type === "Meccan" ? "Mecquoise" : "Médinoise";
+      }
+      return type;
+    },
+    versesLabel: (count) => {
+      if (mode === UX_MODES.CHILD || mode === UX_MODES.BEGINNER) return `${count} versets`;
+      return `${count} AYATS`;
+    },
+    showArchitectureDoc: mode === UX_MODES.EXPERT || mode === UX_MODES.STANDARD,
+    showStars: mode === UX_MODES.CHILD,
+  });
+};
+

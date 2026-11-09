@@ -1500,53 +1500,57 @@ export function SurahHeader({
       )}
 
       {/* ── Surah All Options Modal (accessible for all UX modes, especially Child & Beginner) ── */}
-      <SurahAllOptionsModal
-        isOpen={showAllOptionsModal}
-        onClose={() => setShowAllOptionsModal(false)}
-        selectedSurah={selectedSurah}
-        ayats={ayats}
-        jumpToAyatNumber={jumpToAyatNumber}
-        tjToggleTajweedTone={tjToggleTajweedTone}
-        tjTajweedTone={tjTajweedTone}
-        tjToggleQalqala={tjToggleQalqala}
-        tjQalqala={tjQalqala}
-        tjToggleMadd={tjToggleMadd}
-        tjMadd={tjMadd}
-        tjToggleIzhar={tjToggleIzhar}
-        tjIzhar={tjIzhar}
-        tjToggleIdgham={tjToggleIdgham}
-        tjIdgham={tjIdgham}
-        tjToggleIkhfa={tjToggleIkhfa}
-        tjIkhfa={tjIkhfa}
-        tjToggleIqlab={tjToggleIqlab}
-        tjIqlab={tjIqlab}
-        tjToggleGhunnah={tjToggleGhunnah}
-        tjGhunnah={tjGhunnah}
-        onOpenColorPicker={() => setShowColorPickerModal(true)}
-        pageMode={pageMode}
-        setPageMode={setPageMode}
-        hizbMode={hizbMode}
-        setHizbMode={setHizbMode}
-        juzMode={juzMode}
-        setJuzMode={setJuzMode}
-        fullScreenSelectedAyat={fullScreenSelectedAyat}
-        toggleFullScreen={toggleFullScreen}
-        announceNum={announceNum}
-        toggleAnnounceNum={toggleAnnounceNum}
-        spellCheck={spellCheck}
-        toggleSpellCheck={toggleSpellCheck}
-        showParts={showParts}
-        toggleShowParts={toggleShowParts}
-        translationLang={translationLang}
-        setTranslationLang={setTranslationLang}
-        TRANS_LABELS={TRANS_LABELS}
-      />
+      {showAllOptionsModal && (
+        <SurahAllOptionsModal
+          isOpen={showAllOptionsModal}
+          onClose={() => setShowAllOptionsModal(false)}
+          selectedSurah={selectedSurah}
+          ayats={ayats}
+          jumpToAyatNumber={jumpToAyatNumber}
+          tjToggleTajweedTone={tjToggleTajweedTone}
+          tjTajweedTone={tjTajweedTone}
+          tjToggleQalqala={tjToggleQalqala}
+          tjQalqala={tjQalqala}
+          tjToggleMadd={tjToggleMadd}
+          tjMadd={tjMadd}
+          tjToggleIzhar={tjToggleIzhar}
+          tjIzhar={tjIzhar}
+          tjToggleIdgham={tjToggleIdgham}
+          tjIdgham={tjIdgham}
+          tjToggleIkhfa={tjToggleIkhfa}
+          tjIkhfa={tjIkhfa}
+          tjToggleIqlab={tjToggleIqlab}
+          tjIqlab={tjIqlab}
+          tjToggleGhunnah={tjToggleGhunnah}
+          tjGhunnah={tjGhunnah}
+          onOpenColorPicker={() => setShowColorPickerModal(true)}
+          pageMode={pageMode}
+          setPageMode={setPageMode}
+          hizbMode={hizbMode}
+          setHizbMode={setHizbMode}
+          juzMode={juzMode}
+          setJuzMode={setJuzMode}
+          fullScreenSelectedAyat={fullScreenSelectedAyat}
+          toggleFullScreen={toggleFullScreen}
+          announceNum={announceNum}
+          toggleAnnounceNum={toggleAnnounceNum}
+          spellCheck={spellCheck}
+          toggleSpellCheck={toggleSpellCheck}
+          showParts={showParts}
+          toggleShowParts={toggleShowParts}
+          translationLang={translationLang}
+          setTranslationLang={setTranslationLang}
+          TRANS_LABELS={TRANS_LABELS}
+        />
+      )}
 
       {/* ── Tajweed Color Customizer Modal ── */}
-      <TajweedColorPickerModal
-        isOpen={showColorPickerModal}
-        onClose={() => setShowColorPickerModal(false)}
-      />
+      {showColorPickerModal && (
+        <TajweedColorPickerModal
+          isOpen={showColorPickerModal}
+          onClose={() => setShowColorPickerModal(false)}
+        />
+      )}
     </div>
   );
 }

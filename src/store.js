@@ -10,7 +10,7 @@ const uiSlice = createSlice({
   name: "ui",
   initialState: {
     activePage:    "quran",   // "quran" | "prononciation" | "dashboard" | "concordance" | "collections" | "revision"
-    sidebarOpen:   (typeof window !== "undefined" && window.innerWidth >= 769),
+    sidebarOpen:   false,
     showTsBar:     false,
     showLoopBar:   false,
     showVoiceHelp: false,
@@ -31,7 +31,9 @@ const uiSlice = createSlice({
     enableLetterByLetter:load("quran_enableLetterByLetter", true),
     enableAnimations:    load("quran_enableAnimations", true),
     enableHeavyCompute:  load("quran_enableHeavyCompute", true),
-    fullScreenSelectedAyat: load("quran_fullScreenSelectedAyat", false),
+    fullScreenSelectedAyat: load("quran_fullScreenSelectedAyat", null) !== null
+      ? load("quran_fullScreenSelectedAyat", false)
+      : (load("quran_uxMode", "standard") === "beginner" || load("quran_uxMode", "standard") === "child"),
     ayatFontSize:        load("quran_ayatFontSize", 26),
     pageMode:            load("quran_page_mode", false) ?? false,
     hizbMode:            load("quran_hizb_mode", false) ?? false,
@@ -252,16 +254,20 @@ const uiSlice = createSlice({
         s.ayatFontSize = 32;
         s.enableAnimations = false;
         s.showBeginnerGuides = true;
+        s.fullScreenSelectedAyat = true;
         save("quran_ayatFontSize", 32);
         save("quran_enableAnimations", false);
         save("quran_showBeginnerGuides", true);
+        save("quran_fullScreenSelectedAyat", true);
       } else if (mode === "child") {
         s.ayatFontSize = 34;
         s.enableAnimations = true;
         s.showBeginnerGuides = true;
+        s.fullScreenSelectedAyat = true;
         save("quran_ayatFontSize", 34);
         save("quran_enableAnimations", true);
         save("quran_showBeginnerGuides", true);
+        save("quran_fullScreenSelectedAyat", true);
       } else if (mode === "expert") {
         s.ayatFontSize = 24;
         s.enableAnimations = true;
@@ -269,13 +275,17 @@ const uiSlice = createSlice({
         s.enableLetterByLetter = true;
         s.enableHeavyCompute = true;
         s.showBeginnerGuides = false;
+        s.fullScreenSelectedAyat = false;
         save("quran_ayatFontSize", 24);
         save("quran_showBeginnerGuides", false);
+        save("quran_fullScreenSelectedAyat", false);
       } else if (mode === "standard") {
         s.ayatFontSize = 26;
         s.showBeginnerGuides = false;
+        s.fullScreenSelectedAyat = false;
         save("quran_ayatFontSize", 26);
         save("quran_showBeginnerGuides", false);
+        save("quran_fullScreenSelectedAyat", false);
       }
     },
     setShowUxModeModal: (s, a) => {

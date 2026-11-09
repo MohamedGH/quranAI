@@ -164,6 +164,11 @@ self.addEventListener("activate", (e) => {
 // ── Fetch Interception ────────────────────────────────────────────────────────
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
+  const isDevHost = self.location.hostname.includes("ais-dev") ||
+                    self.location.hostname.includes("ais-pre") ||
+                    self.location.hostname === "localhost" ||
+                    self.location.hostname === "127.0.0.1";
+  if (isDevHost) return;
   const reqUrl = e.request.url;
 
   // Never intercept dev server internal URLs, source files, or Vite HMR

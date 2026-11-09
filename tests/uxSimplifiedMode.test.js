@@ -130,4 +130,45 @@ describe("Simplified UX Mode (Child & Beginner) & Tooltip Accuracy", () => {
       expect(sel.ayatFontSize(store.getState())).toBe(26);
     });
   });
+
+  describe("Child & Beginner full screen surah default and surah menu closed by default", () => {
+    it("configures fullScreenSelectedAyat to true in UX profiles for child and beginner", () => {
+      const childProfile = getUxProfile("child");
+      const beginnerProfile = getUxProfile("beginner");
+      const standardProfile = getUxProfile("standard");
+      const expertProfile = getUxProfile("expert");
+
+      expect(childProfile.defaultSettings.fullScreenSelectedAyat).toBe(true);
+      expect(beginnerProfile.defaultSettings.fullScreenSelectedAyat).toBe(true);
+      expect(standardProfile.defaultSettings.fullScreenSelectedAyat).toBe(false);
+      expect(expertProfile.defaultSettings.fullScreenSelectedAyat).toBe(false);
+    });
+
+    it("ensures surah selection menu (sidebarOpen) is not open by default", async () => {
+      const { store, uiActions, sel } = await import("../src/store.js");
+      // Initially sidebar must be closed
+      store.dispatch(uiActions.setSidebarOpen(false));
+      expect(sel.sidebarOpen(store.getState())).toBe(false);
+    });
+
+    it("automatically activates fullScreenSelectedAyat when switching to child or beginner mode", async () => {
+      const { store, uiActions, sel } = await import("../src/store.js");
+
+      // Standard mode: full screen false
+      store.dispatch(uiActions.setUxMode("standard"));
+      expect(sel.fullScreenSelectedAyat(store.getState())).toBe(false);
+
+      // Child mode: full screen true by default
+      store.dispatch(uiActions.setUxMode("child"));
+      expect(sel.fullScreenSelectedAyat(store.getState())).toBe(true);
+
+      // Expert mode: full screen false
+      store.dispatch(uiActions.setUxMode("expert"));
+      expect(sel.fullScreenSelectedAyat(store.getState())).toBe(false);
+
+      // Beginner mode: full screen true by default
+      store.dispatch(uiActions.setUxMode("beginner"));
+      expect(sel.fullScreenSelectedAyat(store.getState())).toBe(true);
+    });
+  });
 });

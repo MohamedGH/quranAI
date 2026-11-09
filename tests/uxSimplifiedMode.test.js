@@ -209,4 +209,84 @@ describe("Simplified UX Mode (Child & Beginner) & Tooltip Accuracy", () => {
       expect(cfg.nextBtnText()).toBe("Suiv. ⏭");
     });
   });
+
+  describe("UxLevelWizardModal & getUxWizardConfig - Onboarding wizard adapted to each level", () => {
+    it("generates beginner-tailored wizard with step-by-step guidance", async () => {
+      const { getUxWizardConfig } = await import("../src/utils/uxProfileManager.js");
+      const wizard = getUxWizardConfig("beginner");
+      expect(wizard.mode).toBe("beginner");
+      expect(wizard.title).toContain("espace Coran apaisé");
+      expect(wizard.badge).toContain("Débutant");
+      expect(wizard.steps.length).toBeGreaterThanOrEqual(4);
+      expect(wizard.steps[0].title).toContain("Grands Caractères");
+      expect(wizard.steps[1].title).toContain("Écoute Audio Simplifiée");
+      expect(wizard.steps[2].title).toContain("4 Onglets Essentiels");
+      expect(wizard.theme.accent).toBe("#f59e0b");
+    });
+
+    it("generates child-tailored wizard with fun and encouraging language", async () => {
+      const { getUxWizardConfig } = await import("../src/utils/uxProfileManager.js");
+      const wizard = getUxWizardConfig("child");
+      expect(wizard.mode).toBe("child");
+      expect(wizard.title).toContain("explorateur");
+      expect(wizard.badge).toContain("Apprenti");
+      expect(wizard.steps.length).toBe(4);
+      expect(wizard.steps[0].title).toContain("Magiques");
+      expect(wizard.steps[2].title).toContain("Quiz");
+      expect(wizard.theme.accent).toBe("#ffb703");
+    });
+
+    it("generates expert-tailored wizard with high-precision technical features", async () => {
+      const { getUxWizardConfig } = await import("../src/utils/uxProfileManager.js");
+      const wizard = getUxWizardConfig("expert");
+      expect(wizard.mode).toBe("expert");
+      expect(wizard.title).toContain("Haute Précision");
+      expect(wizard.badge).toContain("Expert");
+      expect(wizard.steps.length).toBe(4);
+      expect(wizard.steps[0].title).toContain("Acoustique & Métadonnées");
+      expect(wizard.steps[1].title).toContain("Tajweed & Silences");
+      expect(wizard.steps[2].title).toContain("Raccourcis Clavier");
+      expect(wizard.theme.accent).toBe("#c878ff");
+    });
+
+    it("generates standard-tailored wizard with balanced feature tour", async () => {
+      const { getUxWizardConfig } = await import("../src/utils/uxProfileManager.js");
+      const wizard = getUxWizardConfig("standard");
+      expect(wizard.mode).toBe("standard");
+      expect(wizard.title).toContain("Qur'an Study");
+      expect(wizard.steps.length).toBe(4);
+      expect(wizard.theme.accent).toBe("#c9a84c");
+    });
+
+    it("manages wizard visibility and step index in Redux store", async () => {
+      const { store, uiActions, sel } = await import("../src/store.js");
+      expect(sel.showUxWizard(store.getState())).toBe(false);
+      expect(sel.uxWizardStep(store.getState())).toBe(0);
+
+      // Open wizard
+      store.dispatch(uiActions.setShowUxWizard(true));
+      expect(sel.showUxWizard(store.getState())).toBe(true);
+      expect(sel.uxWizardStep(store.getState())).toBe(0);
+
+      // Advance step
+      store.dispatch(uiActions.setUxWizardStep(2));
+      expect(sel.uxWizardStep(store.getState())).toBe(2);
+
+      // Close wizard
+      store.dispatch(uiActions.setShowUxWizard(false));
+      expect(sel.showUxWizard(store.getState())).toBe(false);
+
+      // Toggle wizard opens and resets step to 0
+      store.dispatch(uiActions.toggleShowUxWizard());
+      expect(sel.showUxWizard(store.getState())).toBe(true);
+      expect(sel.uxWizardStep(store.getState())).toBe(0);
+
+      store.dispatch(uiActions.setShowUxWizard(false));
+    });
+
+    it("exports UxLevelWizardModal as a valid React component", async () => {
+      const { UxLevelWizardModal } = await import("../src/components/common/UxLevelWizardModal.jsx");
+      expect(typeof UxLevelWizardModal).toBe("function");
+    });
+  });
 });

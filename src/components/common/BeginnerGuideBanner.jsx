@@ -78,6 +78,30 @@ export function BeginnerGuideBanner({ context = "general" }) {
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
         <button
+          id="btn-open-wizard-banner"
+          onClick={() => dispatch(uiActions.setShowUxWizard(true))}
+          style={{
+            padding: "5px 12px",
+            fontSize: 11,
+            fontWeight: 700,
+            borderRadius: 6,
+            background: isChild ? "rgba(255, 183, 3, 0.22)" : "rgba(245, 158, 11, 0.22)",
+            border: isChild ? "1px solid rgba(255, 183, 3, 0.5)" : "1px solid rgba(245, 158, 11, 0.5)",
+            color: isChild ? "#ffb703" : "#f59e0b",
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            transition: "all .15s",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+          title="Ouvrir le guide pas-à-pas interactif"
+        >
+          <span>✨</span>
+          <span>{isChild ? "Guide Apprenti" : "Comment ça marche ?"}</span>
+        </button>
+
+        <button
           onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
           style={{
             padding: "5px 10px",

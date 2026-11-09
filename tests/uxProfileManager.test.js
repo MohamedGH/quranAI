@@ -12,6 +12,7 @@ import {
   getNavigationTabs,
   getPlayerConfig,
   getSidebarConfig,
+  getUxThemeTokens,
 } from "../src/utils/uxProfileManager.js";
 import { parseQuranRoute, buildQuranRoute, setRouteUxMode } from "../src/utils/routeManager.js";
 import { ERROR_CODES, createAppError } from "../src/utils/errorManager.js";
@@ -330,5 +331,43 @@ describe("store - UX mode Redux state management", () => {
 
     store.dispatch(uiActions.toggleBeginnerGuides());
     expect(sel.showBeginnerGuides(store.getState())).toBe(false);
+  });
+
+  describe("getUxThemeTokens - Dynamic theme colors adapted to each profile", () => {
+    it("returns warm amber tokens for beginner mode", () => {
+      const tokens = getUxThemeTokens("beginner");
+      expect(tokens.accent).toBe("#f59e0b");
+      expect(tokens.accentHover).toBe("#fbbf24");
+      expect(tokens.name).toContain("Ambre");
+      expect(tokens.accentGradient).toContain("#f59e0b");
+    });
+
+    it("returns cheerful sunny gold tokens for child mode", () => {
+      const tokens = getUxThemeTokens("child");
+      expect(tokens.accent).toBe("#ffb703");
+      expect(tokens.accentHover).toBe("#ffd166");
+      expect(tokens.name).toContain("Soleil");
+      expect(tokens.accentGradient).toContain("#ffb703");
+    });
+
+    it("returns royal purple tokens for expert mode", () => {
+      const tokens = getUxThemeTokens("expert");
+      expect(tokens.accent).toBe("#c878ff");
+      expect(tokens.accentHover).toBe("#d99aff");
+      expect(tokens.name).toContain("Violet");
+      expect(tokens.accentGradient).toContain("#a855f7");
+    });
+
+    it("returns classic warm gold tokens for standard mode", () => {
+      const tokens = getUxThemeTokens("standard");
+      expect(tokens.accent).toBe("#c9a84c");
+      expect(tokens.accentHover).toBe("#e8c96e");
+      expect(tokens.name).toContain("Or");
+    });
+
+    it("falls back to standard tokens when an invalid mode is provided", () => {
+      const tokens = getUxThemeTokens("invalid-mode");
+      expect(tokens.accent).toBe("#c9a84c");
+    });
   });
 });

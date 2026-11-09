@@ -2739,24 +2739,57 @@ export const CSS = `
   }
 
   .ux-profile-child .ayat-row {
-    margin: 4px 10px 8px;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 183, 3, 0.15);
-    background: rgba(255, 183, 3, 0.02);
+    margin: 6px 12px 10px;
+    border-radius: 16px;
+    border: 1.5px solid rgba(255, 183, 3, 0.28);
+    background: linear-gradient(180deg, rgba(255, 183, 3, 0.05) 0%, rgba(20, 24, 33, 0.85) 100%);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+  .ux-profile-child .ayat-row:hover,
+  .ux-profile-child .ayat-row.active {
+    border-color: rgba(255, 183, 3, 0.55);
+    box-shadow: 0 4px 20px rgba(255, 183, 3, 0.2);
   }
   .ux-profile-child .ayat-main {
-    padding: 12px 14px;
-    gap: 12px;
+    padding: 14px 16px;
+    gap: 14px;
   }
   .ux-profile-child .ayat-arabic {
     font-size: min(var(--ayat-font-size, 34px), 34px);
     line-height: 2.3;
+    color: #fff1c2;
+  }
+  .ux-profile-child .ayat-trans {
+    font-size: 16px;
+    line-height: 1.65;
+    color: #ffd166;
+    background: rgba(255, 183, 3, 0.08);
+    padding: 10px 14px;
+    border-radius: 10px;
+    border-left: 3px solid #ffb703;
+  }
+  .ux-profile-child .child-play-btn {
+    background: linear-gradient(135deg, #ffb703 0%, #fb8500 100%) !important;
+    border-color: #ffd166 !important;
+    color: #0c0e14 !important;
+    font-weight: 800 !important;
+    box-shadow: 0 4px 14px rgba(255, 183, 3, 0.35) !important;
+  }
+  .ux-profile-child .ctrl-btn {
+    border-color: rgba(255, 183, 3, 0.35);
+    color: #ffd166;
   }
 
   .ux-profile-expert .ayat-row {
     margin: 0;
     border-radius: 0;
-    border-bottom: 1px solid rgba(42, 47, 64, 0.35);
+    border-bottom: 1px solid rgba(200, 120, 255, 0.20);
+    background: rgba(18, 16, 28, 0.4);
+  }
+  .ux-profile-expert .ayat-row:hover,
+  .ux-profile-expert .ayat-row.active {
+    background: rgba(200, 120, 255, 0.06);
+    border-bottom-color: rgba(200, 120, 255, 0.45);
   }
   .ux-profile-expert .ayat-main {
     padding: 7px 14px;
@@ -2766,15 +2799,41 @@ export const CSS = `
     font-size: min(var(--ayat-font-size, 22px), 21.5px) !important;
     line-height: 1.8 !important;
     letter-spacing: 0;
+    color: #f3e8ff;
   }
   .ux-profile-expert .ayat-trans {
     font-size: 13px;
     line-height: 1.45;
+    color: #d8b4fe;
+    border-left: 2px solid #a855f7;
+    padding-left: 8px;
   }
   .ux-profile-expert .ayat-number-badge {
     width: 25px;
     height: 25px;
     font-size: 9px;
+    border-color: rgba(200, 120, 255, 0.4);
+    color: #c878ff;
+  }
+  .ux-profile-expert .ctrl-btn {
+    border-color: rgba(200, 120, 255, 0.3);
+    color: #d99aff;
+  }
+
+  .ux-profile-standard .ayat-row {
+    margin: 4px 10px 8px;
+    border-radius: 12px;
+    border: 1px solid rgba(201, 168, 76, 0.15);
+    background: rgba(201, 168, 76, 0.015);
+  }
+  .ux-profile-standard .ayat-row:hover,
+  .ux-profile-standard .ayat-row.active {
+    border-color: rgba(201, 168, 76, 0.35);
+  }
+  .ux-profile-standard .ayat-trans {
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--text);
   }
 
   /* Responsive breakpoints for Ayat typography & padding */
@@ -2876,10 +2935,84 @@ export const CSS = `
 
 export const StyleTag = () => {
   const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
+  const uxMode = useSelector(sel.uxMode) || "standard";
+
+  // Dynamic theme tokens calculated according to the active mode
+  const themeCss = React.useMemo(() => {
+    // Mode-specific CSS variables
+    if (uxMode === "beginner") {
+      return `
+        :root {
+          --gold: #f59e0b;
+          --gold2: #fbbf24;
+          --gold3: #fef3c7;
+          --header-border: rgba(245, 158, 11, 0.28);
+          --header-glow: rgba(245, 158, 11, 0.40);
+          --active-nav-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.26), rgba(217, 119, 6, 0.14));
+          --active-nav-border: rgba(245, 158, 11, 0.45);
+          --active-nav-color: #fbbf24;
+          --play-btn-bg: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          --play-btn-border: #fbbf24;
+          --play-btn-color: #ffffff;
+        }
+      `;
+    }
+    if (uxMode === "child") {
+      return `
+        :root {
+          --gold: #ffb703;
+          --gold2: #ffd166;
+          --gold3: #fff1c2;
+          --header-border: rgba(255, 183, 3, 0.32);
+          --header-glow: rgba(255, 183, 3, 0.45);
+          --active-nav-bg: linear-gradient(135deg, rgba(255, 183, 3, 0.26), rgba(251, 133, 0, 0.14));
+          --active-nav-border: rgba(255, 183, 3, 0.50);
+          --active-nav-color: #ffd166;
+          --play-btn-bg: linear-gradient(135deg, #ffb703 0%, #fb8500 100%);
+          --play-btn-border: #ffd166;
+          --play-btn-color: #0c0e14;
+        }
+      `;
+    }
+    if (uxMode === "expert") {
+      return `
+        :root {
+          --gold: #c878ff;
+          --gold2: #d99aff;
+          --gold3: #f3e8ff;
+          --header-border: rgba(200, 120, 255, 0.30);
+          --header-glow: rgba(200, 120, 255, 0.40);
+          --active-nav-bg: linear-gradient(135deg, rgba(200, 120, 255, 0.24), rgba(168, 85, 247, 0.12));
+          --active-nav-border: rgba(200, 120, 255, 0.45);
+          --active-nav-color: #d99aff;
+          --play-btn-bg: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+          --play-btn-border: #c878ff;
+          --play-btn-color: #ffffff;
+        }
+      `;
+    }
+    // Standard / Équilibré (Classic Warm Gold)
+    return `
+      :root {
+        --gold: #c9a84c;
+        --gold2: #e8c96e;
+        --gold3: #f5e0a0;
+        --header-border: rgba(201, 168, 76, 0.18);
+        --header-glow: rgba(201, 168, 76, 0.35);
+        --active-nav-bg: linear-gradient(135deg, rgba(201, 168, 76, 0.22), rgba(201, 168, 76, 0.10));
+        --active-nav-border: rgba(201, 168, 76, 0.30);
+        --active-nav-color: #e8c96e;
+        --play-btn-bg: var(--surface2);
+        --play-btn-border: var(--border2);
+        --play-btn-color: var(--gold2);
+      }
+    `;
+  }, [uxMode]);
+
   return (
     <style
       dangerouslySetInnerHTML={{
-        __html: `${CSS}\n:root { --ayat-font-size: ${ayatFontSize}px; }`,
+        __html: `${CSS}\n${themeCss}\n:root { --ayat-font-size: ${ayatFontSize}px; }`,
       }}
     />
   );

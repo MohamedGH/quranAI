@@ -238,24 +238,49 @@ export function HeaderToolsModal({
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('ux')}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: 6,
-                    border: '1px solid var(--gold)',
-                    background: 'rgba(201, 168, 76, 0.12)',
-                    color: 'var(--gold2)',
-                    fontSize: 9,
-                    fontFamily: "'Cinzel', serif",
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  CHANGER
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <button
+                    id="btn-open-wizard-header-tools"
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      dispatch(uiActions.setShowUxWizard(true));
+                    }}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: 6,
+                      border: '1px solid var(--gold)',
+                      background: 'rgba(201, 168, 76, 0.16)',
+                      color: 'var(--gold2)',
+                      fontSize: 9,
+                      fontFamily: "'Cinzel', serif",
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title="Lancer le guide pas-à-pas de l'application"
+                  >
+                    ✨ GUIDE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ux')}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: 6,
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      color: 'var(--text)',
+                      fontSize: 9,
+                      fontFamily: "'Cinzel', serif",
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    CHANGER
+                  </button>
+                </div>
               </div>
 
               {/* Taille du Texte des Versets */}

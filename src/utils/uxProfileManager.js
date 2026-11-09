@@ -15,6 +15,20 @@ export const UX_PROFILES = Object.freeze({
     shortLabel: "Novice",
     badge: "Novice",
     icon: "🌱",
+    colorTheme: Object.freeze({
+      name: "Ambre Chaleureux",
+      accent: "#f59e0b",
+      accentHover: "#fbbf24",
+      accentRgb: "245, 158, 11",
+      accentGradient: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+      badgeBg: "rgba(245, 158, 11, 0.18)",
+      badgeBorder: "rgba(245, 158, 11, 0.6)",
+      cardBg: "linear-gradient(180deg, rgba(245, 158, 11, 0.05) 0%, rgba(20, 24, 33, 0.85) 100%)",
+      cardBorder: "rgba(245, 158, 11, 0.22)",
+      headerGlow: "rgba(245, 158, 11, 0.35)",
+      navActiveBg: "linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(245, 158, 11, 0.10))",
+      navActiveBorder: "rgba(245, 158, 11, 0.40)",
+    }),
     targetAudience: "Débutants, personnes souhaitant une interface chaleureuse, épurée et sans surcharge de boutons",
     description: "Interface chaleureuse aux teintes ambrées douces avec très grands caractères, 4 onglets essentiels et seulement les boutons indispensables.",
     featureFlags: Object.freeze({
@@ -49,6 +63,20 @@ export const UX_PROFILES = Object.freeze({
     shortLabel: "Standard",
     badge: "Équilibré",
     icon: "⚖️",
+    colorTheme: Object.freeze({
+      name: "Or Classique",
+      accent: "#c9a84c",
+      accentHover: "#e8c96e",
+      accentRgb: "201, 168, 76",
+      accentGradient: "linear-gradient(135deg, #c9a84c 0%, #a68434 100%)",
+      badgeBg: "rgba(201, 168, 76, 0.12)",
+      badgeBorder: "rgba(201, 168, 76, 0.45)",
+      cardBg: "rgba(255, 255, 255, 0.015)",
+      cardBorder: "rgba(42, 47, 64, 0.5)",
+      headerGlow: "rgba(201, 168, 76, 0.35)",
+      navActiveBg: "linear-gradient(135deg, rgba(201, 168, 76, 0.22), rgba(201, 168, 76, 0.10))",
+      navActiveBorder: "rgba(201, 168, 76, 0.30)",
+    }),
     targetAudience: "Pratique quotidienne pour la majorité des lecteurs et étudiants du Coran",
     description: "L'expérience complète et équilibrée avec lecture, audio synchronisé, quiz, règles de Tajweed et suivi de révision.",
     featureFlags: Object.freeze({
@@ -82,6 +110,20 @@ export const UX_PROFILES = Object.freeze({
     shortLabel: "Expert",
     badge: "Avancé",
     icon: "⚡",
+    colorTheme: Object.freeze({
+      name: "Violet Royal & Indigo",
+      accent: "#c878ff",
+      accentHover: "#d99aff",
+      accentRgb: "200, 120, 255",
+      accentGradient: "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)",
+      badgeBg: "rgba(200, 120, 255, 0.18)",
+      badgeBorder: "rgba(200, 120, 255, 0.6)",
+      cardBg: "rgba(20, 18, 30, 0.75)",
+      cardBorder: "rgba(200, 120, 255, 0.25)",
+      headerGlow: "rgba(200, 120, 255, 0.35)",
+      navActiveBg: "linear-gradient(135deg, rgba(200, 120, 255, 0.22), rgba(200, 120, 255, 0.10))",
+      navActiveBorder: "rgba(200, 120, 255, 0.35)",
+    }),
     targetAudience: "Mémorisateurs (Hafiz), imams, étudiants avancés et utilisateurs technophiles",
     description: "Outils de précision : synchronisation mot à mot, réglages fins des silences, raccourcis clavier pro et métadonnées complètes.",
     featureFlags: Object.freeze({
@@ -117,6 +159,20 @@ export const UX_PROFILES = Object.freeze({
     shortLabel: "Enfant",
     badge: "Apprenti",
     icon: "🌟",
+    colorTheme: Object.freeze({
+      name: "Soleil Joyeux & Doré",
+      accent: "#ffb703",
+      accentHover: "#ffd166",
+      accentRgb: "255, 183, 3",
+      accentGradient: "linear-gradient(135deg, #ffb703 0%, #fb8500 100%)",
+      badgeBg: "rgba(255, 183, 3, 0.18)",
+      badgeBorder: "rgba(255, 183, 3, 0.6)",
+      cardBg: "linear-gradient(180deg, rgba(255, 183, 3, 0.04) 0%, rgba(20, 24, 33, 0.85) 100%)",
+      cardBorder: "rgba(255, 183, 3, 0.25)",
+      headerGlow: "rgba(255, 183, 3, 0.40)",
+      navActiveBg: "linear-gradient(135deg, rgba(255, 183, 3, 0.22), rgba(255, 183, 3, 0.10))",
+      navActiveBorder: "rgba(255, 183, 3, 0.40)",
+    }),
     targetAudience: "Enfants et jeunes apprenants découvrant le Coran",
     description: "Affichage chaleureux et stimulant avec textes très grands, encouragements visuels et mode quiz motivant.",
     featureFlags: Object.freeze({
@@ -221,6 +277,14 @@ export const getBeginnerTip = (context = "general", uxMode = "beginner") => {
     revision: "🔁 Révision : Vos versets à réviser sont regroupés ici pour vous aider à les mémoriser pas à pas.",
   };
   return tips[context] || tips.general;
+};
+
+/**
+ * Pure getter returning color theme tokens for a given UX mode.
+ */
+export const getUxThemeTokens = (mode = UX_MODES.STANDARD) => {
+  const profile = getUxProfile(mode);
+  return profile?.colorTheme || UX_PROFILES[UX_MODES.STANDARD].colorTheme;
 };
 
 /**
@@ -380,4 +444,202 @@ export const getSidebarConfig = (uxMode = UX_MODES.STANDARD) => {
     showStars: mode === UX_MODES.CHILD,
   });
 };
+/**
+ * Pure getter returning onboarding wizard configuration and steps adapted to each level/mode.
+ */
+export const getUxWizardConfig = (uxMode = UX_MODES.STANDARD) => {
+  const mode = sanitizeUxMode(uxMode);
+  const theme = getUxThemeTokens(mode);
+  const profile = getUxProfile(mode);
 
+  if (mode === UX_MODES.BEGINNER) {
+    return Object.freeze({
+      mode,
+      badge: "Guide Débutant Pas-à-Pas",
+      title: "Bienvenue dans votre espace Coran apaisé",
+      subtitle: "Un guide pas-à-pas simple et rassurant pour apprendre à votre rythme",
+      theme,
+      steps: Object.freeze([
+        {
+          step: 1,
+          icon: "📖",
+          title: "Lecture Claire & Grands Caractères",
+          shortDesc: "Verset agrandi (32px) et traduction en français immédiate",
+          body: "Le texte sacré arabe s'affiche en très grands caractères avec les voyelles bien visibles. Juste en dessous, la traduction française vous permet de comprendre chaque phrase sans effort.",
+          highlightTip: "Faites défiler vers le bas pour lire naturellement les versets suivants.",
+          keyAction: "Touchez n'importe quel verset pour le sélectionner en grand écran."
+        },
+        {
+          step: 2,
+          icon: "▶️",
+          title: "Écoute Audio Simplifiée",
+          shortDesc: "Seulement 4 boutons essentiels : Précédent, Écouter, Suivant et Options",
+          body: "Pas de commandes compliquées : appuyez sur '▶ Écouter' en bas pour lancer la récitation. Le mot en cours de récitation se colore pour vous guider les yeux fermés.",
+          highlightTip: "En mode novice, tous les boutons inutiles sont masqués pour éviter les fausses manipulations.",
+          keyAction: "Appuyez sur '▶ Écouter' pour démarrer ou '⏸ Pause' pour arrêter."
+        },
+        {
+          step: 3,
+          icon: "🧭",
+          title: "4 Onglets Essentiels",
+          shortDesc: "Coran, Prononciation, Progression et Révision",
+          body: "La barre supérieure ne contient que 4 onglets clairs : lisez le Coran, pratiquez la prononciation des lettres, suivez vos sourates apprises et révisez sereinement.",
+          highlightTip: "Vous pouvez changer de mode à tout moment via le badge 🌱 Novice en haut.",
+          keyAction: "Naviguez facilement entre les 4 rubriques principales."
+        },
+        {
+          step: 4,
+          icon: "🎨",
+          title: "Couleurs Chaleureuses & Bienveillantes",
+          shortDesc: "Une ambiance ambrée douce conçue pour le confort des yeux",
+          body: "L'interface utilise des teintes ambrées et miel apaisantes. Des conseils discrets vous accompagnent au fil de votre lecture sans jamais vous interrompre.",
+          highlightTip: "Ce guide reste accessible à tout moment depuis le menu OUTILS ⚡ ou la bannière d'aide.",
+          keyAction: "Vous êtes prêt ! Bonne et paisible lecture."
+        }
+      ])
+    });
+  }
+
+  if (mode === UX_MODES.CHILD) {
+    return Object.freeze({
+      mode,
+      badge: "Mission Apprenti Coran 🌟",
+      title: "Bienvenue, jeune explorateur du Coran !",
+      subtitle: "Découvre les trésors du Coran en t'amusant avec de belles couleurs",
+      theme,
+      steps: Object.freeze([
+        {
+          step: 1,
+          icon: "🌟",
+          title: "Des Versets Magiques & Très Grands",
+          shortDesc: "Des lettres géantes dorées pour bien lire sans fatiguer",
+          body: "Regarde comme les lettres arabes sont grandes et lumineuses ! Chaque verset ressemble à une carte d'étoile dorée avec sa traduction en français.",
+          highlightTip: "Chaque verset porte son numéro d'étoile pour te repérer facilement.",
+          keyAction: "Clique sur une carte de verset pour la voir en plein écran !"
+        },
+        {
+          step: 2,
+          icon: "🎧",
+          title: "Écoute & Répète avec le Récitateur",
+          shortDesc: "Les mots s'illuminent pendant que le cheikh récite",
+          body: "Appuie sur le gros bouton jaune '▶ ÉCOUTER'. Les mots s'allument les uns après les autres comme des petites lanternes. Répète après le cheikh !",
+          highlightTip: "Tu as de gros boutons rigolos : PRÉC., ÉCOUTER, SUIV. et TAJWID.",
+          keyAction: "Appuie sur '▶ ÉCOUTER' pour chanter et apprendre les versets."
+        },
+        {
+          step: 3,
+          icon: "🎮",
+          title: "Quiz & Jeux de Récitation",
+          shortDesc: "Gagne des points et débloque des étoiles de champion",
+          body: "Dans l'onglet RÉVISION, découvre des quiz rigolos à choix multiples. Réponds sans stress, prends tout ton temps et fête tes victoires avec des sons joyeux !",
+          highlightTip: "Pas de panique si tu te trompes, tu peux recommencer autant de fois que tu veux !",
+          keyAction: "Deviens un champion de la mémorisation !"
+        },
+        {
+          step: 4,
+          icon: "🚀",
+          title: "Prêt pour l'Aventure ?",
+          shortDesc: "Explore les sourates et amuse-toi bien",
+          body: "Tu as maintenant ta cape d'Apprenti du Coran. Choisis ta première sourate et commence ton beau voyage !",
+          highlightTip: "Clique sur ☰ en haut pour choisir ta sourate préférée.",
+          keyAction: "C'est parti ! Que la paix soit sur toi 🌟"
+        }
+      ])
+    });
+  }
+
+  if (mode === UX_MODES.EXPERT) {
+    return Object.freeze({
+      mode,
+      badge: "Console Expert & Mémorisation Pro ⚡",
+      title: "Architecture & Outils de Haute Précision",
+      subtitle: "Guide des fonctionnalités avancées pour Hafiz, Imams et étudiants aguerris",
+      theme,
+      steps: Object.freeze([
+        {
+          step: 1,
+          icon: "⚡",
+          title: "Synchronisation Acoustique & Métadonnées",
+          shortDesc: "Alignement mot à mot au millième de seconde et repères canoniques",
+          body: "Chaque verset intègre les divisions coraniques complètes : Hizb, Juz, Ruku, Manzil et Page de Médine. La synchronisation temporelle fine permet le bouclage ciblé sur des segments précis.",
+          highlightTip: "La vue compacte affiche un maximum de texte par écran pour les révisions rapides.",
+          keyAction: "Activez le mode Hizb ou Page dans les options pour travailler par blocs."
+        },
+        {
+          step: 2,
+          icon: "🎯",
+          title: "Studio de Tajweed & Silences Paramétrables",
+          shortDesc: "Contrôle prédictif des pauses et masquage actif des mots à réviser",
+          body: "Utilisez le 'SilenceReviseControl' pour tester votre mémoire : l'audio coupe le son sur les mots inconnus pour vous forcer à réciter de mémoire avant la reprise automatique.",
+          highlightTip: "Le Coach Vocal de Tajweed annonce et analyse acoustiquement chaque règle (Ghunnah, Qalqala, Madd).",
+          keyAction: "Configurez vos pauses de révision au millième de seconde."
+        },
+        {
+          step: 3,
+          icon: "⌨️",
+          title: "Raccourcis Clavier & Recherche Concordance",
+          shortDesc: "Contrôle mains-libres au clavier pour sessions intensives de mémorisation",
+          body: "Raccourcis rapides : [Espace] pour play/pause, [Flèches] pour sauts de versets, [1-4] pour validation des quiz, [R] pour indice mot masqué, [T] pour Tajweed intégral.",
+          highlightTip: "La page Concordance permet de croiser racines, occurrences lexicales et structures syntaxiques.",
+          keyAction: "Utilisez la concordance lexicale pour maîtriser les versets similaires (Mutashabihat)."
+        },
+        {
+          step: 4,
+          icon: "💾",
+          title: "Offline Storage & Télémétrie de Maîtrise",
+          shortDesc: "Calcul d'estimation de mémoire spatiale et cache IndexedDB complet",
+          body: "L'application fonctionne à 100% hors-ligne avec téléchargement ciblé des sourates et récitation audio. Les métriques de mémorisation calculent votre courbe d'oubli.",
+          highlightTip: "Consultez le Dossier d'Architecture PDF depuis la barre latérale pour la documentation technique.",
+          keyAction: "Vous disposez de l'environnement complet de travail pour Hafiz."
+        }
+      ])
+    });
+  }
+
+  // STANDARD / BALANCED
+  return Object.freeze({
+    mode,
+    badge: "Visite Guidée de l'Application ⚖️",
+    title: "Guide Complet de Qur'an Study",
+    subtitle: "Découvrez toutes les clés pour lire, écouter, comprendre et mémoriser",
+    theme,
+    steps: Object.freeze([
+      {
+        step: 1,
+        icon: "📖",
+        title: "Lecture & Récitation Synchronisée",
+        shortDesc: "Texte arabe Uthmani, phonétique et traductions françaises",
+        body: "Naviguez à travers les 114 sourates. Chaque verset peut être écouté individuellement ou en continu avec synchronisation lettre par lettre et mot à mot.",
+        highlightTip: "Cliquez sur n'importe quel verset pour déployer ses détails, notes et analyses.",
+        keyAction: "Utilisez le menu ☰ à gauche pour choisir une sourate ou filtrer par niveau de maîtrise."
+      },
+      {
+        step: 2,
+        icon: "🎨",
+        title: "Tajweed Dynamique en Couleurs",
+        shortDesc: "Visualisez instantanément les 8 règles fondamentales de Tajweed",
+        body: "Qalqala (écho), Madd (prolongations), Idgham (assimilation), Ikhfa, Izhar, Iqlab et Ghunnah s'illuminent selon une charte chromatique claire et paramétrable.",
+        highlightTip: "Activez ou désactivez chaque règle séparément via le bouton TAJWID.",
+        keyAction: "Entraînez-vous avec les couleurs pour perfectionner votre récitation."
+      },
+      {
+        step: 3,
+        icon: "🔁",
+        title: "Répétition & Mémorisation Pas-à-Pas",
+        shortDesc: "Boucles personnalisées, quiz interactifs et suivi de progression",
+        body: "Définissez une boucle audio sur un intervalle de versets (ex: versets 1 à 7) pour ancrer la mémorisation. Marquez chaque verset comme 'appris' pour voir grimper votre score.",
+        highlightTip: "L'onglet 'Tableau de bord' vous présente vos statistiques et objectifs quotidiens.",
+        keyAction: "Créez vos propres collections thématiques de versets à réviser."
+      },
+      {
+        step: 4,
+        icon: "⚙️",
+        title: "Outils Intégrés & Personnalisation",
+        shortDesc: "Clavier arabe, rappels réguliers, mode hors-ligne et choix du profil",
+        body: "Retrouvez dans l'icône ⚡ (OUTILS) le clavier arabe virtuel, les alertes de révision et le mode hors-ligne pour continuer votre apprentissage sans connexion internet.",
+        highlightTip: "Changez à tout moment de profil d'interface via le badge en haut à droite.",
+        keyAction: "Bonne découverte et excellent apprentissage du Noble Coran !"
+      }
+    ])
+  });
+};

@@ -18,6 +18,7 @@ import { RappelWidget } from "./components/common/RappelWidget.jsx";
 import { ScheduledRemindersModal } from "./components/common/ScheduledRemindersModal.jsx";
 import { HeaderToolsModal } from "./components/common/HeaderToolsModal.jsx";
 import { UxModeSelectorModal } from "./components/common/UxModeSelectorModal.jsx";
+import { UxLevelWizardModal } from "./components/common/UxLevelWizardModal.jsx";
 import { PlayerAudioOptionsModal } from "./components/common/PlayerAudioOptionsModal.jsx";
 import { BeginnerGuideBanner } from "./components/common/BeginnerGuideBanner.jsx";
 import { getUxProfile, getUxModeClassName, isSimplifiedUxMode, getNavigationTabs, getPlayerConfig, getSidebarConfig } from "./utils/uxProfileManager.js";
@@ -5011,6 +5012,7 @@ function AppInner({ currentUser, onSignOut }) {
           />
         </Suspense>
       )}
+      <UxLevelWizardModal />
     </>
     </ArabicKeyboardContext.Provider>
   );

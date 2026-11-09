@@ -51,6 +51,8 @@ const uiSlice = createSlice({
     uxMode:              load("quran_uxMode", "standard"),
     showUxModeModal:     false,
     showBeginnerGuides:  load("quran_showBeginnerGuides", true),
+    showUxWizard:        false,
+    uxWizardStep:        0,
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -301,6 +303,17 @@ const uiSlice = createSlice({
     toggleBeginnerGuides: (s) => {
       s.showBeginnerGuides = !s.showBeginnerGuides;
       save("quran_showBeginnerGuides", s.showBeginnerGuides);
+    },
+    setShowUxWizard: (s, a) => {
+      s.showUxWizard = Boolean(a.payload);
+      if (a.payload) s.uxWizardStep = 0;
+    },
+    toggleShowUxWizard: (s) => {
+      s.showUxWizard = !s.showUxWizard;
+      if (s.showUxWizard) s.uxWizardStep = 0;
+    },
+    setUxWizardStep: (s, a) => {
+      s.uxWizardStep = Math.max(0, Number(a.payload) || 0);
     },
   },
   extraReducers: (builder) => {
@@ -996,6 +1009,8 @@ const rawSel = {
   isChildUx:           (s) => (s.ui.uxMode || "standard") === "child",
   showUxModeModal:     (s) => Boolean(s.ui.showUxModeModal),
   showBeginnerGuides:  (s) => s.ui.showBeginnerGuides !== false,
+  showUxWizard:        (s) => Boolean(s.ui.showUxWizard),
+  uxWizardStep:        (s) => Number(s.ui.uxWizardStep || 0),
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

@@ -107,4 +107,27 @@ describe("Simplified UX Mode (Child & Beginner) & Tooltip Accuracy", () => {
       expect(typeof PlayerAudioOptionsModal).toBe("function");
     });
   });
+
+  describe("Expert font sizing and manual scroll container robustness", () => {
+    it("resets ayatFontSize down to 24 when switching from child or beginner to expert", async () => {
+      const { store, uiActions, sel } = await import("../src/store.js");
+      // Set to child mode first (large font: 34)
+      store.dispatch(uiActions.setUxMode("child"));
+      expect(sel.ayatFontSize(store.getState())).toBe(34);
+
+      // Now switch to expert: font size MUST be reset to 24 (not remaining at 34)
+      store.dispatch(uiActions.setUxMode("expert"));
+      expect(sel.ayatFontSize(store.getState())).toBe(24);
+      expect(sel.isExpertUx(store.getState())).toBe(true);
+    });
+
+    it("resets ayatFontSize to 26 when switching to standard mode", async () => {
+      const { store, uiActions, sel } = await import("../src/store.js");
+      store.dispatch(uiActions.setUxMode("beginner"));
+      expect(sel.ayatFontSize(store.getState())).toBe(32);
+
+      store.dispatch(uiActions.setUxMode("standard"));
+      expect(sel.ayatFontSize(store.getState())).toBe(26);
+    });
+  });
 });

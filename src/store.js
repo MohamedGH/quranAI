@@ -263,11 +263,18 @@ const uiSlice = createSlice({
         save("quran_enableAnimations", true);
         save("quran_showBeginnerGuides", true);
       } else if (mode === "expert") {
+        s.ayatFontSize = 24;
         s.enableAnimations = true;
         s.enableTimestamps = true;
         s.enableLetterByLetter = true;
         s.enableHeavyCompute = true;
         s.showBeginnerGuides = false;
+        save("quran_ayatFontSize", 24);
+        save("quran_showBeginnerGuides", false);
+      } else if (mode === "standard") {
+        s.ayatFontSize = 26;
+        s.showBeginnerGuides = false;
+        save("quran_ayatFontSize", 26);
         save("quran_showBeginnerGuides", false);
       }
     },

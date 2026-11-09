@@ -23,6 +23,7 @@ export function BeginnerGuideBanner({ context = "general" }) {
       aria-label="Guide débutant"
       style={{
         display: "flex",
+        flexShrink: 0,
         alignItems: "center",
         justifyContent: "space-between",
         gap: 12,

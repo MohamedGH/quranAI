@@ -252,7 +252,7 @@ export const CSS = `
   .surah-name-ar{font-family:'Amiri',serif;font-size:16px;color:var(--gold);direction:rtl;}
 
   /* ── MAIN AREA ────────────────────────────────────────────────────── */
-  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0;height:100%;width:100%;position:relative;}
   .surah-header{background:linear-gradient(180deg,var(--surface),var(--bg));border-bottom:1px solid var(--border);padding:4px 12px;flex-shrink:0;text-align:center;}
   .surah-header-ornament{font-family:'Amiri Quran',serif;font-size:18px;color:var(--gold2);direction:rtl;line-height:1.15;}
   .surah-header-title{font-size:8px;letter-spacing:1.5px;color:var(--gold);margin-top:1px;opacity:.85;}
@@ -1175,7 +1175,7 @@ export const CSS = `
   .ts-status.loaded{border-color:var(--teal);color:var(--teal);}
 
   /* ── AYAT LIST ────────────────────────────────────────────────────── */
-  .ayat-scroll{flex:1;overflow-y:auto;padding:6px 0 calc(var(--player-h) + var(--player-loop-h) + 20px);will-change:transform;touch-action:pan-y;}
+  .ayat-scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;touch-action:pan-y;min-height:0;height:100%;padding:6px 0 calc(var(--player-h) + var(--player-loop-h) + env(safe-area-inset-bottom, 0px) + 24px);will-change:transform;}
   /* ── INTER-SURAH BUTTON NAVIGATION ── */
   .surah-floating-nav{position:fixed;bottom:calc(var(--player-h) + var(--player-loop-h) + 16px);right:12px;display:flex;align-items:center;gap:6px;z-index:88;pointer-events:auto;}
   .surah-floating-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:34px;padding:0 11px;border-radius:18px;background:rgba(15,20,32,0.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--border2);color:var(--text);font-size:11px;font-family:'Cinzel',serif;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.45);transition:all .2s ease;}
@@ -1342,9 +1342,9 @@ export const CSS = `
     flex-shrink: 0 !important;
   }
 
-  /* ── SUBMENU ──────────────────────────────────────────────────────── */
   @keyframes pageIn{from{opacity:0}to{opacity:1}}
-  .page-anim{animation:pageIn .12s ease forwards;flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;width:100%;}
+  .page-container{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0;width:100%;height:100%;}
+  .page-anim{animation:pageIn .12s ease forwards;}
   @keyframes submenuIn{0%{opacity:0;transform:translateY(-4px)}100%{opacity:1;transform:translateY(0)}}
   @keyframes submenuOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-4px)}}
   .submenu{background:var(--surface2);border-top:1px solid var(--border);padding:14px 22px 18px;}
@@ -2691,15 +2691,20 @@ export const CSS = `
     100% { transform: translateY(0) scale(1); opacity: 1; }
   }
 
-  /* ── UX Profile Enhancements ── */
+  /* ── UX Profile Enhancements & Ayat Responsive Design ── */
   .ux-profile-beginner .ayat-row {
-    padding: 18px 16px;
-    margin-bottom: 12px;
+    margin: 4px 10px 8px;
     border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.015);
+  }
+  .ux-profile-beginner .ayat-main {
+    padding: 12px 14px;
+    gap: 12px;
   }
   .ux-profile-beginner .ayat-arabic {
-    line-height: 2.3;
-    font-size: calc(var(--ayat-font-size, 32px));
+    line-height: 2.2;
+    font-size: min(var(--ayat-font-size, 32px), 32px);
   }
   .ux-profile-beginner .ayat-trans {
     font-size: 15px;
@@ -2707,17 +2712,139 @@ export const CSS = `
     color: var(--text);
   }
   .ux-profile-beginner button {
-    min-height: 44px;
+    min-height: 40px;
+  }
+
+  .ux-profile-child .ayat-row {
+    margin: 4px 10px 8px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 183, 3, 0.15);
+    background: rgba(255, 183, 3, 0.02);
+  }
+  .ux-profile-child .ayat-main {
+    padding: 12px 14px;
+    gap: 12px;
   }
   .ux-profile-child .ayat-arabic {
-    font-size: calc(var(--ayat-font-size, 34px));
-    line-height: 2.4;
+    font-size: min(var(--ayat-font-size, 34px), 34px);
+    line-height: 2.3;
   }
-  .ux-profile-child .ayat-row {
-    border-radius: 16px;
+
+  .ux-profile-expert .ayat-row {
+    margin: 0;
+    border-radius: 0;
+    border-bottom: 1px solid rgba(42, 47, 64, 0.35);
+  }
+  .ux-profile-expert .ayat-main {
+    padding: 7px 14px;
+    gap: 10px;
   }
   .ux-profile-expert .ayat-arabic {
-    line-height: 2.0;
+    font-size: min(var(--ayat-font-size, 22px), 21.5px) !important;
+    line-height: 1.8 !important;
+    letter-spacing: 0;
+  }
+  .ux-profile-expert .ayat-trans {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .ux-profile-expert .ayat-number-badge {
+    width: 25px;
+    height: 25px;
+    font-size: 9px;
+  }
+
+  /* Responsive breakpoints for Ayat typography & padding */
+  @media (max-width: 900px) {
+    .ux-profile-beginner .ayat-arabic {
+      font-size: min(var(--ayat-font-size, 28px), 28px);
+      line-height: 2.15;
+    }
+    .ux-profile-child .ayat-arabic {
+      font-size: min(var(--ayat-font-size, 29px), 29px);
+      line-height: 2.2;
+    }
+    .ux-profile-expert .ayat-arabic {
+      font-size: 19.5px !important;
+      line-height: 1.8 !important;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .ayat-main {
+      padding: 10px 12px;
+      gap: 10px;
+    }
+    .ayat-arabic {
+      font-size: 20px;
+      line-height: 1.95;
+    }
+    .ux-profile-beginner .ayat-row,
+    .ux-profile-child .ayat-row {
+      margin: 3px 6px 6px;
+    }
+    .ux-profile-beginner .ayat-main,
+    .ux-profile-child .ayat-main {
+      padding: 9px 10px;
+      gap: 8px;
+    }
+    .ux-profile-beginner .ayat-arabic {
+      font-size: 23px !important;
+      line-height: 2.05 !important;
+    }
+    .ux-profile-child .ayat-arabic {
+      font-size: 24px !important;
+      line-height: 2.1 !important;
+    }
+    .ux-profile-expert .ayat-arabic {
+      font-size: 18.5px !important;
+      line-height: 1.78 !important;
+    }
+    .ux-profile-expert .ayat-main {
+      padding: 6px 8px;
+      gap: 7px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .ayat-main {
+      padding: 8px 8px;
+      gap: 7px;
+    }
+    .ayat-arabic {
+      font-size: 18.5px;
+      line-height: 1.9;
+    }
+    .ux-profile-beginner .ayat-row,
+    .ux-profile-child .ayat-row {
+      margin: 2px 4px 5px;
+    }
+    .ux-profile-beginner .ayat-main,
+    .ux-profile-child .ayat-main {
+      padding: 7px 7px;
+      gap: 6px;
+    }
+    .ux-profile-beginner .ayat-arabic {
+      font-size: 21px !important;
+      line-height: 2.0 !important;
+    }
+    .ux-profile-child .ayat-arabic {
+      font-size: 21.5px !important;
+      line-height: 2.0 !important;
+    }
+    .ux-profile-expert .ayat-arabic {
+      font-size: 17px !important;
+      line-height: 1.72 !important;
+    }
+    .ux-profile-expert .ayat-main {
+      padding: 5px 6px;
+      gap: 6px;
+    }
+    .ayat-number-badge {
+      width: 25px;
+      height: 25px;
+      font-size: 8.5px;
+    }
   }
 
   @media(max-width:700px){.concord-page{padding:16px 14px 80px;}.concord-ayat-text{font-size:var(--ayat-font-size, 18px);}.concord-search-bar input{font-size:16px;}}

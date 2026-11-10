@@ -1901,7 +1901,17 @@ export const CSS = `
   .pronon-nav-tab:hover{color:var(--text2);}
   .pronon-nav-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
   .pronon-two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
-  @media (max-width:700px){.pronon-two-col{grid-template-columns:1fr;} .pronon-page{padding:16px 14px 80px;}}
+  .makharij-diagram-container{width:100%;max-width:520px;margin:0 auto;}
+  .makharij-svg{width:100%;height:auto;border-radius:10px;}
+  .makharij-hotspot:hover circle{filter:drop-shadow(0 0 6px #ffb703);}
+  .heavy-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
+  .contrast-cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media (max-width:850px){
+    .pronon-two-col{grid-template-columns:1fr;}
+    .heavy-detail-grid{grid-template-columns:1fr !important;}
+    .contrast-cards-grid{grid-template-columns:1fr !important;}
+    .pronon-page{padding:16px 14px 80px;}
+  }
 
   /* ── MISC ─────────────────────────────────────────────────────────── */
   .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:12px;color:var(--text3);font-size:11px;letter-spacing:2px;}

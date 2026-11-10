@@ -158,6 +158,83 @@ describe("makharijData - Anatomical speech organs & Tajweed phonetics", () => {
       expect(HEAVY_LETTERS_DATA.pronunciationSteps[1].title).toContain("cuillère");
     });
   });
+
+  describe("Child-adapted pedagogical explanations (Mode Enfant)", () => {
+    it("provides child-friendly names and descriptions for all 5 general organs", () => {
+      Object.values(GENERAL_MAKHAREJ).forEach((org) => {
+        expect(org.childName).toBeTruthy();
+        expect(org.childDescription).toBeTruthy();
+      });
+
+      expect(GENERAL_MAKHAREJ.JAWF.childName).toContain("Toboggan");
+      expect(GENERAL_MAKHAREJ.HALQ.childName).toContain("Grotte");
+      expect(GENERAL_MAKHAREJ.LISAN.childName).toContain("Langue Magicienne");
+      expect(GENERAL_MAKHAREJ.SHAFATAYN.childName).toContain("Portes");
+      expect(GENERAL_MAKHAREJ.KHAYSHUM.childName).toContain("Clochette");
+    });
+
+    it("provides child-friendly labels and descriptions for all anatomical zones", () => {
+      Object.values(ANATOMICAL_ZONES).forEach((zone) => {
+        expect(zone.childLabel).toBeTruthy();
+        expect(zone.childDescription).toBeTruthy();
+        expect(typeof zone.childLabel).toBe("string");
+        expect(typeof zone.childDescription).toBe("string");
+      });
+    });
+
+    it("equips every one of the 29 letters with kid-friendly childTip, childOrgan, and howToPronounceChild", () => {
+      DETAILED_ARABIC_LETTERS.forEach((l) => {
+        expect(l.childTip).toBeTruthy();
+        expect(typeof l.childTip).toBe("string");
+        expect(l.childOrgan).toBeTruthy();
+        expect(typeof l.childOrgan).toBe("string");
+        expect(l.howToPronounceChild).toBeTruthy();
+        expect(typeof l.howToPronounceChild).toBe("string");
+      });
+
+      // Sample key letters
+      const ba = DETAILED_ARABIC_LETTERS.find((x) => x.letter === "ب");
+      expect(ba.childTip).toContain("bisou");
+
+      const ha = DETAILED_ARABIC_LETTERS.find((x) => x.letter === "ح");
+      expect(ha.childTip).toContain("buée");
+
+      const kha = DETAILED_ARABIC_LETTERS.find((x) => x.letter === "خ");
+      expect(kha.childTip).toContain("lion");
+
+      const dad = DETAILED_ARABIC_LETTERS.find((x) => x.letter === "ض");
+      expect(dad.childOrgan).toContain("couronne");
+      expect(dad.childTip).toContain("magique");
+
+      const ta = DETAILED_ARABIC_LETTERS.find((x) => x.letter === "ط");
+      expect(ta.childTip).toContain("tambour");
+    });
+
+    it("provides child adaptations for Tafkhim formula, letters, steps, degrees, and contrast pairs", () => {
+      expect(HEAVY_LETTERS_DATA.childFormulaTitle).toContain("Champions");
+      expect(HEAVY_LETTERS_DATA.childDefinition).toContain("super-héros");
+
+      HEAVY_LETTERS_DATA.letters.forEach((l) => {
+        expect(l.childNickname).toBeTruthy();
+        expect(l.childSoundTip).toBeTruthy();
+      });
+
+      HEAVY_LETTERS_DATA.pronunciationSteps.forEach((s) => {
+        expect(s.childTitle).toBeTruthy();
+        expect(s.childExplanation).toBeTruthy();
+      });
+
+      HEAVY_LETTERS_DATA.contrastPairs.forEach((p) => {
+        expect(p.childTitle).toBeTruthy();
+        expect(p.childLesson).toBeTruthy();
+      });
+
+      HEAVY_LETTERS_DATA.degrees.forEach((d) => {
+        expect(d.childTitle).toBeTruthy();
+        expect(d.childDesc).toBeTruthy();
+      });
+    });
+  });
 });
 
 describe("Prononciation Visual Components", () => {

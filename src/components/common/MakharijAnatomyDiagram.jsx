@@ -10,6 +10,7 @@ export function MakharijAnatomyDiagram({
   activeZoneId = null,
   activeLetter = null,
   isHeavyMode = false,
+  isChild = false,
   onSelectZone = () => {},
   showLabels = true,
   interactive = true,
@@ -29,9 +30,9 @@ export function MakharijAnatomyDiagram({
       {/* Barre d'outils du diagramme */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 13 }}>🔬</span>
+          <span style={{ fontSize: 13 }}>{isChild ? "🌟" : "🔬"}</span>
           <span style={{ fontSize: 11, fontFamily: "'Cinzel', serif", fontWeight: 700, color: "var(--gold2)", letterSpacing: 0.8 }}>
-            ANATOMIE DU TRACTUS VOCAL
+            {isChild ? "LA CARTE SECRÈTE DE TA BOUCHE" : "ANATOMIE DU TRACTUS VOCAL"}
           </span>
         </div>
 
@@ -53,7 +54,7 @@ export function MakharijAnatomyDiagram({
               transition: "all .15s",
             }}
           >
-            Vue Coupe Standard
+            {isChild ? "Vue Découverte" : "Vue Coupe Standard"}
           </button>
           <button
             type="button"
@@ -71,7 +72,7 @@ export function MakharijAnatomyDiagram({
               transition: "all .15s",
             }}
           >
-            ⚖️ Vue Emphase (Grave vs Fine)
+            {isChild ? "🦁 Mode Champion (Grave vs Doux)" : "⚖️ Vue Emphase (Grave vs Fine)"}
           </button>
         </div>
       </div>
@@ -372,16 +373,16 @@ export function MakharijAnatomyDiagram({
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 13, color: "#ffb703" }}>📍</span>
+                <span style={{ fontSize: 13, color: "#ffb703" }}>{isChild ? "⭐" : "📍"}</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", fontFamily: "'Cinzel', serif" }}>
-                  {activeZone.label}
+                  {isChild ? (activeZone.childLabel || activeZone.label) : activeZone.label}
                 </span>
                 <span style={{ fontSize: 11, color: "#ffe082", fontFamily: "'Amiri Quran', serif", direction: "rtl" }}>
                   ({activeZone.arabic})
                 </span>
               </div>
               <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.35 }}>
-                {activeZone.description}
+                {isChild ? (activeZone.childDescription || activeZone.description) : activeZone.description}
               </div>
             </div>
 
@@ -416,11 +417,11 @@ export function MakharijAnatomyDiagram({
       {/* Légende rapide des 5 grands organes */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, justifyContent: "center" }}>
         {[
-          { key: "halq", icon: "🔴", label: "Gorge (الحلق)", color: "#ff7eb3" },
-          { key: "lisan", icon: "🟡", label: "Langue (اللسان)", color: "#ffb703" },
-          { key: "shafatayn", icon: "🟣", label: "Lèvres (الشفتان)", color: "#a855f7" },
-          { key: "jawf", icon: "🟢", label: "Cavité (الجوف)", color: "#56d4bc" },
-          { key: "khayshum", icon: "🔵", label: "Nez (الخيشوم)", color: "#38bdf8" },
+          { key: "halq", icon: "🔴", label: isChild ? "Grotte de la Gorge" : "Gorge (الحلق)", color: "#ff7eb3" },
+          { key: "lisan", icon: "👅", label: isChild ? "Langue Magicienne" : "Langue (اللسان)", color: "#ffb703" },
+          { key: "shafatayn", icon: "👄", label: isChild ? "Deux Lèvres Douces" : "Lèvres (الشفتان)", color: "#a855f7" },
+          { key: "jawf", icon: "🟢", label: isChild ? "Grand Toboggan" : "Cavité (الجوف)", color: "#56d4bc" },
+          { key: "khayshum", icon: "👃", label: isChild ? "Clochette du Nez" : "Nez (الخيشوم)", color: "#38bdf8" },
         ].map((item) => (
           <button
             key={item.key}

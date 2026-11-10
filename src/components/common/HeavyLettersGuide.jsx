@@ -11,7 +11,7 @@ import { MakharijAnatomyDiagram } from "./MakharijAnatomyDiagram.jsx";
  * - Les 5 degrés de Tafkhîm
  * - Visualisations anatomiques de la bouche et de la langue
  */
-export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
+export function HeavyLettersGuide({ speak = () => {}, playingId = null, isChild = false }) {
   const [selectedHeavyLetter, setSelectedHeavyLetter] = useState("ط");
   const [activeContrastPair, setActiveContrastPair] = useState("ta_ta");
 
@@ -33,13 +33,16 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 24 }}>⚖️</span>
+            <span style={{ fontSize: 24 }}>{isChild ? "🦁" : "⚖️"}</span>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#ffe082", fontFamily: "'Cinzel', serif", letterSpacing: 1 }}>
-                LES LETTRES GRAVES & EMPHATIQUES (حُرُوفُ التَّفْخِيمِ وَالإِسْتِعْلَاءِ)
+                {isChild ? "LES 7 LETTRES CHAMPIONNES (GRAVES) : خُصَّ ضَغْطٍ قِظْ" : "LES LETTRES GRAVES & EMPHATIQUES (حُرُوفُ التَّفْخِيمِ وَالإِسْتِعْلَاءِ)"}
               </div>
               <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>
-                La formule mnémotechnique sacrée : <strong style={{ color: "#ffd166", fontFamily: "'Amiri Quran', serif", fontSize: 18, direction: "rtl" }}>خُصَّ ضَغْطٍ قِظْ</strong>
+                {isChild ? "La formule magique des super-héros : " : "La formule mnémotechnique sacrée : "}
+                <strong style={{ color: "#ffd166", fontFamily: "'Amiri Quran', serif", fontSize: 18, direction: "rtl" }}>
+                  خُصَّ ضَغْطٍ قِظْ
+                </strong>
               </div>
             </div>
           </div>
@@ -55,14 +58,24 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
               fontFamily: "'Cinzel', serif",
             }}
           >
-            7 LETTRES ESSENTIELLES
+            {isChild ? "7 SUPER-CHAMPIONS" : "7 LETTRES ESSENTIELLES"}
           </div>
         </div>
 
         <p style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.6, margin: 0 }}>
-          En langue arabe et en Tajweed, le <strong>Tafkhîm (تَفْخِيم)</strong> signifie « rendre le son gras, lourd et profond ».
-          La bouche s'emplit de la résonance du son grâce à l'élévation de l'arrière de la langue (<em>Istilâ'</em>) vers le voile du palais.
-          À l'inverse, les autres lettres de l'alphabet sont fines (<em>Tarqîq</em>) et se prononcent avec la bouche plate comme un léger sourire.
+          {isChild ? (
+            <span>
+              Dans la récitation du Coran, ces <strong>7 lettres</strong> sont les championnes de l'alphabet !
+              Elles gonflent leur voix comme un lion courageux pour remplir toute la bouche.
+              Le grand secret : <strong>gonfler la voix au fond du palais, sans faire de bouche en canard !</strong>
+            </span>
+          ) : (
+            <span>
+              En langue arabe et en Tajweed, le <strong>Tafkhîm (تَفْخِيم)</strong> signifie « rendre le son gras, lourd et profond ».
+              La bouche s'emplit de la résonance du son grâce à l'élévation de l'arrière de la langue (<em>Istilâ'</em>) vers le voile du palais.
+              À l'inverse, les autres lettres de l'alphabet sont fines (<em>Tarqîq</em>) et se prononcent avec la bouche plate comme un léger sourire.
+            </span>
+          )}
         </p>
 
         {/* 4 Piliers physiologiques */}
@@ -83,11 +96,15 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 14 }}>{s.icon}</span>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#ffe082", fontFamily: "'Cinzel', serif" }}>
-                  Règle {s.step}
+                  {isChild ? `Secret ${s.step}` : `Règle ${s.step}`}
                 </span>
               </div>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: "#fff" }}>{s.title}</div>
-              <div style={{ fontSize: 9.5, color: "var(--text3)", lineHeight: 1.4 }}>{s.explanation}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: "#fff" }}>
+                {isChild ? (s.childTitle || s.title) : s.title}
+              </div>
+              <div style={{ fontSize: 9.5, color: "var(--text3)", lineHeight: 1.4 }}>
+                {isChild ? (s.childExplanation || s.explanation) : s.explanation}
+              </div>
             </div>
           ))}
         </div>
@@ -96,7 +113,7 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
       {/* ── LES 7 LETTRES D'ISTILA' : EXPLORATION INTERACTIVE ── */}
       <div>
         <div className="pronon-section-title" style={{ marginBottom: 12 }}>
-          LES 7 LETTRES GRAVES DE LA FORMULE (خُصَّ ضَغْطٍ قِظْ)
+          {isChild ? "🌟 LES 7 LETTRES CHAMPIONNES DE LA FORMULE (خُصَّ ضَغْطٍ قِظْ)" : "LES 7 LETTRES GRAVES DE LA FORMULE (خُصَّ ضَغْطٍ قِظْ)"}
         </div>
 
         {/* Grille de sélection des 7 lettres */}
@@ -134,7 +151,7 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
                 <div style={{ fontSize: 10, fontFamily: "'Cinzel', serif", fontWeight: 700, color: isSelected ? "#ffb703" : "var(--text3)" }}>
                   {l.name}
                 </div>
-                {l.itbaq && (
+                {l.itbaq ? (
                   <span
                     style={{
                       fontSize: 7.5,
@@ -146,8 +163,24 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
                       fontWeight: 700,
                     }}
                   >
-                    ITBÂQ
+                    {isChild ? "👑 MAXI" : "ITBÂQ"}
                   </span>
+                ) : (
+                  isChild && (
+                    <span
+                      style={{
+                        fontSize: 7.5,
+                        padding: "1px 4px",
+                        borderRadius: 4,
+                        background: "rgba(255, 183, 3, 0.2)",
+                        color: "#ffe082",
+                        border: "1px solid rgba(255, 183, 3, 0.35)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      ⭐ FORT
+                    </span>
+                  )
                 )}
               </button>
             );
@@ -175,9 +208,11 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
                 </span>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", fontFamily: "'Cinzel', serif" }}>
-                    Lettre {letterInfo.name} ({letterInfo.trans})
+                    {isChild ? (letterInfo.childNickname || `Lettre ${letterInfo.name}`) : `Lettre ${letterInfo.name} (${letterInfo.trans})`}
                   </div>
-                  <div style={{ fontSize: 10, color: "#ffb703", fontWeight: 600 }}>{letterInfo.rankLabel}</div>
+                  <div style={{ fontSize: 10, color: "#ffb703", fontWeight: 600 }}>
+                    {isChild ? "🦁 Lettre Championne & Courageuse" : letterInfo.rankLabel}
+                  </div>
                 </div>
               </div>
 
@@ -195,7 +230,7 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
                   fontSize: 10,
                 }}
               >
-                {playingId === `heavy-play-${letterInfo.letter}` ? "⏹ STOP" : "▶ ÉCOUTER"}
+                {playingId === `heavy-play-${letterInfo.letter}` ? "⏹ STOP" : isChild ? "▶ ÉCOUTER LE SON" : "▶ ÉCOUTER"}
               </button>
             </div>
 
@@ -211,29 +246,35 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
                 lineHeight: 1.45,
               }}
             >
-              <strong>{letterInfo.itbaq ? "⭐ Double Puissance (Itbâq + Istilâ')" : "🌟 Istilâ' (Élévation de la langue)"} :</strong>{" "}
-              {letterInfo.description}
+              <strong>
+                {isChild
+                  ? (letterInfo.itbaq ? "👑 Super-Puissance des Champions (Itbâq)" : "⭐ Force du Champion (Istilâ')")
+                  : (letterInfo.itbaq ? "⭐ Double Puissance (Itbâq + Istilâ')" : "🌟 Istilâ' (Élévation de la langue)")} :
+              </strong>{" "}
+              {isChild ? (letterInfo.childSoundTip || letterInfo.description) : letterInfo.description}
             </div>
 
             {/* Conseils d'articulation */}
             <div>
               <div style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--gold2)", fontFamily: "'Cinzel', serif", marginBottom: 4 }}>
-                COMMENT LA PRONONCER PRÉCISÉMENT :
+                {isChild ? "🌟 CONSEIL DU PETIT CHAMPION :" : "COMMENT LA PRONONCER PRÉCISÉMENT :"}
               </div>
-              <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.6 }}>{letterInfo.soundTip}</div>
+              <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.6 }}>
+                {isChild ? (letterInfo.childSoundTip || letterInfo.soundTip) : letterInfo.soundTip}
+              </div>
             </div>
 
             {/* Entraînement avec les 4 voyelles */}
             <div>
               <div style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--gold2)", fontFamily: "'Cinzel', serif", marginBottom: 8 }}>
-                ENTRAÎNEMENT AVEC LES VOYELLES :
+                {isChild ? "🎨 ENTRAÎNEMENT AVEC LES 4 SONS :" : "ENTRAÎNEMENT AVEC LES VOYELLES :"}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
                 {[
-                  { sign: "َ", name: "Fatḥa (A)", sound: letterInfo.letter + "َ" },
-                  { sign: "ِ", name: "Kasra (I)", sound: letterInfo.letter + "ِ" },
-                  { sign: "ُ", name: "Ḍamma (OU)", sound: letterInfo.letter + "ُ" },
-                  { sign: "ْ", name: "Soukoun (Sec)", sound: letterInfo.letter + "ْ" },
+                  { sign: "َ", name: isChild ? "Fatḥa (A)" : "Fatḥa (A)", sound: letterInfo.letter + "َ" },
+                  { sign: "ِ", name: isChild ? "Kasra (I)" : "Kasra (I)", sound: letterInfo.letter + "ِ" },
+                  { sign: "ُ", name: isChild ? "Ḍamma (OU)" : "Ḍamma (OU)", sound: letterInfo.letter + "ُ" },
+                  { sign: "ْ", name: isChild ? "Soukoun (Stop)" : "Soukoun (Sec)", sound: letterInfo.letter + "ْ" },
                 ].map((v, vi) => {
                   const pid = `heavy-vow-${letterInfo.letter}-${vi}`;
                   return (
@@ -275,7 +316,8 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
               }}
             >
               <div style={{ fontSize: 10, color: "var(--text2)" }}>
-                Exemple coranique : <strong style={{ color: "#ffd166" }}>{letterInfo.contrastPair.heavyWord}</strong>
+                {isChild ? "Exemple dans le Coran : " : "Exemple coranique : "}
+                <strong style={{ color: "#ffd166" }}>{letterInfo.contrastPair.heavyWord}</strong>
               </div>
               <button
                 type="button"
@@ -299,6 +341,7 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
             <MakharijAnatomyDiagram
               activeLetter={selectedHeavyLetter}
               isHeavyMode={true}
+              isChild={isChild}
               showLabels={true}
             />
           </div>
@@ -315,13 +358,15 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-          <span style={{ fontSize: 20 }}>⚔️</span>
+          <span style={{ fontSize: 20 }}>{isChild ? "🎮" : "⚔️"}</span>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--teal2)", fontFamily: "'Cinzel', serif" }}>
-              ATELIER D'ÉCOUTE COMPARATIVE : FINE (TARQÎQ) VS GRAVE (TAFKHÎM)
+              {isChild ? "LE DÉFI DES CONTRASTES : ÉCOUTE LA DIFFÉRENCE !" : "ATELIER D'ÉCOUTE COMPARATIVE : FINE (TARQÎQ) VS GRAVE (TAFKHÎM)"}
             </div>
             <div style={{ fontSize: 10, color: "var(--text3)" }}>
-              Cliquez pour entendre la différence qui évite de changer le sens des versets du Coran.
+              {isChild
+                ? "Écoute bien : la lettre fine est douce comme une plume, la lettre championne est forte comme un géant !"
+                : "Cliquez pour entendre la différence qui évite de changer le sens des versets du Coran."}
             </div>
           </div>
         </div>
@@ -346,7 +391,7 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
                 transition: "all .15s",
               }}
             >
-              {pair.title}
+              {isChild ? (pair.childTitle || pair.title) : pair.title}
             </button>
           ))}
         </div>
@@ -372,7 +417,7 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
                   }}
                 >
                   <div style={{ fontSize: 10, color: "var(--teal2)", fontWeight: 700, letterSpacing: 1, fontFamily: "'Cinzel', serif" }}>
-                    LETTRE FINE (تَرْقِيق - SOURIRE PLAT)
+                    {isChild ? "🕊️ LETTRE DOUCE (UN JOLI SOURIRE)" : "LETTRE FINE (تَرْقِيق - SOURIRE PLAT)"}
                   </div>
                   <div style={{ fontFamily: "'Amiri Quran', serif", fontSize: 48, color: "var(--teal2)", lineHeight: 1 }}>
                     {pair.thin.letter}
@@ -421,7 +466,7 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
                   }}
                 >
                   <div style={{ fontSize: 10, color: "#ffe082", fontWeight: 700, letterSpacing: 1, fontFamily: "'Cinzel', serif" }}>
-                    LETTRE GRAVE (تَفْخِيم - CAVITÉ BOMBÉE)
+                    {isChild ? "🦁 LETTRE CHAMPIONNE (VOIX DE GÉANT)" : "LETTRE GRAVE (تَفْخِيم - CAVITÉ BOMBÉE)"}
                   </div>
                   <div style={{ fontFamily: "'Amiri Quran', serif", fontSize: 48, color: "#ffd166", lineHeight: 1 }}>
                     {pair.heavy.letter}
@@ -456,22 +501,22 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
                 </div>
               </div>
 
-              {/* Avertissement de sens */}
+              {/* Avertissement de sens / Astuce enfant */}
               <div
                 style={{
-                  background: "rgba(239, 68, 68, 0.1)",
-                  border: "1px solid rgba(239, 68, 68, 0.35)",
+                  background: isChild ? "rgba(255, 183, 3, 0.12)" : "rgba(239, 68, 68, 0.1)",
+                  border: isChild ? "1px solid rgba(255, 183, 3, 0.4)" : "1px solid rgba(239, 68, 68, 0.35)",
                   borderRadius: 8,
                   padding: "8px 12px",
                   fontSize: 10.5,
-                  color: "#fca5a5",
+                  color: isChild ? "#ffe082" : "#fca5a5",
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
                 }}
               >
-                <span>⚠️</span>
-                <span>{pair.warning}</span>
+                <span>{isChild ? "⭐" : "⚠️"}</span>
+                <span>{isChild ? (pair.childLesson || pair.warning) : pair.warning}</span>
               </div>
             </div>
           );
@@ -481,7 +526,7 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
       {/* ── LES 5 DEGRÉS DE GRAVITÉ (MARÂTIB AT-TAFKHÎM) ── */}
       <div>
         <div className="pronon-section-title" style={{ marginBottom: 12 }}>
-          LES 5 DEGRÉS DE GRAVITÉ (مَرَاتِبُ التَّفْخِيمِ) SELON IBN AL-JAZARI
+          {isChild ? "🏆 LES 5 NIVEAUX DE FORCE DES LETTRES" : "LES 5 DEGRÉS DE GRAVITÉ (مَرَاتِبُ التَّفْخِيمِ) SELON IBN AL-JAZARI"}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
@@ -501,10 +546,10 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: "#ffe082", fontFamily: "'Cinzel', serif" }}>
-                  {d.title}
+                  {isChild ? (d.childTitle || d.title) : d.title}
                 </span>
                 <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 10, background: "rgba(255,255,255,0.06)", color: "var(--text3)" }}>
-                  Niveau {d.level}
+                  {isChild ? `Étape ${d.level}` : `Niveau ${d.level}`}
                 </span>
               </div>
               <div style={{ fontSize: 11, fontWeight: 600, color: "#fff" }}>{d.condition}</div>
@@ -524,7 +569,9 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null }) {
               >
                 {d.arabicExample}
               </div>
-              <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>{d.ruleDesc}</div>
+              <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
+                {isChild ? (d.childDesc || d.ruleDesc) : d.ruleDesc}
+              </div>
             </div>
           ))}
         </div>

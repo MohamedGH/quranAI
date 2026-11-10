@@ -1,10 +1,12 @@
 import React, { useState, useRef } from "react";
+import { useSelector } from "react-redux";
 import { ARABIC_LETTERS, HARAKATS } from "../../utils/arabicUtils.js";
 import {
   DETAILED_ARABIC_LETTERS,
   GENERAL_MAKHAREJ,
   ANATOMICAL_ZONES,
   getLetterAnatomy,
+  getLetterChildTip,
   isHeavyLetter,
   isItbaqLetter,
   HEAVY_LETTERS_DATA,
@@ -13,6 +15,7 @@ import { MakharijAnatomyDiagram } from "../common/MakharijAnatomyDiagram.jsx";
 import { HeavyLettersGuide } from "../common/HeavyLettersGuide.jsx";
 
 export function PrononciationPage() {
+  const isChild = useSelector((state) => (state?.ui?.uxMode || "standard") === "child");
   const [tab, setTab] = useState("lettres"); // lettres | graves | harakat | tajwid
   const [selected, setSelected] = useState(0); // Default to letter 0 (Ba)
   const [organFilter, setOrganFilter] = useState("all"); // all | lisan | halq | shafatayn | jawf | heavy
@@ -67,11 +70,11 @@ export function PrononciationPage() {
         }}
       >
         <div style={{ fontFamily: "'Amiri Quran', serif", fontSize: 22, color: "var(--gold)", direction: "rtl", opacity: 0.9 }}>
-          مَخَارِجُ الحُرُوفِ وَالتَّجْوِيد
+          {isChild ? "🌟 مَخَارِجُ الحُرُوفِ لِلأَطْفَالِ" : "مَخَارِجُ الحُرُوفِ وَالتَّجْوِيد"}
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 9, letterSpacing: 2, color: "var(--text3)", fontFamily: "'Cinzel', serif" }}>
-          POINTS D'ARTICULATION · ANATOMIE · LETTRES GRAVES
+          {isChild ? "LE CHÂTEAU MAGIQUE DES LETTRES · SECRETS DU PETIT CHAMPION" : "POINTS D'ARTICULATION · ANATOMIE · LETTRES GRAVES"}
         </div>
       </div>
 
@@ -79,10 +82,10 @@ export function PrononciationPage() {
       <div style={{ padding: "0 28px", borderBottom: "1px solid var(--border)", flexShrink: 0, background: "var(--surface)" }}>
         <div className="pronon-nav-tabs">
           {[
-            ["lettres", "🔤 LETTRES & ANATOMIE"],
-            ["graves", "⚖️ LETTRES GRAVES (TAFKHÎM)"],
-            ["harakat", "◌ VOYELLES & SIGNES"],
-            ["tajwid", "📚 RÈGLES DE TAJWID"],
+            ["lettres", isChild ? "🌟 MON CHÂTEAU DES LETTRES" : "🔤 LETTRES & ANATOMIE"],
+            ["graves", isChild ? "🦁 LES LETTRES CHAMPIONNES (GRAVES)" : "⚖️ LETTRES GRAVES (TAFKHÎM)"],
+            ["harakat", isChild ? "🎨 VOYELLES & SONS MAGIQUES" : "◌ VOYELLES & SIGNES"],
+            ["tajwid", isChild ? "✨ SECRETS DE RÉCITATION" : "📚 RÈGLES DE TAJWID"],
           ].map(([k, label]) => (
             <button
               key={k}
@@ -107,18 +110,18 @@ export function PrononciationPage() {
             {/* Colonne gauche : Filtres anatomiques + Grille des 29 lettres */}
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div className="pronon-section-title">
-                POINTS DE SORTIE DES 29 LETTRES (مَخَارِجُ الحُرُوف)
+                {isChild ? "🌟 LES 29 LETTRES ET LEURS MAISONS SECRÈTES" : "POINTS DE SORTIE DES 29 LETTRES (مَخَارِجُ الحُرُوف)"}
               </div>
 
               {/* Filtre par organe anatomique */}
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                 {[
-                  { id: "all", label: `Toutes (${ARABIC_LETTERS.length})` },
-                  { id: "lisan", label: "👅 Langue (18)" },
-                  { id: "halq", label: "🔴 Gorge (6)" },
-                  { id: "shafatayn", label: "👄 Lèvres (4)" },
-                  { id: "jawf", label: "🟢 Cavité (1)" },
-                  { id: "heavy", label: "⚖️ Graves (7)" },
+                  { id: "all", label: isChild ? `Toutes (${ARABIC_LETTERS.length})` : `Toutes (${ARABIC_LETTERS.length})` },
+                  { id: "lisan", label: isChild ? "👅 Langue Magicienne (18)" : "👅 Langue (18)" },
+                  { id: "halq", label: isChild ? "🔴 Grotte de la Gorge (6)" : "🔴 Gorge (6)" },
+                  { id: "shafatayn", label: isChild ? "👄 Deux Lèvres (4)" : "👄 Lèvres (4)" },
+                  { id: "jawf", label: isChild ? "🟢 Grand Toboggan (1)" : "🟢 Cavité (1)" },
+                  { id: "heavy", label: isChild ? "🦁 Lettres Championnes (7)" : "⚖️ Graves (7)" },
                 ].map((f) => (
                   <button
                     key={f.id}
@@ -210,8 +213,16 @@ export function PrononciationPage() {
 
               {/* Conseil de récitation */}
               <div className="pronon-tip-box" style={{ marginTop: 8 }}>
-                💡 <strong>Règle d'or :</strong> Chaque lettre a un point de sortie précis (<em>Makhraj</em>) et des caractéristiques d'air et de voix (<em>Sifât</em>).
-                Cliquez sur n'importe quelle lettre pour voir exactement où elle se forme dans la bouche, la langue ou la gorge sur le diagramme anatomique.
+                {isChild ? (
+                  <span>
+                    🌟 <strong>Secret d'Apprenti :</strong> Chaque lettre a sa propre maison secrète dans ta bouche ! Clique sur une lettre pour voir où elle habite et écoute son secret magique !
+                  </span>
+                ) : (
+                  <span>
+                    💡 <strong>Règle d'or :</strong> Chaque lettre a un point de sortie précis (<em>Makhraj</em>) et des caractéristiques d'air et de voix (<em>Sifât</em>).
+                    Cliquez sur n'importe quelle lettre pour voir exactement où elle se forme dans la bouche, la langue ou la gorge sur le diagramme anatomique.
+                  </span>
+                )}
               </div>
             </div>
 
@@ -223,7 +234,7 @@ export function PrononciationPage() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <div className="pronon-makhraj-tag">
-                        📍 {selDetail?.organTitle || sel.makhraj}
+                        📍 {isChild ? (selDetail?.childOrgan || selDetail?.organTitle || sel.makhraj) : (selDetail?.organTitle || sel.makhraj)}
                       </div>
 
                       {isSelectedHeavy ? (
@@ -239,7 +250,7 @@ export function PrononciationPage() {
                             fontWeight: 700,
                           }}
                         >
-                          ⚖️ GRAVE (TAFKHÎM){isSelectedItbaq ? " · ITBÂQ" : ""}
+                          {isChild ? "🦁 LETTRE CHAMPIONNE (GRAVE)" : `⚖️ GRAVE (TAFKHÎM)${isSelectedItbaq ? " · ITBÂQ" : ""}`}
                         </span>
                       ) : (
                         <span
@@ -254,7 +265,7 @@ export function PrononciationPage() {
                             fontWeight: 700,
                           }}
                         >
-                          ✨ FINE (TARQÎQ)
+                          {isChild ? "✨ LETTRE DOUCE" : "✨ FINE (TARQÎQ)"}
                         </span>
                       )}
                     </div>
@@ -270,7 +281,7 @@ export function PrononciationPage() {
                         fontWeight: 700,
                       }}
                     >
-                      {playingId === `letter-${selected}` ? "⏹ STOP" : "▶ ÉCOUTER"}
+                      {playingId === `letter-${selected}` ? "⏹ STOP" : isChild ? "▶ ÉCOUTER LE SON" : "▶ ÉCOUTER"}
                     </button>
                   </div>
 
@@ -284,7 +295,7 @@ export function PrononciationPage() {
                         {sel.name.toUpperCase()} · /{sel.trans}/
                       </div>
                       <div style={{ fontSize: 10, color: "var(--text3)", textAlign: "center", marginTop: 2 }}>
-                        {selDetail?.makhrajLabel || sel.makhraj}
+                        {isChild ? (selDetail?.childOrgan || selDetail?.makhrajLabel || sel.makhraj) : (selDetail?.makhrajLabel || sel.makhraj)}
                       </div>
                     </div>
                   </div>
@@ -294,34 +305,61 @@ export function PrononciationPage() {
                     <MakharijAnatomyDiagram
                       activeLetter={sel.letter}
                       isHeavyMode={isSelectedHeavy}
+                      isChild={isChild}
                       showLabels={true}
                     />
                   </div>
 
-                  {/* Description d'articulation approfondie */}
-                  <div
-                    style={{
-                      background: "rgba(255, 255, 255, 0.03)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 10,
-                      padding: "10px 14px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                    }}
-                  >
-                    <div style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--gold2)", fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
-                      POSITION ANATOMIQUE DES ORGANES (LANGUE, GORGE, LÈVRES) :
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.6 }}>
-                      {selDetail?.howToPronounce || sel.tip}
-                    </div>
-                    {selDetail?.anatomicalTip && (
-                      <div style={{ fontSize: 10, color: "var(--teal2)", borderTop: "1px solid var(--border2)", paddingTop: 4, marginTop: 2 }}>
-                        🔬 <em>Détail anatomique :</em> {selDetail.anatomicalTip}
+                  {/* Description d'articulation adaptée */}
+                  {isChild ? (
+                    <div
+                      style={{
+                        background: "rgba(255, 183, 3, 0.08)",
+                        border: "1.5px solid rgba(255, 183, 3, 0.35)",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontSize: 10.5, letterSpacing: 1.2, color: "#ffe082", fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
+                        🌟 ASTUCE MAGIQUE DU PETIT CHAMPION :
                       </div>
-                    )}
-                  </div>
+                      <div style={{ fontSize: 12, color: "#fff", lineHeight: 1.6, fontWeight: 500 }}>
+                        {selDetail?.childTip || selDetail?.howToPronounce || sel.tip}
+                      </div>
+                      {selDetail?.howToPronounceChild && (
+                        <div style={{ fontSize: 10.5, color: "var(--teal2)", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 5, marginTop: 2 }}>
+                          👉 <strong>Comment faire :</strong> {selDetail.howToPronounceChild}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        background: "rgba(255, 255, 255, 0.03)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 10,
+                        padding: "10px 14px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--gold2)", fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
+                        POSITION ANATOMIQUE DES ORGANES (LANGUE, GORGE, LÈVRES) :
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.6 }}>
+                        {selDetail?.howToPronounce || sel.tip}
+                      </div>
+                      {selDetail?.anatomicalTip && (
+                        <div style={{ fontSize: 10, color: "var(--teal2)", borderTop: "1px solid var(--border2)", paddingTop: 4, marginTop: 2 }}>
+                          🔬 <em>Détail anatomique :</em> {selDetail.anatomicalTip}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Formes selon la position */}
                   <div>
@@ -427,7 +465,7 @@ export function PrononciationPage() {
         {/* ── TAB 2 : LETTRES GRAVES (TAFKHÎM - خُصَّ ضَغْطٍ قِظْ) ──             */}
         {/* ══════════════════════════════════════════════════════════════════════ */}
         {tab === "graves" && (
-          <HeavyLettersGuide speak={speak} playingId={playingId} />
+          <HeavyLettersGuide speak={speak} playingId={playingId} isChild={isChild} />
         )}
 
         {/* ══════════════════════════════════════════════════════════════════════ */}
@@ -436,31 +474,47 @@ export function PrononciationPage() {
         {tab === "harakat" && (
           <>
             <div>
-              <div className="pronon-section-title">VOYELLES COURTES (حَرَكَات)</div>
+              <div className="pronon-section-title">
+                {isChild ? "🎨 LES 4 PETITS SONS MAGIQUES (حَرَكَات)" : "VOYELLES COURTES (حَرَكَات)"}
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-                {HARAKATS.map((h, hi) => (
-                  <div
-                    key={hi}
-                    className={`pronon-harakat-btn${playingId === `harak-${hi}` ? " playing" : ""}`}
-                    onClick={() => speak(h.arabic, `harak-${hi}`)}
-                  >
-                    <div className="pronon-harakat-arabic" style={{ color: h.color }}>
-                      {h.arabic}
-                    </div>
-                    <div className="pronon-harakat-name">{h.name.toUpperCase()}</div>
-                    <div className="pronon-harakat-desc">{h.desc}</div>
-                    {playingId === `harak-${hi}` && (
-                      <div style={{ fontSize: 8, color: "var(--teal)", letterSpacing: 1, marginTop: 2 }}>
-                        ▶ EN COURS
+                {HARAKATS.map((h, hi) => {
+                  let childDesc = h.desc;
+                  if (isChild) {
+                    if (h.name.toLowerCase().includes("fath")) childDesc = "😊 Ouvre grand la bouche avec le sourire : A !";
+                    else if (h.name.toLowerCase().includes("kasr")) childDesc = "😄 Fais un grand sourire malicieux : I !";
+                    else if (h.name.toLowerCase().includes("damm")) childDesc = "😗 Fais un petit rond avec tes lèvres comme un bisou : Ou !";
+                    else if (h.name.toLowerCase().includes("suk") || h.name.toLowerCase().includes("souk")) childDesc = "🤫 Chut ! Une petite pause toute douce sans voyelle !";
+                    else if (h.name.toLowerCase().includes("shadd")) childDesc = "💪 La lettre championne musclée qui double sa force !";
+                    else if (h.name.toLowerCase().includes("tanwin")) childDesc = "🔔 Fais chanter la petite clochette du nez : 'An', 'In' ou 'Oun' !";
+                  }
+
+                  return (
+                    <div
+                      key={hi}
+                      className={`pronon-harakat-btn${playingId === `harak-${hi}` ? " playing" : ""}`}
+                      onClick={() => speak(h.arabic, `harak-${hi}`)}
+                    >
+                      <div className="pronon-harakat-arabic" style={{ color: h.color }}>
+                        {h.arabic}
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <div className="pronon-harakat-name">{h.name.toUpperCase()}</div>
+                      <div className="pronon-harakat-desc">{childDesc}</div>
+                      {playingId === `harak-${hi}` && (
+                        <div style={{ fontSize: 8, color: "var(--teal)", letterSpacing: 1, marginTop: 2 }}>
+                          ▶ EN COURS
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             <div>
-              <div className="pronon-section-title">ENTRAÎNEMENT AVEC ب (Ba)</div>
+              <div className="pronon-section-title">
+                {isChild ? "🎯 ENTRAÎNE-TOI AVEC LA LETTRE ب (Ba)" : "ENTRAÎNEMENT AVEC ب (Ba)"}
+              </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                 {HARAKATS.map((h, hi) => {
                   const pid = `train-${hi}`;
@@ -495,12 +549,32 @@ export function PrononciationPage() {
             </div>
 
             <div>
-              <div className="pronon-section-title">VOYELLES LONGUES (حُرُوف الْمَدّ)</div>
+              <div className="pronon-section-title">
+                {isChild ? "🚂 LES VOYELLES LONGUES ENCHANTÉES (حُرُوف الْمَدّ)" : "VOYELLES LONGUES (حُرُوف الْمَدّ)"}
+              </div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 {[
-                  { arabic: "بَا", name: "Alif + Fatḥa", desc: "Son 'Â' long (ex: كَافِرُون)", color: "var(--gold2)", synth: "بَا" },
-                  { arabic: "بِي", name: "Ya + Kasra", desc: "Son 'Î' long (ex: كِيلَ)", color: "var(--teal2)", synth: "بِي" },
-                  { arabic: "بُو", name: "Waw + Ḍamma", desc: "Son 'Û' long (ex: نُوحٌ)", color: "var(--green2)", synth: "بُو" },
+                  {
+                    arabic: "بَا",
+                    name: isChild ? "Le Grand Â" : "Alif + Fatḥa",
+                    desc: isChild ? "Chante un grand 'Âaa' qui s'étire vers le ciel !" : "Son 'Â' long (ex: كَافِرُون)",
+                    color: "var(--gold2)",
+                    synth: "بَا",
+                  },
+                  {
+                    arabic: "بِي",
+                    name: isChild ? "Le Grand Î" : "Ya + Kasra",
+                    desc: isChild ? "Chante un grand 'Îii' tout joyeux avec le sourire !" : "Son 'Î' long (ex: كِيلَ)",
+                    color: "var(--teal2)",
+                    synth: "بِي",
+                  },
+                  {
+                    arabic: "بُو",
+                    name: isChild ? "Le Grand Oû" : "Waw + Ḍamma",
+                    desc: isChild ? "Chante un grand 'Oûuu' comme un bisou magique !" : "Son 'Û' long (ex: نُوحٌ)",
+                    color: "var(--green2)",
+                    synth: "بُو",
+                  },
                 ].map((v, vi) => (
                   <div
                     key={vi}
@@ -539,48 +613,64 @@ export function PrononciationPage() {
         {tab === "tajwid" && (
           <>
             <div>
-              <div className="pronon-section-title">RÈGLES DE BASE DU TAJWID (تجويد)</div>
+              <div className="pronon-section-title">
+                {isChild ? "✨ LES 7 SECRETS MAGIQUES DE RÉCITATION (تجويد)" : "RÈGLES DE BASE DU TAJWID (تجويد)"}
+              </div>
               {[
                 {
-                  name: "NUN SAKIN & TANWÎN — Iẓhâr (إظهار)",
+                  name: isChild ? "☀️ LE SOLEIL CLAIR (Iẓhâr)" : "NUN SAKIN & TANWÎN — Iẓhâr (إظهار)",
                   arabic: "أَنْعَمْتَ",
-                  desc: "Prononciation claire du Nûn quand il est suivi de ء ه ع غ ح خ (lettres de la gorge). On entend le 'n' distinctement sans nasalisation prolongée.",
+                  desc: isChild
+                    ? "Le son 'N' brille et se prononce tout clair et propre comme le soleil ! On ne le cache pas."
+                    : "Prononciation claire du Nûn quand il est suivi de ء ه ع غ ح خ (lettres de la gorge). On entend le 'n' distinctement sans nasalisation prolongée.",
                   color: "var(--gold)",
                 },
                 {
-                  name: "NUN SAKIN & TANWÎN — Idghâm (إدغام)",
+                  name: isChild ? "🧲 L'AIMANT MAGIQUE (Idghâm)" : "NUN SAKIN & TANWÎN — Idghâm (إدغام)",
                   arabic: "مَنْ يَعْمَلُ",
-                  desc: "Fusion du Nûn dans la lettre suivante (ي ن م و ل ر). Le 'n' disparaît dans la consonne suivante.",
+                  desc: isChild
+                    ? "Comme par magie, le son 'N' disparaît et se colle directement dans la lettre suivante !"
+                    : "Fusion du Nûn dans la lettre suivante (ي ن م و ل ر). Le 'n' disparaît dans la consonne suivante.",
                   color: "var(--teal)",
                 },
                 {
-                  name: "NUN SAKIN & TANWÎN — Iqlab (إقلاب)",
+                  name: isChild ? "🔄 LE CAMÉLÉON RIGOLO (Iqlâb)" : "NUN SAKIN & TANWÎN — Iqlab (إقلاب)",
                   arabic: "أَنْبِيَاء",
-                  desc: "Transformation du Nûn en Mîm nasale devant la lettre ب. 'nb' devient 'm' nasal avec lèvres douces.",
+                  desc: isChild
+                    ? "Dès que le 'N' rencontre la lettre Ba (ب), il se déguise en 'M' tout doux avec un bisou des lèvres !"
+                    : "Transformation du Nûn en Mîm nasale devant la lettre ب. 'nb' devient 'm' nasal avec lèvres douces.",
                   color: "var(--green)",
                 },
                 {
-                  name: "NUN SAKIN & TANWÎN — Ikhfâ (إخفاء)",
+                  name: isChild ? "🥷 LE NINJA SECRET (Ikhfâ)" : "NUN SAKIN & TANWÎN — Ikhfâ (إخفاء)",
                   arabic: "مَنْ كَانَ",
-                  desc: "Dissimulation nasalisée du Nûn devant 15 lettres. Son intermédiaire entre Iẓhâr et Idghâm avec maintien de la Ghunnah.",
+                  desc: isChild
+                    ? "Le son 'N' se cache dans le nez comme un petit ninja avec un doux bourdonnement magique !"
+                    : "Dissimulation nasalisée du Nûn devant 15 lettres. Son intermédiaire entre Iẓhâr et Idghâm avec maintien de la Ghunnah.",
                   color: "var(--gold2)",
                 },
                 {
-                  name: "MADD — Allongement naturel (مَدّ طَبِيعِي)",
+                  name: isChild ? "🚂 LE TRAIN ENCHANTÉ (Madd Naturel)" : "MADD — Allongement naturel (مَدّ طَبِيعِي)",
                   arabic: "قَالَ",
-                  desc: "Allongement de 2 temps sur ا و ي quand précédé de sa voyelle correspondante.",
+                  desc: isChild
+                    ? "On étire la voix pendant 2 temps comme le wagon d'un train enchanté : 'Âaa', 'Îii', 'Oûuu' !"
+                    : "Allongement de 2 temps sur ا و ي quand précédé de sa voyelle correspondante.",
                   color: "var(--teal2)",
                 },
                 {
-                  name: "MADD — Allongement obligatoire (مَدّ وَاجِب)",
+                  name: isChild ? "🚀 LE GRAND VOYAGE DE LA VOIX (Madd Long)" : "MADD — Allongement obligatoire (مَدّ وَاجِب)",
                   arabic: "جَاءَ",
-                  desc: "Allongement de 4-5 temps quand les lettres de madd sont suivies d'une hamza dans le même mot.",
+                  desc: isChild
+                    ? "Quand une Hamza arrive, la voix s'envole encore plus loin pendant 4 à 5 temps !"
+                    : "Allongement de 4-5 temps quand les lettres de madd sont suivies d'une hamza dans le même mot.",
                   color: "var(--gold3)",
                 },
                 {
-                  name: "QALQALAH (قَلْقَلَة) — Écho rebondissant",
+                  name: isChild ? "🏀 LE BALLON QUI REBONDIT (Qalqalah)" : "QALQALAH (قَلْقَلَة) — Écho rebondissant",
                   arabic: "يَقْطَعُ",
-                  desc: "Vibration explosive sur les lettres ق ط ب ج د portant un soukoun. Le son rebondit nettement.",
+                  desc: isChild
+                    ? "Sur les 5 lettres championnes (ق ط ب ج د), quand il y a un stop, la voix rebondit comme une balle magique : 'BOING' !"
+                    : "Vibration explosive sur les lettres ق ط ب ج د portant un soukoun. Le son rebondit nettement.",
                   color: "var(--red)",
                 },
               ].map((rule, ri) => (
@@ -623,7 +713,15 @@ export function PrononciationPage() {
             </div>
 
             <div className="pronon-tip-box" style={{ marginTop: 4 }}>
-              🎓 <strong>Conseil :</strong> Pour écouter ces règles directement appliquées au texte sacré, visitez la page 📖 <strong>LECTURE</strong> et activez le bouton <strong>TAJWID</strong> pour visualiser les couleurs en temps réel sur les versets !
+              {isChild ? (
+                <span>
+                  🌟 <strong>Bravo Petit Récitateur :</strong> Va maintenant sur la page 📖 <strong>LECTURE</strong> pour voir briller toutes ces couleurs magiques directement sur les versets du Coran !
+                </span>
+              ) : (
+                <span>
+                  🎓 <strong>Conseil :</strong> Pour écouter ces règles directement appliquées au texte sacré, visitez la page 📖 <strong>LECTURE</strong> et activez le bouton <strong>TAJWID</strong> pour visualiser les couleurs en temps réel sur les versets !
+                </span>
+              )}
             </div>
           </>
         )}

@@ -2739,34 +2739,39 @@ export const CSS = `
   }
 
   .ux-profile-child .ayat-row {
-    margin: 6px 12px 10px;
-    border-radius: 16px;
-    border: 1.5px solid rgba(255, 183, 3, 0.28);
-    background: linear-gradient(180deg, rgba(255, 183, 3, 0.05) 0%, rgba(20, 24, 33, 0.85) 100%);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    margin: 8px 14px 14px;
+    border-radius: 20px;
+    border: 2px solid rgba(255, 183, 3, 0.45);
+    background: linear-gradient(180deg, rgba(255, 248, 220, 0.18) 0%, rgba(255, 230, 130, 0.10) 35%, rgba(28, 34, 48, 0.90) 100%);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.25), 0 0 16px rgba(255, 183, 3, 0.15);
   }
   .ux-profile-child .ayat-row:hover,
-  .ux-profile-child .ayat-row.active {
-    border-color: rgba(255, 183, 3, 0.55);
-    box-shadow: 0 4px 20px rgba(255, 183, 3, 0.2);
+  .ux-profile-child .ayat-row.active,
+  .ux-profile-child .ayat-row.playing {
+    border-color: #ffb703;
+    background: linear-gradient(180deg, rgba(255, 250, 230, 0.28) 0%, rgba(255, 235, 150, 0.18) 40%, rgba(30, 38, 54, 0.94) 100%);
+    box-shadow: 0 8px 30px rgba(255, 183, 3, 0.38), 0 0 24px rgba(255, 220, 80, 0.28);
   }
   .ux-profile-child .ayat-main {
-    padding: 14px 16px;
-    gap: 14px;
+    padding: 16px 20px;
+    gap: 16px;
+    align-items: center;
   }
   .ux-profile-child .ayat-arabic {
-    font-size: min(var(--ayat-font-size, 34px), 34px);
-    line-height: 2.3;
-    color: #fff1c2;
+    font-size: min(var(--ayat-font-size, 36px), 40px) !important;
+    line-height: 2.5 !important;
+    color: #fffbee !important;
+    text-shadow: 0 2px 14px rgba(255, 183, 3, 0.40);
+    padding: 6px 0;
   }
   .ux-profile-child .ayat-trans {
-    font-size: 16px;
-    line-height: 1.65;
-    color: #ffd166;
-    background: rgba(255, 183, 3, 0.08);
-    padding: 10px 14px;
-    border-radius: 10px;
-    border-left: 3px solid #ffb703;
+    font-size: 17px;
+    line-height: 1.7;
+    color: #ffe082;
+    background: rgba(255, 183, 3, 0.14);
+    padding: 12px 18px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255, 183, 3, 0.40);
   }
   .ux-profile-child .child-play-btn {
     background: linear-gradient(135deg, #ffb703 0%, #fb8500 100%) !important;
@@ -2776,8 +2781,29 @@ export const CSS = `
     box-shadow: 0 4px 14px rgba(255, 183, 3, 0.35) !important;
   }
   .ux-profile-child .ctrl-btn {
-    border-color: rgba(255, 183, 3, 0.35);
+    border-color: rgba(255, 183, 3, 0.45);
     color: #ffd166;
+  }
+  /* Clutter removal in child mode: maximize room for the Quranic text */
+  .ux-profile-child .ayat-mastery-col {
+    display: none !important;
+  }
+  .ux-profile-child .edge-pills-bar {
+    display: none !important;
+  }
+  .ux-profile-child .ayat-page-badge {
+    display: none !important;
+  }
+  .ux-profile-child .ayat-number-badge {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+    font-weight: 800;
+    border-radius: 50%;
+    border: 2px solid #ffb703;
+    background: rgba(255, 183, 3, 0.22);
+    color: #fff8db;
+    box-shadow: 0 2px 8px rgba(255, 183, 3, 0.35);
   }
 
   .ux-profile-expert .ayat-row {
@@ -2843,8 +2869,8 @@ export const CSS = `
       line-height: 2.15;
     }
     .ux-profile-child .ayat-arabic {
-      font-size: min(var(--ayat-font-size, 29px), 29px);
-      line-height: 2.2;
+      font-size: 34px !important;
+      line-height: 2.45 !important;
     }
     .ux-profile-expert .ayat-arabic {
       font-size: 19.5px !important;
@@ -2861,22 +2887,27 @@ export const CSS = `
       font-size: 20px;
       line-height: 1.95;
     }
-    .ux-profile-beginner .ayat-row,
-    .ux-profile-child .ayat-row {
+    .ux-profile-beginner .ayat-row {
       margin: 3px 6px 6px;
     }
-    .ux-profile-beginner .ayat-main,
-    .ux-profile-child .ayat-main {
+    .ux-profile-child .ayat-row {
+      margin: 6px 8px 10px;
+    }
+    .ux-profile-beginner .ayat-main {
       padding: 9px 10px;
       gap: 8px;
+    }
+    .ux-profile-child .ayat-main {
+      padding: 12px 14px;
+      gap: 10px;
     }
     .ux-profile-beginner .ayat-arabic {
       font-size: 23px !important;
       line-height: 2.05 !important;
     }
     .ux-profile-child .ayat-arabic {
-      font-size: 24px !important;
-      line-height: 2.1 !important;
+      font-size: 30px !important;
+      line-height: 2.35 !important;
     }
     .ux-profile-expert .ayat-arabic {
       font-size: 18.5px !important;
@@ -2897,22 +2928,27 @@ export const CSS = `
       font-size: 18.5px;
       line-height: 1.9;
     }
-    .ux-profile-beginner .ayat-row,
-    .ux-profile-child .ayat-row {
+    .ux-profile-beginner .ayat-row {
       margin: 2px 4px 5px;
     }
-    .ux-profile-beginner .ayat-main,
-    .ux-profile-child .ayat-main {
+    .ux-profile-child .ayat-row {
+      margin: 4px 6px 8px;
+    }
+    .ux-profile-beginner .ayat-main {
       padding: 7px 7px;
       gap: 6px;
+    }
+    .ux-profile-child .ayat-main {
+      padding: 10px 10px;
+      gap: 8px;
     }
     .ux-profile-beginner .ayat-arabic {
       font-size: 21px !important;
       line-height: 2.0 !important;
     }
     .ux-profile-child .ayat-arabic {
-      font-size: 21.5px !important;
-      line-height: 2.0 !important;
+      font-size: 28px !important;
+      line-height: 2.3 !important;
     }
     .ux-profile-expert .ayat-arabic {
       font-size: 17px !important;
@@ -2961,15 +2997,15 @@ export const StyleTag = () => {
       return `
         :root {
           --gold: #ffb703;
-          --gold2: #ffd166;
-          --gold3: #fff1c2;
-          --header-border: rgba(255, 183, 3, 0.32);
-          --header-glow: rgba(255, 183, 3, 0.45);
-          --active-nav-bg: linear-gradient(135deg, rgba(255, 183, 3, 0.26), rgba(251, 133, 0, 0.14));
-          --active-nav-border: rgba(255, 183, 3, 0.50);
-          --active-nav-color: #ffd166;
+          --gold2: #ffe082;
+          --gold3: #fff9db;
+          --header-border: rgba(255, 183, 3, 0.40);
+          --header-glow: rgba(255, 200, 50, 0.55);
+          --active-nav-bg: linear-gradient(135deg, rgba(255, 183, 3, 0.32), rgba(255, 160, 0, 0.18));
+          --active-nav-border: rgba(255, 183, 3, 0.65);
+          --active-nav-color: #ffe082;
           --play-btn-bg: linear-gradient(135deg, #ffb703 0%, #fb8500 100%);
-          --play-btn-border: #ffd166;
+          --play-btn-border: #ffe082;
           --play-btn-color: #0c0e14;
         }
       `;

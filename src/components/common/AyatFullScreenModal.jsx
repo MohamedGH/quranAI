@@ -784,8 +784,10 @@ export function AyatFullScreenModal({
     return <span>{ayat.text}</span>;
   };
 
-  // Adjust display font size: on small screens, clamp slightly for extreme long verses
-  const effectiveFontSize = isMobile ? Math.min(fontSize, 36) : fontSize;
+  // Adjust display font size: child mode gets a generous prominent font size, others clamp slightly on mobile
+  const effectiveFontSize = isChild
+    ? Math.max(fontSize, isMobile ? 32 : 38)
+    : (isMobile ? Math.min(fontSize, 36) : fontSize);
 
   return (
     <div
@@ -794,7 +796,9 @@ export function AyatFullScreenModal({
         position: "fixed",
         inset: 0,
         zIndex: 2500,
-        background: "radial-gradient(ellipse at center, #131724 0%, #0a0d14 70%, #06080e 100%)",
+        background: isChild
+          ? "radial-gradient(ellipse at 50% 20%, #222a3d 0%, #161b28 60%, #0f131d 100%)"
+          : "radial-gradient(ellipse at center, #131724 0%, #0a0d14 70%, #06080e 100%)",
         color: "var(--text)",
         display: "flex",
         flexDirection: "column",
@@ -2221,9 +2225,11 @@ export function AyatFullScreenModal({
                 gap: isMobile ? 8 : 12,
                 padding: isMobile ? "4px 14px" : "6px 20px",
                 borderRadius: 24,
-                background: "radial-gradient(ellipse at center, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.04) 100%)",
-                border: "1px solid rgba(201,168,76,0.4)",
-                boxShadow: "0 0 20px rgba(201,168,76,0.12)",
+                background: isChild
+                  ? "radial-gradient(ellipse at center, rgba(255,183,3,0.26) 0%, rgba(255,183,3,0.06) 100%)"
+                  : "radial-gradient(ellipse at center, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.04) 100%)",
+                border: isChild ? "1.5px solid rgba(255,183,3,0.6)" : "1px solid rgba(201,168,76,0.4)",
+                boxShadow: isChild ? "0 0 20px rgba(255,183,3,0.25)" : "0 0 20px rgba(201,168,76,0.12)",
                 maxWidth: "96%",
               }}
             >
@@ -2231,11 +2237,11 @@ export function AyatFullScreenModal({
                 style={{
                   fontFamily: "'Amiri Quran', serif",
                   fontSize: isMobile ? 18 : 22,
-                  color: "var(--gold2)",
-                  textShadow: "0 0 10px rgba(201,168,76,0.5)",
+                  color: isChild ? "#ffe082" : "var(--gold2)",
+                  textShadow: isChild ? "0 0 10px rgba(255,183,3,0.6)" : "0 0 10px rgba(201,168,76,0.5)",
                 }}
               >
-                ﴿ {toArabicDigits(currentAyatNum)} ﴾
+                {isChild ? "🌟" : `﴿ ${toArabicDigits(currentAyatNum)} ﴾`}
               </span>
               <span
                 style={{
@@ -2243,12 +2249,16 @@ export function AyatFullScreenModal({
                   fontSize: isMobile ? 11 : 13,
                   fontWeight: 700,
                   letterSpacing: 1.5,
-                  color: "var(--gold2)",
+                  color: isChild ? "#fff8db" : "var(--gold2)",
                 }}
               >
-                VERSET {currentAyatNum} <span style={{ color: "var(--text3)", fontWeight: 400 }}>/ {totalAyats}</span>
+                {isChild
+                  ? `Verset ${currentAyatNum} sur ${totalAyats}`
+                  : `VERSET ${currentAyatNum} `}
+                {!isChild && <span style={{ color: "var(--text3)", fontWeight: 400 }}>/ {totalAyats}</span>}
               </span>
               {(() => {
+                if (isChild) return null;
                 const ayatHizb = ayat.hizb ?? (ayat.hizbQuarter != null ? Math.ceil(ayat.hizbQuarter / 4) : null);
                 if (!ayat.page && !ayatHizb && !ayat.juz) return null;
                 return (
@@ -2380,12 +2390,12 @@ export function AyatFullScreenModal({
             style={{
               fontFamily: "'Amiri Quran', serif",
               fontSize: `${effectiveFontSize}px`,
-              lineHeight: isMobile ? 2.1 : 2.3,
+              lineHeight: isChild ? 2.5 : (isMobile ? 2.1 : 2.3),
               direction: "rtl",
-              color: "#f8f5ed",
-              padding: isMobile ? "0 4px" : "0 20px",
+              color: isChild ? "#fffbee" : "#f8f5ed",
+              padding: isChild ? (isMobile ? "10px 4px" : "18px 20px") : (isMobile ? "0 4px" : "0 20px"),
               textAlign: "center",
-              textShadow: "0 2px 18px rgba(0,0,0,0.65)",
+              textShadow: isChild ? "0 2px 20px rgba(255,183,3,0.45)" : "0 2px 18px rgba(0,0,0,0.65)",
               transition: "font-size .2s ease",
               width: "100%",
               wordBreak: "break-word",
@@ -2438,12 +2448,12 @@ export function AyatFullScreenModal({
                 maxWidth: 840,
                 width: isMobile ? "96%" : "92%",
                 padding: isMobile ? "12px 14px" : "16px 24px",
-                background: "rgba(91,200,245,0.04)",
-                border: "1px solid rgba(91,200,245,0.18)",
-                borderRadius: 12,
-                fontSize: isMobile ? 14 : 16,
-                lineHeight: isMobile ? 1.65 : 1.8,
-                color: "var(--text)",
+                background: isChild ? "rgba(255, 183, 3, 0.12)" : "rgba(91,200,245,0.04)",
+                border: isChild ? "1.5px solid rgba(255, 183, 3, 0.45)" : "1px solid rgba(91,200,245,0.18)",
+                borderRadius: 14,
+                fontSize: isChild ? (isMobile ? 16 : 18) : (isMobile ? 14 : 16),
+                lineHeight: isChild ? 1.75 : (isMobile ? 1.65 : 1.8),
+                color: isChild ? "#ffe082" : "var(--text)",
                 textAlign: "center",
                 fontStyle: "italic",
                 position: "relative",
@@ -2457,13 +2467,13 @@ export function AyatFullScreenModal({
                   transform: "translateX(-50%)",
                   fontSize: 8,
                   letterSpacing: 1.5,
-                  color: "var(--teal2)",
-                  background: "#10141e",
+                  color: isChild ? "#ffb703" : "var(--teal2)",
+                  background: isChild ? "#1b2130" : "#10141e",
                   padding: "0 8px",
                   fontFamily: "'Cinzel',serif",
                   fontWeight: 600,
                   borderRadius: 4,
-                  border: "1px solid rgba(91,200,245,0.25)",
+                  border: isChild ? "1px solid rgba(255, 183, 3, 0.5)" : "1px solid rgba(91,200,245,0.25)",
                 }}
               >
                 TRADUCTION ({(translationLang || "FR").toUpperCase()})
@@ -2473,170 +2483,69 @@ export function AyatFullScreenModal({
           )}
 
           {/* Study & Quick Actions Row */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: isMobile ? 6 : 8,
-              flexWrap: "wrap",
-              padding: "4px 0",
-              width: "100%",
-            }}
-          >
-            {/* Mark Learned Button */}
-            <button
-              id="btn-fs-toggle-learned"
-              onClick={toggleLearned}
+          {isChild ? (
+            <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 5,
-                padding: isMobile ? "6px 11px" : "6px 14px",
-                borderRadius: 20,
-                border: `1px solid ${isLearned ? "var(--green)" : "rgba(255,255,255,0.1)"}`,
-                background: isLearned ? "rgba(76,175,129,0.18)" : "rgba(255,255,255,0.03)",
-                color: isLearned ? "var(--green2)" : "var(--text3)",
-                fontSize: isMobile ? 9 : 10,
-                fontFamily: "'Cinzel',serif",
-                fontWeight: 600,
-                letterSpacing: 0.5,
-                cursor: "pointer",
-                transition: "all .15s",
-                minHeight: 34,
+                justifyContent: "center",
+                gap: 12,
+                padding: "8px 0 4px",
+                width: "100%",
               }}
             >
-              <span>{isLearned ? "✓ APPRIS" : "○ MARQUER APPRIS"}</span>
-            </button>
-
-            {/* To Revise Button (Opens Reviser panel in Submenu) */}
-            <button
-              id="btn-fs-toggle-revise"
-              onClick={() => {
-                if (!isToRevise) toggleToRevise();
-                if (setSubmenuMode) {
-                  setSubmenuMode("reviser");
-                  setShowSubmenu(true);
-                  setTimeout(() => {
-                    document.getElementById("fs-submenu-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }, 50);
-                }
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: isMobile ? "6px 11px" : "6px 14px",
-                borderRadius: 20,
-                border: `1px solid ${isToRevise ? "var(--gold)" : "rgba(255,255,255,0.1)"}`,
-                background: isToRevise ? "rgba(201,168,76,0.18)" : "rgba(255,255,255,0.03)",
-                color: isToRevise ? "var(--gold2)" : "var(--text3)",
-                fontSize: isMobile ? 9 : 10,
-                fontFamily: "'Cinzel',serif",
-                fontWeight: 600,
-                letterSpacing: 0.5,
-                cursor: "pointer",
-                transition: "all .15s",
-                minHeight: 34,
-              }}
-              title="Ouvrir le panneau À Réviser pour cibler mots ou lettres"
-            >
-              <span>🔖 {isToRevise ? "À RÉVISER (ACTIF)" : "MARQUER À RÉVISER"}</span>
-            </button>
-
-            {isToRevise && (
+              {/* Single cheerful kid action button */}
               <button
-                id="btn-fs-untoggle-revise"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleToRevise();
-                }}
+                id="btn-fs-toggle-learned"
+                onClick={toggleLearned}
                 style={{
-                  background: "transparent",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  borderRadius: 16,
-                  color: "var(--text3)",
-                  fontSize: 9,
-                  fontFamily: "'Cinzel',serif",
-                  padding: "4px 8px",
-                  cursor: "pointer",
-                  minHeight: 34,
-                }}
-                title="Retirer complètement des révisions"
-              >
-                ✕ RETIRER
-              </button>
-            )}
-
-            {/* Create Part Button */}
-            {onStartPartCreate && (
-              <button
-                id="btn-fs-create-part"
-                onClick={onStartPartCreate}
-                style={{
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
-                  gap: 5,
-                  padding: isMobile ? "6px 11px" : "6px 14px",
-                  borderRadius: 20,
-                  border: "1px solid rgba(62,184,160,0.35)",
-                  background: "rgba(62,184,160,0.1)",
-                  color: "var(--teal2)",
-                  fontSize: isMobile ? 9 : 10,
-                  fontFamily: "'Cinzel',serif",
-                  fontWeight: 600,
-                  letterSpacing: 0.5,
-                  cursor: "pointer",
-                  transition: "all .15s",
-                  minHeight: 34,
-                }}
-                title="Découper ce verset en parties"
-              >
-                <span>✂ DÉCOUPER</span>
-              </button>
-            )}
-
-            {masteryPercent != null && (
-              <div
-                style={{
-                  fontSize: 9,
+                  gap: 8,
+                  padding: isMobile ? "10px 20px" : "12px 28px",
+                  borderRadius: 24,
+                  border: isLearned ? "2px solid #52b788" : "2px solid #ffb703",
+                  background: isLearned
+                    ? "linear-gradient(135deg, rgba(82,183,136,0.35) 0%, rgba(82,183,136,0.18) 100%)"
+                    : "linear-gradient(135deg, rgba(255,183,3,0.30) 0%, rgba(251,133,0,0.18) 100%)",
+                  color: isLearned ? "#b7e4c7" : "#ffe082",
+                  fontSize: isMobile ? 13 : 15,
+                  fontFamily: "'Cinzel', serif",
+                  fontWeight: 800,
                   letterSpacing: 0.8,
-                  padding: "5px 10px",
-                  borderRadius: 20,
-                  border: `1px solid ${masteryColor(masteryPercent)}`,
-                  color: masteryColor(masteryPercent),
-                  fontFamily: "'Cinzel',serif",
-                  background: masteryPercent > 0 ? "rgba(201,168,76,0.08)" : "rgba(255,255,255,0.03)",
-                  display: "flex",
-                  alignItems: "center",
-                  minHeight: 34,
-                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
+                  transition: "all .2s ease",
                 }}
-                title={`Maîtrise du verset : ${masteryPercent}%`}
               >
-                MAÎTRISE: {masteryPercent}%
-              </div>
-            )}
-
-            {/* Jump to Submenu Button */}
-            {setSubmenuMode && (
+                <span>{isLearned ? "⭐ C'EST APPRIS ! BRAVO !" : "🌟 J'AI APPRIS CE VERSET"}</span>
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: isMobile ? 6 : 8,
+                flexWrap: "wrap",
+                padding: "4px 0",
+                width: "100%",
+              }}
+            >
+              {/* Mark Learned Button */}
               <button
-                id="btn-fs-jump-submenu"
-                onClick={() => {
-                  setShowSubmenu(true);
-                  setTimeout(() => {
-                    document.getElementById("fs-submenu-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }, 50);
-                }}
+                id="btn-fs-toggle-learned"
+                onClick={toggleLearned}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 5,
                   padding: isMobile ? "6px 11px" : "6px 14px",
                   borderRadius: 20,
-                  border: "1px solid rgba(201,168,76,0.35)",
-                  background: "rgba(201,168,76,0.1)",
-                  color: "var(--gold2)",
+                  border: `1px solid ${isLearned ? "var(--green)" : "rgba(255,255,255,0.1)"}`,
+                  background: isLearned ? "rgba(76,175,129,0.18)" : "rgba(255,255,255,0.03)",
+                  color: isLearned ? "var(--green2)" : "var(--text3)",
                   fontSize: isMobile ? 9 : 10,
                   fontFamily: "'Cinzel',serif",
                   fontWeight: 600,
@@ -2646,13 +2555,154 @@ export function AyatFullScreenModal({
                   minHeight: 34,
                 }}
               >
-                <span>📋 SOUS-MENU · {(submenuMode || "LECTURE").toUpperCase()}</span>
+                <span>{isLearned ? "✓ APPRIS" : "○ MARQUER APPRIS"}</span>
               </button>
-            )}
-          </div>
 
-          {/* ── Submenu Section in Full Screen (Big View) ── */}
-          {setSubmenuMode && (
+              {/* To Revise Button (Opens Reviser panel in Submenu) */}
+              <button
+                id="btn-fs-toggle-revise"
+                onClick={() => {
+                  if (!isToRevise) toggleToRevise();
+                  if (setSubmenuMode) {
+                    setSubmenuMode("reviser");
+                    setShowSubmenu(true);
+                    setTimeout(() => {
+                      document.getElementById("fs-submenu-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }, 50);
+                  }
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  padding: isMobile ? "6px 11px" : "6px 14px",
+                  borderRadius: 20,
+                  border: `1px solid ${isToRevise ? "var(--gold)" : "rgba(255,255,255,0.1)"}`,
+                  background: isToRevise ? "rgba(201,168,76,0.18)" : "rgba(255,255,255,0.03)",
+                  color: isToRevise ? "var(--gold2)" : "var(--text3)",
+                  fontSize: isMobile ? 9 : 10,
+                  fontFamily: "'Cinzel',serif",
+                  fontWeight: 600,
+                  letterSpacing: 0.5,
+                  cursor: "pointer",
+                  transition: "all .15s",
+                  minHeight: 34,
+                }}
+                title="Ouvrir le panneau À Réviser pour cibler mots ou lettres"
+              >
+                <span>🔖 {isToRevise ? "À RÉVISER (ACTIF)" : "MARQUER À RÉVISER"}</span>
+              </button>
+
+              {isToRevise && (
+                <button
+                  id="btn-fs-untoggle-revise"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleToRevise();
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    borderRadius: 16,
+                    color: "var(--text3)",
+                    fontSize: 9,
+                    fontFamily: "'Cinzel',serif",
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                    minHeight: 34,
+                  }}
+                  title="Retirer complètement des révisions"
+                >
+                  ✕ RETIRER
+                </button>
+              )}
+
+              {/* Create Part Button */}
+              {onStartPartCreate && (
+                <button
+                  id="btn-fs-create-part"
+                  onClick={onStartPartCreate}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: isMobile ? "6px 11px" : "6px 14px",
+                    borderRadius: 20,
+                    border: "1px solid rgba(62,184,160,0.35)",
+                    background: "rgba(62,184,160,0.1)",
+                    color: "var(--teal2)",
+                    fontSize: isMobile ? 9 : 10,
+                    fontFamily: "'Cinzel',serif",
+                    fontWeight: 600,
+                    letterSpacing: 0.5,
+                    cursor: "pointer",
+                    transition: "all .15s",
+                    minHeight: 34,
+                  }}
+                  title="Découper ce verset en parties"
+                >
+                  <span>✂ DÉCOUPER</span>
+                </button>
+              )}
+
+              {masteryPercent != null && (
+                <div
+                  style={{
+                    fontSize: 9,
+                    letterSpacing: 0.8,
+                    padding: "5px 10px",
+                    borderRadius: 20,
+                    border: `1px solid ${masteryColor(masteryPercent)}`,
+                    color: masteryColor(masteryPercent),
+                    fontFamily: "'Cinzel',serif",
+                    background: masteryPercent > 0 ? "rgba(201,168,76,0.08)" : "rgba(255,255,255,0.03)",
+                    display: "flex",
+                    alignItems: "center",
+                    minHeight: 34,
+                    fontWeight: 700,
+                  }}
+                  title={`Maîtrise du verset : ${masteryPercent}%`}
+                >
+                  MAÎTRISE: {masteryPercent}%
+                </div>
+              )}
+
+              {/* Jump to Submenu Button */}
+              {setSubmenuMode && (
+                <button
+                  id="btn-fs-jump-submenu"
+                  onClick={() => {
+                    setShowSubmenu(true);
+                    setTimeout(() => {
+                      document.getElementById("fs-submenu-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }, 50);
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: isMobile ? "6px 11px" : "6px 14px",
+                    borderRadius: 20,
+                    border: "1px solid rgba(201,168,76,0.35)",
+                    background: "rgba(201,168,76,0.1)",
+                    color: "var(--gold2)",
+                    fontSize: isMobile ? 9 : 10,
+                    fontFamily: "'Cinzel',serif",
+                    fontWeight: 600,
+                    letterSpacing: 0.5,
+                    cursor: "pointer",
+                    transition: "all .15s",
+                    minHeight: 34,
+                  }}
+                >
+                  <span>📋 SOUS-MENU · {(submenuMode || "LECTURE").toUpperCase()}</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── Submenu Section in Full Screen (Big View - Hidden in Child mode) ── */}
+          {!isChild && setSubmenuMode && (
             <section
               id="fs-submenu-section"
               data-no-swipe="true"

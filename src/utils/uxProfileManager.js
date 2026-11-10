@@ -160,21 +160,21 @@ export const UX_PROFILES = Object.freeze({
     badge: "Apprenti",
     icon: "🌟",
     colorTheme: Object.freeze({
-      name: "Soleil Joyeux & Doré",
+      name: "Soleil Joyeux & Doré Lumineux",
       accent: "#ffb703",
-      accentHover: "#ffd166",
+      accentHover: "#ffe082",
       accentRgb: "255, 183, 3",
-      accentGradient: "linear-gradient(135deg, #ffb703 0%, #fb8500 100%)",
-      badgeBg: "rgba(255, 183, 3, 0.18)",
-      badgeBorder: "rgba(255, 183, 3, 0.6)",
-      cardBg: "linear-gradient(180deg, rgba(255, 183, 3, 0.04) 0%, rgba(20, 24, 33, 0.85) 100%)",
-      cardBorder: "rgba(255, 183, 3, 0.25)",
-      headerGlow: "rgba(255, 183, 3, 0.40)",
-      navActiveBg: "linear-gradient(135deg, rgba(255, 183, 3, 0.22), rgba(255, 183, 3, 0.10))",
-      navActiveBorder: "rgba(255, 183, 3, 0.40)",
+      accentGradient: "linear-gradient(135deg, #ffb703 0%, #ffa000 100%)",
+      badgeBg: "rgba(255, 183, 3, 0.25)",
+      badgeBorder: "rgba(255, 183, 3, 0.75)",
+      cardBg: "linear-gradient(180deg, rgba(255, 245, 205, 0.20) 0%, rgba(255, 225, 120, 0.10) 40%, rgba(28, 34, 48, 0.90) 100%)",
+      cardBorder: "rgba(255, 183, 3, 0.50)",
+      headerGlow: "rgba(255, 200, 50, 0.60)",
+      navActiveBg: "linear-gradient(135deg, rgba(255, 183, 3, 0.35), rgba(255, 160, 0, 0.20))",
+      navActiveBorder: "rgba(255, 183, 3, 0.70)",
     }),
     targetAudience: "Enfants et jeunes apprenants découvrant le Coran",
-    description: "Affichage chaleureux et stimulant avec textes très grands, encouragements visuels et mode quiz motivant.",
+    description: "Affichage clair, lumineux et chaleureux avec caractères très grands (36px), espace aéré, boutons simplifiés et jeux stimulants.",
     featureFlags: Object.freeze({
       simplifiedAudioPlayer: true,
       simplifiedSurahHeader: true,
@@ -182,13 +182,13 @@ export const UX_PROFILES = Object.freeze({
       hideAdvancedMetrics: true,
     }),
     features: Object.freeze([
-      "Très grands caractères arabes (34px) aérés",
-      "Surlignage dynamique lettre par lettre captivant",
-      "Quiz avec félicitations sonores et visuelles valorisantes",
-      "Parcours guidé adapté au rythme des plus jeunes"
+      "Caractères arabes géants (36px) lumineux et aérés",
+      "Couleurs claires et chaudes pour une lecture facile sans fatigue",
+      "Interface épurée avec un nombre minimal de boutons",
+      "Jeux et quiz motivants avec encouragements visuels et sonores"
     ]),
     defaultSettings: Object.freeze({
-      ayatFontSize: 34,
+      ayatFontSize: 36,
       showParts: true,
       enableAnimations: true,
       enableTimestamps: true,
@@ -320,12 +320,9 @@ export const getNavigationTabs = (uxMode = UX_MODES.STANDARD) => {
 
   if (mode === UX_MODES.CHILD) {
     return Object.freeze([
-      { id: "quran",         icon: "📖", label: "LECTURE",        title: "Lire et écouter les belles sourates" },
-      { id: "prononciation", icon: "🌟", label: "LETTRES",        title: "Apprendre à bien prononcer les lettres" },
-      { id: "dashboard",     icon: "🏆", label: "PROGRÈS",        title: "Mes étoiles et récompenses" },
-      { id: "revision",      icon: "⭐", label: "FAVORIS",        title: "Mes versets préférés à réviser" },
-      { id: "recordings",    icon: "🎙️", label: "MA VOIX",        title: "Écouter mes enregistrements" },
-      { id: "offline",       icon: "💾", label: "SANS INTERNET",  title: "Lire même sans connexion" },
+      { id: "quran",         icon: "📖", label: "LECTURE",      title: "Lire et écouter les belles sourates" },
+      { id: "prononciation", icon: "🌟", label: "LETTRES",      title: "Apprendre à bien prononcer les lettres" },
+      { id: "revision",      icon: "⭐", label: "JEUX & QUIZ",  title: "Jeux, quiz et révision amusante" },
     ]);
   }
 

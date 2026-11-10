@@ -2316,23 +2316,25 @@ function AppInner({ currentUser, onSignOut }) {
               <span className="ux-badge-chevron">▾</span>
             </button>
 
-            {/* Outils & Aides d'étude Modal Button */}
-            <button
-              id="header-tools-btn"
-              className={`header-tool-btn${showArabicKeyboard || showRappel ? ' active' : ''}`}
-              onClick={() => {
-                setHeaderToolsInitialTab('tools');
-                setShowHeaderToolsModal(true);
-              }}
-              title="Outils & Aides d'étude (Clavier, Rappels, Options)"
-              aria-label="Outils d'étude"
-            >
-              <span className="tool-icon">⚡</span>
-              <span className="tool-label desktop-only">OUTILS</span>
-              {(showArabicKeyboard || showRappel) && (
-                <span className="tool-active-dot" title="Outil actif" />
-              )}
-            </button>
+            {/* Outils & Aides d'étude Modal Button (Hidden in Child mode to keep the interface simple) */}
+            {uxMode !== 'child' && (
+              <button
+                id="header-tools-btn"
+                className={`header-tool-btn${showArabicKeyboard || showRappel ? ' active' : ''}`}
+                onClick={() => {
+                  setHeaderToolsInitialTab('tools');
+                  setShowHeaderToolsModal(true);
+                }}
+                title="Outils & Aides d'étude (Clavier, Rappels, Options)"
+                aria-label="Outils d'étude"
+              >
+                <span className="tool-icon">⚡</span>
+                <span className="tool-label desktop-only">OUTILS</span>
+                {(showArabicKeyboard || showRappel) && (
+                  <span className="tool-active-dot" title="Outil actif" />
+                )}
+              </button>
+            )}
 
             {/* User Avatar / Account Profile Modal Trigger */}
             {currentUser && (

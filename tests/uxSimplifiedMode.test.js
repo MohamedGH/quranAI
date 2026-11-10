@@ -111,11 +111,11 @@ describe("Simplified UX Mode (Child & Beginner) & Tooltip Accuracy", () => {
   describe("Expert font sizing and manual scroll container robustness", () => {
     it("resets ayatFontSize down to 24 when switching from child or beginner to expert", async () => {
       const { store, uiActions, sel } = await import("../src/store.js");
-      // Set to child mode first (large font: 34)
+      // Set to child mode first (large font: 36)
       store.dispatch(uiActions.setUxMode("child"));
-      expect(sel.ayatFontSize(store.getState())).toBe(34);
+      expect(sel.ayatFontSize(store.getState())).toBe(36);
 
-      // Now switch to expert: font size MUST be reset to 24 (not remaining at 34)
+      // Now switch to expert: font size MUST be reset to 24 (not remaining at 36)
       store.dispatch(uiActions.setUxMode("expert"));
       expect(sel.ayatFontSize(store.getState())).toBe(24);
       expect(sel.isExpertUx(store.getState())).toBe(true);
@@ -289,4 +289,55 @@ describe("Simplified UX Mode (Child & Beginner) & Tooltip Accuracy", () => {
       expect(typeof UxLevelWizardModal).toBe("function");
     });
   });
+
+  describe("Child Mode - Luminous palette, prominent ayat text & uncluttered buttons", () => {
+    it("features luminous sunny color palette with warm radiant gold tokens", async () => {
+      const { getUxThemeTokens, getUxProfile } = await import("../src/utils/uxProfileManager.js");
+      const tokens = getUxThemeTokens("child");
+      expect(tokens.name).toContain("Lumineux");
+      expect(tokens.accent).toBe("#ffb703");
+      expect(tokens.accentHover).toBe("#ffe082");
+      expect(tokens.badgeBorder).toBe("rgba(255, 183, 3, 0.75)");
+      expect(tokens.cardBg).toContain("rgba(255, 245, 205");
+
+      const profile = getUxProfile("child");
+      expect(profile.description).toContain("36px");
+      expect(profile.description).toContain("lumineux");
+    });
+
+    it("gives prominent space to the Quranic verse text with 36px font scale and fullScreenSelectedAyat", async () => {
+      const { getUxProfile } = await import("../src/utils/uxProfileManager.js");
+      const profile = getUxProfile("child");
+      expect(profile.defaultSettings.ayatFontSize).toBe(36);
+      expect(profile.defaultSettings.fullScreenSelectedAyat).toBe(true);
+      expect(profile.featureFlags.hideAdvancedMetrics).toBe(true);
+    });
+
+    it("declutters navigation down to strictly 3 kid-friendly tabs", async () => {
+      const { getNavigationTabs } = await import("../src/utils/uxProfileManager.js");
+      const tabs = getNavigationTabs("child");
+      expect(tabs).toHaveLength(3);
+      const tabIds = tabs.map((t) => t.id);
+      expect(tabIds).toEqual(["quran", "prononciation", "revision"]);
+
+      expect(tabs[0].label).toBe("LECTURE");
+      expect(tabs[1].label).toBe("LETTRES");
+      expect(tabs[2].label).toBe("JEUX & QUIZ");
+    });
+
+    it("declutters main player controls strictly to 4 kid buttons (préc, écouter/pause, suiv, tajwid)", async () => {
+      const { getPlayerConfig } = await import("../src/utils/uxProfileManager.js");
+      const cfg = getPlayerConfig("child");
+      expect(cfg.isChild).toBe(true);
+      expect(cfg.showFastBackward).toBe(false);
+      expect(cfg.showLoopButton).toBe(false);
+      expect(cfg.showStandaloneReciter).toBe(false);
+      expect(cfg.playBtnText(false)).toBe("▶ ÉCOUTER");
+      expect(cfg.playBtnText(true)).toBe("⏸ PAUSE");
+      expect(cfg.prevBtnText()).toBe("⏮ PRÉC.");
+      expect(cfg.nextBtnText()).toBe("SUIV. ⏭");
+      expect(cfg.tajweedBtnLabel).toBe("🎨 TAJWID & AUDIO");
+    });
+  });
 });
+

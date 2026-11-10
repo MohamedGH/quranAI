@@ -112,13 +112,11 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
   });
 
   describe("getNavigationTabs - Profile-adapted menu navigation", () => {
-    it("provides kid-friendly tabs and labels for child profile", () => {
+    it("provides 3 streamlined kid-friendly tabs and labels for child profile without button overload", () => {
       const tabs = getNavigationTabs("child");
+      expect(tabs).toHaveLength(3);
       const ids = tabs.map((t) => t.id);
-      expect(ids).toContain("quran");
-      expect(ids).toContain("prononciation");
-      expect(ids).toContain("dashboard");
-      expect(ids).toContain("revision");
+      expect(ids).toEqual(["quran", "prononciation", "revision"]);
 
       const quranTab = tabs.find((t) => t.id === "quran");
       expect(quranTab.label).toBe("LECTURE");
@@ -126,6 +124,9 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
 
       const prononTab = tabs.find((t) => t.id === "prononciation");
       expect(prononTab.label).toBe("LETTRES");
+
+      const revTab = tabs.find((t) => t.id === "revision");
+      expect(revTab.label).toBe("JEUX & QUIZ");
     });
 
     it("provides 4 clear and essential tabs for beginner profile without button overload", () => {
@@ -299,7 +300,7 @@ describe("store - UX mode Redux state management", () => {
 
     expect(sel.uxMode(state)).toBe("child");
     expect(sel.isChildUx(state)).toBe(true);
-    expect(sel.ayatFontSize(state)).toBe(34);
+    expect(sel.ayatFontSize(state)).toBe(36);
     expect(sel.showBeginnerGuides(state)).toBe(true);
     expect(sel.fullScreenSelectedAyat(state)).toBe(true);
   });
@@ -345,7 +346,7 @@ describe("store - UX mode Redux state management", () => {
     it("returns cheerful sunny gold tokens for child mode", () => {
       const tokens = getUxThemeTokens("child");
       expect(tokens.accent).toBe("#ffb703");
-      expect(tokens.accentHover).toBe("#ffd166");
+      expect(tokens.accentHover).toBe("#ffe082");
       expect(tokens.name).toContain("Soleil");
       expect(tokens.accentGradient).toContain("#ffb703");
     });

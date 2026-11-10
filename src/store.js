@@ -262,11 +262,11 @@ const uiSlice = createSlice({
         save("quran_showBeginnerGuides", true);
         save("quran_fullScreenSelectedAyat", true);
       } else if (mode === "child") {
-        s.ayatFontSize = 34;
+        s.ayatFontSize = 36;
         s.enableAnimations = true;
         s.showBeginnerGuides = true;
         s.fullScreenSelectedAyat = true;
-        save("quran_ayatFontSize", 34);
+        save("quran_ayatFontSize", 36);
         save("quran_enableAnimations", true);
         save("quran_showBeginnerGuides", true);
         save("quran_fullScreenSelectedAyat", true);

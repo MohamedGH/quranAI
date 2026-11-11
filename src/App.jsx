@@ -4703,28 +4703,45 @@ function AppInner({ currentUser, onSignOut }) {
               </div>
 
               <div className="player-controls">
-                <button className="ctrl-btn" title="Verset précédent" onClick={() => {
-                  const i = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
-                  playMainAyat(i); if (isMainPlaying) playWhenReady();
-                }}>{playerConfig.prevBtnText()}</button>
+                <button
+                  className="ctrl-btn"
+                  title={playerConfig.prevBtnAriaLabel ? playerConfig.prevBtnAriaLabel() : "Verset précédent"}
+                  aria-label={playerConfig.prevBtnAriaLabel ? playerConfig.prevBtnAriaLabel() : "Verset précédent"}
+                  onClick={() => {
+                    const i = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
+                    playMainAyat(i); if (isMainPlaying) playWhenReady();
+                  }}
+                >{playerConfig.prevBtnText()}</button>
                 {playerConfig.showFastBackward && (
                   <button
                     className="ctrl-btn"
                     title="Reculer de 5 secondes (Retour rapide / Fast backward)"
+                    aria-label="Reculer de 5 secondes"
                     onClick={handleFastBackward}>⏪</button>
                 )}
-                <button className={`ctrl-btn play-btn${isChild ? ' child-play-btn' : isBeginner ? ' beginner-play-btn' : ''}`} title={isMainPlaying ? "Pause" : "Lecture"} onClick={() => {
-                  if (!isMainPlaying) { playMainAyat(loopActive ? loopStart : mainAyatIdx); setIsMainPlaying(true); playWhenReady(); }
-                  else { setIsMainPlaying(false); setPlayingAyatNum(null); safePauseAudio(mainAudioRef.current); }
-                }}>{playerConfig.playBtnText(isMainPlaying)}</button>
-                <button className="ctrl-btn" title="Verset suivant" onClick={() => {
-                  const i = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
-                  playMainAyat(i); if (isMainPlaying) playWhenReady();
-                }}>{playerConfig.nextBtnText()}</button>
+                <button
+                  className={`ctrl-btn play-btn${isChild ? ' child-play-btn' : isBeginner ? ' beginner-play-btn' : ''}`}
+                  title={playerConfig.playBtnAriaLabel ? playerConfig.playBtnAriaLabel(isMainPlaying) : (isMainPlaying ? "Pause" : "Lecture")}
+                  aria-label={playerConfig.playBtnAriaLabel ? playerConfig.playBtnAriaLabel(isMainPlaying) : (isMainPlaying ? "Pause" : "Lecture")}
+                  onClick={() => {
+                    if (!isMainPlaying) { playMainAyat(loopActive ? loopStart : mainAyatIdx); setIsMainPlaying(true); playWhenReady(); }
+                    else { setIsMainPlaying(false); setPlayingAyatNum(null); safePauseAudio(mainAudioRef.current); }
+                  }}
+                >{playerConfig.playBtnText(isMainPlaying)}</button>
+                <button
+                  className="ctrl-btn"
+                  title={playerConfig.nextBtnAriaLabel ? playerConfig.nextBtnAriaLabel() : "Verset suivant"}
+                  aria-label={playerConfig.nextBtnAriaLabel ? playerConfig.nextBtnAriaLabel() : "Verset suivant"}
+                  onClick={() => {
+                    const i = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
+                    playMainAyat(i); if (isMainPlaying) playWhenReady();
+                  }}
+                >{playerConfig.nextBtnText()}</button>
                 {playerConfig.showLoopButton && (
                   <button
                     className={`ctrl-btn${loopActive || showLoopBar ? " loop-on" : ""}`}
-                    title={showLoopBar ? "Fermer les réglages de boucle" : "Boucle de versets (configurer / activer)"}
+                    title={showLoopBar ? "Fermer les réglages de boucle" : (playerConfig.loopBtnAriaLabel ? playerConfig.loopBtnAriaLabel() : "Boucle de versets")}
+                    aria-label={playerConfig.loopBtnAriaLabel ? playerConfig.loopBtnAriaLabel() : "Boucle de versets"}
                     onClick={() => {
                       if (!loopActive && !showLoopBar) {
                         setLoopActive(true);
@@ -4734,36 +4751,23 @@ function AppInner({ currentUser, onSignOut }) {
                         setShowLoopBar(!showLoopBar);
                       }
                     }}
-                    style={{ fontSize: 12 }}>{playerConfig.loopBtnText()}</button>
+                    style={{ fontSize: 13 }}>{playerConfig.loopBtnText()}</button>
                 )}
-                {/* Options Tajwid & Audio : Mode simplifié (enfant, débutant) regroupe dans une modal dédiée */}
+                {/* Options Tajwid & Audio : Mode simplifié (enfant, débutant) bouton icône circulaire 🎨 */}
                 {isSimplifiedUxMode(uxMode) ? (
                   <button
                     id="player-audio-options-modal-btn"
                     className={`ctrl-btn player-tajweed-modal-trigger${(isCoachEnabled || silenceWordsToRevise) ? " loop-on" : ""}`}
                     onClick={() => setShowPlayerAudioModal(true)}
-                    title="Options audio, Récitateur, Répétition & Tajwid (Modal)"
+                    title="Options audio, Récitateur, Répétition & Tajwid"
                     aria-label="Ouvrir les options audio et Tajwid"
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                      padding: "4px 8px",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      borderRadius: 12,
-                      background: (isCoachEnabled || silenceWordsToRevise) ? "rgba(16, 185, 129, 0.2)" : isChild ? "rgba(255, 183, 3, 0.18)" : isBeginner ? "rgba(245, 158, 11, 0.20)" : "rgba(255, 255, 255, 0.08)",
-                      border: (isCoachEnabled || silenceWordsToRevise) ? "1px solid #10b981" : isChild ? "1px solid rgba(255, 183, 3, 0.45)" : isBeginner ? "1px solid rgba(245, 158, 11, 0.45)" : "1px solid rgba(255, 255, 255, 0.15)",
-                      color: (isCoachEnabled || silenceWordsToRevise) ? "#34d399" : isChild ? "#ffb703" : isBeginner ? "#f59e0b" : "#e2e8f0",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                    }}
                   >
-                    <span>🎨</span>
-                    <span className="player-opt-label-long">{playerConfig.tajweedBtnLabel}</span>
-                    <span className="player-opt-label-short" style={{ display: "none" }}>{playerConfig.tajweedBtnLabelShort || "OPTIONS"}</span>
+                    <span style={{ fontSize: 14 }}>🎨</span>
                     {(isCoachEnabled || silenceWordsToRevise) && (
                       <span style={{
+                        position: "absolute",
+                        top: 2,
+                        right: 2,
                         width: 6,
                         height: 6,
                         borderRadius: "50%",
@@ -4771,7 +4775,6 @@ function AppInner({ currentUser, onSignOut }) {
                         display: "inline-block"
                       }} />
                     )}
-                    <span style={{ fontSize: 9, opacity: 0.8 }}>▾</span>
                   </button>
                 ) : (
                   <>
@@ -4873,7 +4876,10 @@ function AppInner({ currentUser, onSignOut }) {
                 </>,
                 document.body
               )}
+            </div>
 
+            {/* PROGRESS & TIMELINE BAR — Ligne dédiée pour éviter tout chevauchement et débordement de texte */}
+            <div className="player-progress-container">
               {(() => {
                 const sn = selectedSurah.number;
                 const ayatDurations = ayats.map(a => {
@@ -4910,9 +4916,9 @@ function AppInner({ currentUser, onSignOut }) {
                 const loopEndMs   = ayatDurations.slice(0, Math.min(loopEnd,ayats.length-1)+1).reduce((s,d)=>s+d,0);
 
                 return (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 0', width:'100%' }}>
-                    <span style={{ fontSize:9, color:'var(--text3)', fontFamily:"'Cinzel',serif", letterSpacing:1, flexShrink:0 }}>{fmt(curMs)}</span>
-                    <div style={{ flex:1, height:4, background:'var(--border)', borderRadius:2, overflow:'hidden', cursor:'pointer', position:'relative' }}
+                  <div className="player-timeline-row">
+                    <span className="player-time-label">{fmt(curMs)}</span>
+                    <div className="player-timeline-track"
                       onClick={e => {
                         const rect = e.currentTarget.getBoundingClientRect();
                         const targetMs = (e.clientX - rect.left) / rect.width * totalMs;
@@ -4933,10 +4939,10 @@ function AppInner({ currentUser, onSignOut }) {
                           acc += ayatDurations[i];
                         }
                       }}>
-                      {loopActive && <div style={{ position:'absolute', left:`${(loopStartMs/totalMs)*100}%`, width:`${((loopEndMs-loopStartMs)/totalMs)*100}%`, height:'100%', background:'rgba(62,184,160,.25)' }} />}
-                      <div style={{ height:'100%', width:`${pct}%`, background:'var(--gold)', borderRadius:2, transition:'width .1s linear' }} />
+                      {loopActive && <div className="player-timeline-loop" style={{ left:`${(loopStartMs/totalMs)*100}%`, width:`${((loopEndMs-loopStartMs)/totalMs)*100}%` }} />}
+                      <div className="player-timeline-fill" style={{ width:`${pct}%` }} />
                     </div>
-                    <span style={{ fontSize:9, color:'var(--text3)', fontFamily:"'Cinzel',serif", letterSpacing:1, flexShrink:0 }}>{fmt(totalMs)}</span>
+                    <span className="player-time-label">{fmt(totalMs)}</span>
                   </div>
                 );
               })()}

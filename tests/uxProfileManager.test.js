@@ -156,35 +156,35 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
       const cfg = getPlayerConfig("child");
       expect(cfg.isChild).toBe(true);
       expect(cfg.isSimplified).toBe(true);
-      expect(cfg.playBtnText(false)).toBe("▶ ÉCOUTER");
-      expect(cfg.playBtnText(true)).toBe("⏸ PAUSE");
-      expect(cfg.prevBtnText()).toBe("⏮ PRÉC.");
-      expect(cfg.nextBtnText()).toBe("SUIV. ⏭");
-      expect(cfg.loopBtnText()).toBe("🔁 RÉPÉTER");
+      expect(cfg.playBtnText(false)).toBe("▶");
+      expect(cfg.playBtnText(true)).toBe("⏸");
+      expect(cfg.prevBtnText()).toBe("⏮");
+      expect(cfg.nextBtnText()).toBe("⏭");
+      expect(cfg.loopBtnText()).toBe("↺");
       expect(cfg.showFastBackward).toBe(false);
       expect(cfg.showLoopButton).toBe(false);
       expect(cfg.showStandaloneReciter).toBe(false);
-      expect(cfg.tajweedBtnLabel).toBe("🎨 TAJWID & AUDIO");
-      expect(cfg.tajweedBtnLabelShort).toBe("OPTIONS");
+      expect(cfg.tajweedBtnLabel).toBe("OPTIONS");
+      expect(cfg.tajweedBtnIcon).toBe("🎨");
 
       const status = cfg.verseCounterFormat(3, 7);
-      expect(status).toContain("Verset 3 sur 7");
+      expect(status).toContain("Verset 3/7");
     });
 
     it("provides clear guided controls and uncluttered player for beginner profile", () => {
       const cfg = getPlayerConfig("beginner");
       expect(cfg.isBeginner).toBe(true);
       expect(cfg.isSimplified).toBe(true);
-      expect(cfg.playBtnText(false)).toBe("▶ Écouter");
-      expect(cfg.playBtnText(true)).toBe("⏸ Pause");
-      expect(cfg.prevBtnText()).toBe("⏮ Préc.");
-      expect(cfg.nextBtnText()).toBe("Suiv. ⏭");
-      expect(cfg.loopBtnText()).toBe("🔁 Répéter");
+      expect(cfg.playBtnText(false)).toBe("▶");
+      expect(cfg.playBtnText(true)).toBe("⏸");
+      expect(cfg.prevBtnText()).toBe("⏮");
+      expect(cfg.nextBtnText()).toBe("⏭");
+      expect(cfg.loopBtnText()).toBe("↺");
       expect(cfg.showFastBackward).toBe(false);
       expect(cfg.showLoopButton).toBe(false);
       expect(cfg.showStandaloneReciter).toBe(false);
-      expect(cfg.tajweedBtnLabel).toBe("🎨 OPTIONS & TAJWID");
-      expect(cfg.tajweedBtnLabelShort).toBe("OPTIONS");
+      expect(cfg.tajweedBtnLabel).toBe("OPTIONS");
+      expect(cfg.tajweedBtnIcon).toBe("🎨");
     });
 
     it("provides concise symbols for expert and standard profiles", () => {

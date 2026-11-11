@@ -371,29 +371,36 @@ export const getPlayerConfig = (uxMode = UX_MODES.STANDARD) => {
     isExpert: mode === UX_MODES.EXPERT,
     isSimplified: isSimplifiedUxMode(mode),
     playBtnText: (isPlaying) => {
-      if (mode === UX_MODES.CHILD) return isPlaying ? "⏸ PAUSE" : "▶ ÉCOUTER";
-      if (mode === UX_MODES.BEGINNER) return isPlaying ? "⏸ Pause" : "▶ Écouter";
       return isPlaying ? "⏸" : "▶";
     },
-    prevBtnText: () => {
-      if (mode === UX_MODES.CHILD) return "⏮ PRÉC.";
-      if (mode === UX_MODES.BEGINNER) return "⏮ Préc.";
-      return "⏮";
+    playBtnAriaLabel: (isPlaying) => {
+      if (mode === UX_MODES.CHILD) return isPlaying ? "Pause (mettre en pause)" : "Écouter la récitation";
+      if (mode === UX_MODES.BEGINNER) return isPlaying ? "Pause" : "Écouter";
+      return isPlaying ? "Pause" : "Lecture";
     },
-    nextBtnText: () => {
-      if (mode === UX_MODES.CHILD) return "SUIV. ⏭";
-      if (mode === UX_MODES.BEGINNER) return "Suiv. ⏭";
-      return "⏭";
+    prevBtnText: () => "⏮",
+    prevBtnAriaLabel: () => {
+      if (mode === UX_MODES.CHILD) return "Verset précédent (revenir en arrière)";
+      if (mode === UX_MODES.BEGINNER) return "Verset précédent";
+      return "Précédent";
     },
-    loopBtnText: () => {
-      if (mode === UX_MODES.CHILD) return "🔁 RÉPÉTER";
-      if (mode === UX_MODES.BEGINNER) return "🔁 Répéter";
-      return "↺";
+    nextBtnText: () => "⏭",
+    nextBtnAriaLabel: () => {
+      if (mode === UX_MODES.CHILD) return "Verset suivant (avancer au verset d'après)";
+      if (mode === UX_MODES.BEGINNER) return "Verset suivant";
+      return "Suivant";
+    },
+    loopBtnText: () => "↺",
+    loopBtnAriaLabel: () => {
+      if (mode === UX_MODES.CHILD) return "Répéter le verset en boucle";
+      if (mode === UX_MODES.BEGINNER) return "Répéter la sélection";
+      return "Boucle";
     },
     showFastBackward: mode !== UX_MODES.CHILD && mode !== UX_MODES.BEGINNER,
     showLoopButton: mode !== UX_MODES.CHILD && mode !== UX_MODES.BEGINNER,
     showStandaloneReciter: mode !== UX_MODES.CHILD && mode !== UX_MODES.BEGINNER,
-    tajweedBtnLabel: mode === UX_MODES.CHILD ? "🎨 TAJWID & AUDIO" : mode === UX_MODES.BEGINNER ? "🎨 OPTIONS & TAJWID" : "TAJWID",
+    tajweedBtnIcon: "🎨",
+    tajweedBtnLabel: mode === UX_MODES.CHILD ? "OPTIONS" : mode === UX_MODES.BEGINNER ? "OPTIONS" : "TAJWID",
     tajweedBtnLabelShort: mode === UX_MODES.CHILD ? "OPTIONS" : mode === UX_MODES.BEGINNER ? "OPTIONS" : "TAJWID",
     surahTitleFormat: (surah) => {
       if (!surah) return "";
@@ -403,10 +410,10 @@ export const getPlayerConfig = (uxMode = UX_MODES.STANDARD) => {
     },
     verseCounterFormat: (currentAyatNum, totalAyats, loopDetails = "") => {
       if (mode === UX_MODES.CHILD) {
-        return `Verset ${currentAyatNum} sur ${totalAyats}${loopDetails ? ` · 🔁 ${loopDetails}` : ""}`;
+        return `Verset ${currentAyatNum}/${totalAyats}${loopDetails ? ` · 🔁 ${loopDetails}` : ""}`;
       }
       if (mode === UX_MODES.BEGINNER) {
-        return `Verset ${currentAyatNum} / ${totalAyats}${loopDetails ? ` (${loopDetails})` : ""}`;
+        return `Verset ${currentAyatNum}/${totalAyats}${loopDetails ? ` (${loopDetails})` : ""}`;
       }
       return `AYAT ${currentAyatNum} / ${totalAyats}`;
     },

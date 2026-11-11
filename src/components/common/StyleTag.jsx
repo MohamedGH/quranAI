@@ -1722,6 +1722,12 @@ export const CSS = `
   .reciter-empty{padding:24px 12px;text-align:center;color:var(--text3);font-size:13px;}
   .reciter-sheet-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid var(--border);color:var(--text3);font-size:11px;}
   .reciter-reset{min-height:36px;padding:0 10px;border:1px solid var(--border2);border-radius:6px;background:transparent;color:var(--text2);font-size:11px;cursor:pointer;}
+  .player-progress-container{width:100%;padding:2px 20px 6px;box-sizing:border-box;}
+  .player-timeline-row{display:flex;align-items:center;gap:10px;width:100%;}
+  .player-time-label{font-size:9px;color:var(--text3);font-family:'Cinzel',serif;letter-spacing:1px;flex-shrink:0;}
+  .player-timeline-track{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;cursor:pointer;position:relative;}
+  .player-timeline-loop{position:absolute;height:100%;background:rgba(62,184,160,.28);}
+  .player-timeline-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--teal));border-radius:2px;transition:width .1s linear;}
   .player-progress{flex:1;display:flex;align-items:center;gap:8px;min-width:0;}
   .progress-bar-wrap{flex:1;height:3px;background:var(--border);border-radius:2px;position:relative;}
   .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--teal));border-radius:2px;transition:width .3s;}
@@ -2353,15 +2359,16 @@ export const CSS = `
     .player-ayah{ font-size:8px !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .ctrl-btn{ width:30px !important; height:30px !important; min-height:30px !important; max-height:30px !important; font-size:11px !important; }
     .ctrl-btn.play-btn{ width:36px !important; height:36px !important; min-height:36px !important; max-height:36px !important; font-size:13px !important; }
-    .player-tajweed-modal-trigger{ padding:3px 6px !important; font-size:10px !important; }
-    .player-tajweed-modal-trigger .player-opt-label-long{ display:none !important; }
-    .player-tajweed-modal-trigger .player-opt-label-short{ display:inline !important; }
+    .player-tajweed-modal-trigger{ width:30px !important; height:30px !important; min-height:30px !important; max-height:30px !important; padding:0 !important; border-radius:50% !important; font-size:13px !important; }
     .reciter-trigger{position:fixed;right:12px;bottom:calc(var(--player-h) + env(safe-area-inset-bottom, 0px) + 10px);z-index:201;min-height:42px;padding:0 12px;border-radius:22px;background:var(--surface2);box-shadow:0 6px 20px rgba(0,0,0,.35);}
     .reciter-trigger-label{display:inline;max-width:110px;}
     .reciter-sheet{right:0;bottom:0;width:100%;max-height:min(82dvh,680px);border-radius:18px 18px 0 0;}
     .reciter-sheet-header{padding:16px 14px 12px;}
     .reciter-list{padding-bottom:16px;}
     .reciter-option{min-height:52px;font-size:15px;}
+    .player-progress-container{ padding:1px 10px 4px !important; }
+    .player-timeline-row{ gap:6px !important; }
+    .player-time-label{ font-size:7.5px !important; }
     .progress-text{ display:none; }
     .loop-bar{ padding:4px 12px 6px; gap:6px; }
     .loop-rep-wrap{ display:none; }
@@ -2763,25 +2770,41 @@ export const CSS = `
   }
   .ux-profile-beginner .player-tajweed-modal-trigger,
   .ux-profile-child .player-tajweed-modal-trigger {
+    width: 32px !important;
     height: 32px !important;
     min-height: 32px !important;
     max-height: 32px !important;
-    line-height: 1 !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
   }
   .ux-profile-beginner .player-info,
   .ux-profile-child .player-info {
-    min-width: 90px;
-    max-width: 150px;
-    flex-shrink: 1;
+    min-width: 80px;
+    max-width: 160px;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
   .ux-profile-beginner .player-surah,
   .ux-profile-child .player-surah {
     font-size: 11px;
     font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
   }
   .ux-profile-beginner .player-ayah,
   .ux-profile-child .player-ayah {
     font-size: 9px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    margin-top: 1px;
   }
 
   .ux-profile-child .ayat-row {

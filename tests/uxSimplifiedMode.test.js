@@ -203,6 +203,7 @@ describe("Simplified UX Mode (Child & Beginner) & Tooltip Accuracy", () => {
       expect(cfg.showLoopButton).toBe(false);
       expect(cfg.showStandaloneReciter).toBe(false);
       expect(cfg.tajweedBtnLabel).toBe("🎨 OPTIONS & TAJWID");
+      expect(cfg.tajweedBtnLabelShort).toBe("OPTIONS");
       expect(cfg.playBtnText(false)).toBe("▶ Écouter");
       expect(cfg.playBtnText(true)).toBe("⏸ Pause");
       expect(cfg.prevBtnText()).toBe("⏮ Préc.");
@@ -337,6 +338,7 @@ describe("Simplified UX Mode (Child & Beginner) & Tooltip Accuracy", () => {
       expect(cfg.prevBtnText()).toBe("⏮ PRÉC.");
       expect(cfg.nextBtnText()).toBe("SUIV. ⏭");
       expect(cfg.tajweedBtnLabel).toBe("🎨 TAJWID & AUDIO");
+      expect(cfg.tajweedBtnLabelShort).toBe("OPTIONS");
     });
   });
 });

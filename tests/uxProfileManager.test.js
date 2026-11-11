@@ -165,6 +165,7 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
       expect(cfg.showLoopButton).toBe(false);
       expect(cfg.showStandaloneReciter).toBe(false);
       expect(cfg.tajweedBtnLabel).toBe("🎨 TAJWID & AUDIO");
+      expect(cfg.tajweedBtnLabelShort).toBe("OPTIONS");
 
       const status = cfg.verseCounterFormat(3, 7);
       expect(status).toContain("Verset 3 sur 7");
@@ -183,6 +184,7 @@ describe("uxProfileManager - Pure functional profiles & metadata", () => {
       expect(cfg.showLoopButton).toBe(false);
       expect(cfg.showStandaloneReciter).toBe(false);
       expect(cfg.tajweedBtnLabel).toBe("🎨 OPTIONS & TAJWID");
+      expect(cfg.tajweedBtnLabelShort).toBe("OPTIONS");
     });
 
     it("provides concise symbols for expert and standard profiles", () => {

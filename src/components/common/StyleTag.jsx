@@ -1689,16 +1689,16 @@ export const CSS = `
   .rev-empty{text-align:center;padding:60px 20px;color:var(--text3);font-size:11px;letter-spacing:2px;}
   .rev-progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:4px;}
   .rev-progress-fill{height:100%;border-radius:2px;transition:width .4s ease;}
-  .main-player{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(0deg,var(--surface),rgba(19,22,31,.98));border-top:1px solid var(--border);z-index:200;backdrop-filter:blur(10px);}
+  .main-player{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(0deg,var(--surface),rgba(19,22,31,.98));border-top:1px solid var(--border);z-index:200;backdrop-filter:blur(10px);min-height:var(--player-h);}
   .main-player::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);}
-  .player-row{display:flex;align-items:center;gap:14px;padding:8px 20px;height:var(--player-h);}
-  .player-info{min-width:120px;max-width:180px;}
-  .player-surah{font-size:9px;letter-spacing:1.5px;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .player-ayah{font-size:8px;letter-spacing:1px;color:var(--text3);margin-top:2px;}
-  .player-controls{display:flex;align-items:center;gap:6px;}
-  .ctrl-btn{width:32px;height:32px;border-radius:50%;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all var(--transition);flex-shrink:0;touch-action:manipulation;}
+  .player-row{display:flex;align-items:center;gap:14px;padding:8px 20px;min-height:var(--player-h);box-sizing:border-box;}
+  .player-info{min-width:110px;max-width:200px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden;}
+  .player-surah{font-size:9.5px;letter-spacing:1px;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25;}
+  .player-ayah{font-size:8px;letter-spacing:0.8px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;}
+  .player-controls{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+  .ctrl-btn{width:32px;height:32px;min-height:32px;max-height:32px;box-sizing:border-box;border-radius:50%;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:12px;transition:all var(--transition);flex-shrink:0;touch-action:manipulation;white-space:nowrap;}
   .ctrl-btn:hover{border-color:var(--gold);color:var(--gold);}
-  .ctrl-btn.play-btn{width:38px;height:38px;background:var(--gold);border-color:var(--gold);color:var(--bg);font-size:14px;}
+  .ctrl-btn.play-btn{width:38px;height:38px;min-height:38px;max-height:38px;background:var(--gold);border-color:var(--gold);color:var(--bg);font-size:14px;}
   .ctrl-btn.play-btn:hover{background:var(--gold2);}
   .ctrl-btn.loop-on{border-color:var(--teal);color:var(--teal);background:rgba(62,184,160,.1);}
   .ctrl-btn.active-silence{border-color:#ff7eb3 !important;color:#ff7eb3 !important;background:rgba(255,126,179,.18) !important;box-shadow:0 0 8px rgba(255,126,179,.3) !important;}
@@ -2208,7 +2208,7 @@ export const CSS = `
     .surah-header{ padding:4px 10px; }
     .surah-header-ornament{ font-size:18px; }
     .bismillah-line{ font-size:17px; padding:5px 12px; }
-    .player-info{ display:none; }
+    .player-info{ min-width:90px; max-width:140px; }
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -2347,9 +2347,15 @@ export const CSS = `
 
     /* Player compact */
     .player-bar{ padding-bottom:max(env(safe-area-inset-bottom, 0px), 4px); }
-    .player-row{ padding:6px 12px; gap:8px; }
-    .ctrl-btn{ width:32px; height:32px; font-size:11.5px; }
-    .ctrl-btn.play-btn{ width:38px; height:38px; font-size:14px; }
+    .player-row{ padding:4px 8px; gap:8px; justify-content:space-between; }
+    .player-info{ display:flex !important; min-width:0 !important; max-width:130px !important; flex:1 1 auto !important; }
+    .player-surah{ font-size:9.5px !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .player-ayah{ font-size:8px !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .ctrl-btn{ width:30px !important; height:30px !important; min-height:30px !important; max-height:30px !important; font-size:11px !important; }
+    .ctrl-btn.play-btn{ width:36px !important; height:36px !important; min-height:36px !important; max-height:36px !important; font-size:13px !important; }
+    .player-tajweed-modal-trigger{ padding:3px 6px !important; font-size:10px !important; }
+    .player-tajweed-modal-trigger .player-opt-label-long{ display:none !important; }
+    .player-tajweed-modal-trigger .player-opt-label-short{ display:inline !important; }
     .reciter-trigger{position:fixed;right:12px;bottom:calc(var(--player-h) + env(safe-area-inset-bottom, 0px) + 10px);z-index:201;min-height:42px;padding:0 12px;border-radius:22px;background:var(--surface2);box-shadow:0 6px 20px rgba(0,0,0,.35);}
     .reciter-trigger-label{display:inline;max-width:110px;}
     .reciter-sheet{right:0;bottom:0;width:100%;max-height:min(82dvh,680px);border-radius:18px 18px 0 0;}
@@ -2733,19 +2739,49 @@ export const CSS = `
     border-radius: 8px;
     border-left: 3px solid #f59e0b;
   }
-  .ux-profile-beginner button {
+  .ux-profile-beginner button:not(.ctrl-btn):not(.player-tajweed-modal-trigger):not(.reciter-option) {
     min-height: 42px;
   }
   .ux-profile-beginner .ctrl-btn {
     border-color: rgba(245, 158, 11, 0.35);
     color: #fde68a;
+    width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
   }
   .ux-profile-beginner .beginner-play-btn {
     background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
     border-color: #fbbf24 !important;
     color: #ffffff !important;
     font-weight: 700 !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
     box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35) !important;
+  }
+  .ux-profile-beginner .player-tajweed-modal-trigger,
+  .ux-profile-child .player-tajweed-modal-trigger {
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    line-height: 1 !important;
+  }
+  .ux-profile-beginner .player-info,
+  .ux-profile-child .player-info {
+    min-width: 90px;
+    max-width: 150px;
+    flex-shrink: 1;
+  }
+  .ux-profile-beginner .player-surah,
+  .ux-profile-child .player-surah {
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .ux-profile-beginner .player-ayah,
+  .ux-profile-child .player-ayah {
+    font-size: 9px;
   }
 
   .ux-profile-child .ayat-row {
@@ -2788,11 +2824,19 @@ export const CSS = `
     border-color: #ffd166 !important;
     color: #0c0e14 !important;
     font-weight: 800 !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
     box-shadow: 0 4px 14px rgba(255, 183, 3, 0.35) !important;
   }
   .ux-profile-child .ctrl-btn {
     border-color: rgba(255, 183, 3, 0.45);
     color: #ffd166;
+    width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
   }
   /* Clutter removal in child mode: maximize room for the Quranic text */
   .ux-profile-child .ayat-mastery-col {

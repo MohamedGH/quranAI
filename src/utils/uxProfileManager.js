@@ -394,6 +394,7 @@ export const getPlayerConfig = (uxMode = UX_MODES.STANDARD) => {
     showLoopButton: mode !== UX_MODES.CHILD && mode !== UX_MODES.BEGINNER,
     showStandaloneReciter: mode !== UX_MODES.CHILD && mode !== UX_MODES.BEGINNER,
     tajweedBtnLabel: mode === UX_MODES.CHILD ? "🎨 TAJWID & AUDIO" : mode === UX_MODES.BEGINNER ? "🎨 OPTIONS & TAJWID" : "TAJWID",
+    tajweedBtnLabelShort: mode === UX_MODES.CHILD ? "OPTIONS" : mode === UX_MODES.BEGINNER ? "OPTIONS" : "TAJWID",
     surahTitleFormat: (surah) => {
       if (!surah) return "";
       if (mode === UX_MODES.CHILD) return `🌟 ${surah.englishName}`;

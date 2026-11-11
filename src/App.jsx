@@ -4760,7 +4760,8 @@ function AppInner({ currentUser, onSignOut }) {
                     }}
                   >
                     <span>🎨</span>
-                    <span>{playerConfig.tajweedBtnLabel}</span>
+                    <span className="player-opt-label-long">{playerConfig.tajweedBtnLabel}</span>
+                    <span className="player-opt-label-short" style={{ display: "none" }}>{playerConfig.tajweedBtnLabelShort || "OPTIONS"}</span>
                     {(isCoachEnabled || silenceWordsToRevise) && (
                       <span style={{
                         width: 6,

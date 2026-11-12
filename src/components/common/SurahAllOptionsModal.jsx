@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { sel, uiActions, playerActions } from "../../store.js";
 import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
+import { detectSheetDismissGesture, detectTabSwipeGesture } from "../../utils/swipeNavigation.js";
 
 export function SurahAllOptionsModal({
   isOpen,
@@ -52,6 +53,58 @@ export function SurahAllOptionsModal({
   const [activeTab, setActiveTab] = useState(initialTab);
   const [searchAyatText, setSearchAyatText] = useState("");
   const dispatch = useDispatch();
+  const touchStartRef = useRef(null);
+  const SURAH_MODAL_TABS = ["tajweed", "display", "jump", "filters", "lang"];
+
+  const handleTouchStart = (e) => {
+    if (!e.touches || e.touches.length !== 1) return;
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      time: Date.now(),
+    };
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchStartRef.current) return;
+    const t = e.changedTouches?.[0];
+    if (!t) {
+      touchStartRef.current = null;
+      return;
+    }
+    const startX = touchStartRef.current.x;
+    const startY = touchStartRef.current.y;
+    const endX = t.clientX;
+    const endY = t.clientY;
+    touchStartRef.current = null;
+
+    // 1. Pull down to dismiss
+    const dismissRes = detectSheetDismissGesture({
+      startY,
+      endY,
+      startX,
+      endX,
+      minDismissDistance: 60,
+    });
+    if (dismissRes.shouldDismiss) {
+      onClose();
+      return;
+    }
+
+    // 2. Horizontal swipe across tabs
+    const tabRes = detectTabSwipeGesture({
+      startX,
+      endX,
+      startY,
+      endY,
+      currentTab: activeTab,
+      tabs: SURAH_MODAL_TABS,
+      minDistance: 45,
+    });
+    if (tabRes.shouldChange && tabRes.targetTab) {
+      setActiveTab(tabRes.targetTab);
+    }
+  };
 
   const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
   const tajweedPalette = useSelector(sel.tajweedPalette) || "classic";
@@ -102,6 +155,8 @@ export function SurahAllOptionsModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         style={{
           width: "100%",
           maxWidth: 580,
@@ -116,6 +171,19 @@ export function SurahAllOptionsModal({
           boxSizing: "border-box",
         }}
       >
+        {/* Visual drag handle for swipe-to-dismiss */}
+        <div
+          aria-hidden="true"
+          style={{
+            width: 40,
+            height: 4,
+            borderRadius: 2,
+            background: "rgba(255, 255, 255, 0.28)",
+            margin: "8px auto 2px",
+            cursor: "grab",
+          }}
+        />
+
         {/* ── Modal Header ────────────────────────────────────────────── */}
         <div
           style={{

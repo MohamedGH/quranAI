@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { sel, playerActions } from "../../store.js";
 import { TajweedAudioCoachControl } from "../audio/TajweedAudioCoachControl.jsx";
 import { SilenceReviseControl } from "../audio/SilenceReviseControl.jsx";
+import { detectSheetDismissGesture, detectTabSwipeGesture } from "../../utils/swipeNavigation.js";
 
 export function PlayerAudioOptionsModal({
   isOpen,
@@ -31,6 +32,58 @@ export function PlayerAudioOptionsModal({
 }) {
   const [activeTab, setActiveTab] = useState("tajweed"); // "tajweed" | "silence" | "loop" | "reciter"
   const dispatch = useDispatch();
+  const touchStartRef = useRef(null);
+  const MODAL_TABS = ["tajweed", "silence", "loop", "reciter"];
+
+  const handleTouchStart = (e) => {
+    if (!e.touches || e.touches.length !== 1) return;
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      time: Date.now(),
+    };
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchStartRef.current) return;
+    const t = e.changedTouches?.[0];
+    if (!t) {
+      touchStartRef.current = null;
+      return;
+    }
+    const startX = touchStartRef.current.x;
+    const startY = touchStartRef.current.y;
+    const endX = t.clientX;
+    const endY = t.clientY;
+    touchStartRef.current = null;
+
+    // 1. Pull down to dismiss
+    const dismissRes = detectSheetDismissGesture({
+      startY,
+      endY,
+      startX,
+      endX,
+      minDismissDistance: 60,
+    });
+    if (dismissRes.shouldDismiss) {
+      onClose();
+      return;
+    }
+
+    // 2. Horizontal swipe across modal tabs
+    const tabRes = detectTabSwipeGesture({
+      startX,
+      endX,
+      startY,
+      endY,
+      currentTab: activeTab,
+      tabs: MODAL_TABS,
+      minDistance: 45,
+    });
+    if (tabRes.shouldChange && tabRes.targetTab) {
+      setActiveTab(tabRes.targetTab);
+    }
+  };
 
   const isCoachEnabled = useSelector(sel.tajweedCoachEnabled);
   const silenceWordsToRevise = useSelector(sel.silenceWordsToRevise);
@@ -74,6 +127,8 @@ export function PlayerAudioOptionsModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         style={{
           width: "100%",
           maxWidth: 520,
@@ -88,6 +143,19 @@ export function PlayerAudioOptionsModal({
           boxSizing: "border-box",
         }}
       >
+        {/* Visual drag handle for swipe-to-dismiss */}
+        <div
+          aria-hidden="true"
+          style={{
+            width: 40,
+            height: 4,
+            borderRadius: 2,
+            background: "rgba(255, 255, 255, 0.28)",
+            margin: "8px auto 2px",
+            cursor: "grab",
+          }}
+        />
+
         {/* ── Modal Header ────────────────────────────────────────────── */}
         <div
           style={{

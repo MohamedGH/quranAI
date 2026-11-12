@@ -117,6 +117,10 @@ import {
   resolveActiveAyatNumber,
   computeSurahSwipeNavigation,
   computeSurahNavigationByDirection,
+  calculateTouchDistance,
+  detectPinchGesture,
+  detectPlayerGesture,
+  detectEdgeSwipeGesture,
 } from "./utils/swipeNavigation.js";
 
 function AppInner({ currentUser, onSignOut }) {
@@ -552,6 +556,9 @@ function AppInner({ currentUser, onSignOut }) {
   const ayatRefs     = useRef({});
   const ayatScrollRef = useRef(null);
   const touchStartRef = useRef(null);
+  const pinchStartRef = useRef(null);
+  const playerTouchStartRef = useRef(null);
+  const lastPlayerTapRef = useRef(0);
   const pendingSwipeScrollRef = useRef(null);
   const swipeHudTimerRef = useRef(null);
   const [swipeHud, setSwipeHud] = useState(null);
@@ -1644,8 +1651,19 @@ function AppInner({ currentUser, onSignOut }) {
   };
 
   // ── Swipe navigation entre sourates avec conservation du même numéro de verset ──
+  // + Support Pinch-to-zoom sur mobile / tablette
   const handleAyatTouchStart = useCallback((e) => {
-    if (!e.touches || e.touches.length !== 1) {
+    if (!e.touches) return;
+    if (e.touches.length === 2) {
+      touchStartRef.current = null;
+      const dist = calculateTouchDistance(e.touches[0], e.touches[1]);
+      pinchStartRef.current = {
+        initialDist: dist,
+        initialFontSize: ayatFontSize || 26,
+      };
+      return;
+    }
+    if (e.touches.length !== 1) {
       touchStartRef.current = null;
       return;
     }
@@ -1657,10 +1675,34 @@ function AppInner({ currentUser, onSignOut }) {
       time: Date.now(),
       isInteractive,
     };
-  }, []);
+  }, [ayatFontSize]);
+
+  const handleAyatTouchMove = useCallback((e) => {
+    if (e.touches && e.touches.length === 2 && pinchStartRef.current) {
+      const currentDist = calculateTouchDistance(e.touches[0], e.touches[1]);
+      const pinch = detectPinchGesture({
+        initialDistance: pinchStartRef.current.initialDist,
+        currentDistance: currentDist,
+        initialFontSize: pinchStartRef.current.initialFontSize,
+        minFontSize: 16,
+        maxFontSize: 48,
+      });
+      if (pinch.isPinching && pinch.newFontSize !== (ayatFontSize || 26)) {
+        dispatch(uiActions.setAyatFontSize(pinch.newFontSize));
+        if (swipeHudTimerRef.current) clearTimeout(swipeHudTimerRef.current);
+        setSwipeHud({
+          direction: pinch.deltaFontSize > 0 ? "zoom-in" : "zoom-out",
+          title: `Taille du texte`,
+          subtitle: `🔍 ${pinch.newFontSize}px (Pincement)`,
+        });
+        swipeHudTimerRef.current = setTimeout(() => setSwipeHud(null), 1000);
+      }
+    }
+  }, [ayatFontSize, dispatch]);
 
   const handleAyatTouchCancel = useCallback(() => {
     touchStartRef.current = null;
+    pinchStartRef.current = null;
   }, []);
 
   // ── Navigation entre sourates (swipe ou bouton) avec conservation du même numéro de verset ──
@@ -1740,6 +1782,11 @@ function AppInner({ currentUser, onSignOut }) {
   }, [selectedSurah, openAyatNum, ayats, surahs, navigate, dispatch, showToast]);
 
   const handleAyatTouchEnd = useCallback((e) => {
+    if (pinchStartRef.current) {
+      if (!e.touches || e.touches.length < 2) {
+        pinchStartRef.current = null;
+      }
+    }
     if (!touchStartRef.current || touchStartRef.current.isInteractive) {
       touchStartRef.current = null;
       return;
@@ -1763,6 +1810,117 @@ function AppInner({ currentUser, onSignOut }) {
     if (!gesture.isStrongSwipe) return;
     handleNavigateSurah(gesture.direction);
   }, [selectedSurah, handleNavigateSurah]);
+
+  // ── Gestes tactiles sur la barre de lecture (Player Bar) ──
+  const handlePlayerTouchStart = useCallback((e) => {
+    if (!e.touches || e.touches.length !== 1) return;
+    if (isInteractiveElement(e.target)) return;
+    const t = e.touches[0];
+    playerTouchStartRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      time: Date.now(),
+    };
+  }, []);
+
+  const handlePlayerTouchEnd = useCallback((e) => {
+    if (!playerTouchStartRef.current) return;
+    const t = e.changedTouches?.[0];
+    if (!t) {
+      playerTouchStartRef.current = null;
+      return;
+    }
+    const gesture = detectPlayerGesture({
+      startX: playerTouchStartRef.current.x,
+      startY: playerTouchStartRef.current.y,
+      endX: t.clientX,
+      endY: t.clientY,
+      startTime: playerTouchStartRef.current.time,
+      endTime: Date.now(),
+      lastTapTime: lastPlayerTapRef.current,
+    });
+    playerTouchStartRef.current = null;
+
+    if (gesture.action === "toggle_play") {
+      if (!isMainPlaying) {
+        playMainAyat(loopActive ? loopStart : mainAyatIdx);
+        setIsMainPlaying(true);
+        playWhenReady();
+        showToast("▶ Lecture", "info");
+      } else {
+        setIsMainPlaying(false);
+        setPlayingAyatNum(null);
+        safePauseAudio(mainAudioRef.current);
+        showToast("⏸ Pause", "info");
+      }
+      lastPlayerTapRef.current = 0;
+    } else if (gesture.action === "tap") {
+      lastPlayerTapRef.current = Date.now();
+    } else if (gesture.action === "next") {
+      const nextIdx = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
+      playMainAyat(nextIdx);
+      if (isMainPlaying) playWhenReady();
+      showToast(`⏭ Verset ${nextIdx + 1}`, "info");
+    } else if (gesture.action === "prev") {
+      const prevIdx = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
+      playMainAyat(prevIdx);
+      if (isMainPlaying) playWhenReady();
+      showToast(`⏮ Verset ${prevIdx + 1}`, "info");
+    } else if (gesture.action === "open_options") {
+      setShowPlayerAudioModal(true);
+      showToast("🎨 Options audio", "info");
+    }
+  }, [isMainPlaying, loopActive, loopStart, loopEnd, mainAyatIdx, ayats.length, playMainAyat, playWhenReady, showToast]);
+
+  // ── Geste de balayage latéral (Edge Swipe) pour ouvrir/fermer le tiroir latéral (Sidebar) ──
+  useEffect(() => {
+    let edgeTouchStart = null;
+
+    const handleWindowTouchStart = (e) => {
+      if (!e.touches || e.touches.length !== 1) {
+        edgeTouchStart = null;
+        return;
+      }
+      const t = e.touches[0];
+      edgeTouchStart = {
+        x: t.clientX,
+        y: t.clientY,
+      };
+    };
+
+    const handleWindowTouchEnd = (e) => {
+      if (!edgeTouchStart) return;
+      const t = e.changedTouches?.[0];
+      if (!t) {
+        edgeTouchStart = null;
+        return;
+      }
+
+      const res = detectEdgeSwipeGesture({
+        startX: edgeTouchStart.x,
+        endX: t.clientX,
+        startY: edgeTouchStart.y,
+        endY: t.clientY,
+        edgeThreshold: 35,
+        minSwipeDistance: 50,
+        isOpen: sidebarOpen,
+      });
+      edgeTouchStart = null;
+
+      if (res.action === "open_drawer" && !sidebarOpen) {
+        setSidebarOpen(true);
+      } else if (res.action === "close_drawer" && sidebarOpen) {
+        setSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener("touchstart", handleWindowTouchStart, { passive: true });
+    window.addEventListener("touchend", handleWindowTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", handleWindowTouchStart);
+      window.removeEventListener("touchend", handleWindowTouchEnd);
+    };
+  }, [sidebarOpen]);
 
   // ── Voice command execution ──
   const executeCommand = useCallback((cmd) => {
@@ -3296,7 +3454,13 @@ function AppInner({ currentUser, onSignOut }) {
                       minWidth: 200,
                     }}
                   >
-                    <div style={{ fontSize: 26, lineHeight: 1 }}>{swipeHud.direction === "left" ? "➡️" : "⬅️"}</div>
+                    <div style={{ fontSize: 26, lineHeight: 1 }}>
+                      {swipeHud.direction === "zoom-in" || swipeHud.direction === "zoom-out"
+                        ? "🔍"
+                        : swipeHud.direction === "left"
+                        ? "➡️"
+                        : "⬅️"}
+                    </div>
                     <div style={{ fontWeight: 700, fontSize: 16, color: "var(--gold)", letterSpacing: 0.4 }}>{swipeHud.title}</div>
                     <div style={{ fontSize: 12.5, color: "var(--text2)", fontWeight: 500 }}>{swipeHud.subtitle}</div>
                   </div>
@@ -3306,6 +3470,7 @@ function AppInner({ currentUser, onSignOut }) {
                   ref={ayatScrollRef}
                   className="ayat-scroll"
                   onTouchStart={handleAyatTouchStart}
+                  onTouchMove={handleAyatTouchMove}
                   onTouchEnd={handleAyatTouchEnd}
                   onTouchCancel={handleAyatTouchCancel}
                   onContextMenu={handleAyatContextMenu}
@@ -4692,7 +4857,11 @@ function AppInner({ currentUser, onSignOut }) {
 
         {/* MAIN PLAYER */}
         {selectedSurah && ayats.length > 0 && (
-          <div className="main-player">
+          <div
+            className="main-player"
+            onTouchStart={handlePlayerTouchStart}
+            onTouchEnd={handlePlayerTouchEnd}
+          >
 
             <div className="player-row">
               <div className="player-info">

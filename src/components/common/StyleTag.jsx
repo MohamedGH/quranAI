@@ -1689,7 +1689,7 @@ export const CSS = `
   .rev-empty{text-align:center;padding:60px 20px;color:var(--text3);font-size:11px;letter-spacing:2px;}
   .rev-progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:4px;}
   .rev-progress-fill{height:100%;border-radius:2px;transition:width .4s ease;}
-  .main-player{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(0deg,var(--surface),rgba(19,22,31,.98));border-top:1px solid var(--border);z-index:200;backdrop-filter:blur(10px);min-height:var(--player-h);}
+  .main-player{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(0deg,var(--surface),rgba(19,22,31,.98));border-top:1px solid var(--border);z-index:200;backdrop-filter:blur(10px);min-height:var(--player-h);user-select:none;-webkit-user-select:none;touch-action:pan-x pan-y;}
   .main-player::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);}
   .player-row{display:flex;align-items:center;gap:14px;padding:8px 20px;min-height:var(--player-h);box-sizing:border-box;}
   .player-info{min-width:110px;max-width:200px;flex-shrink:0;display:flex;flex-direction:column;justify-content:center;overflow:hidden;}

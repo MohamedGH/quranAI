@@ -9,6 +9,12 @@ import {
   computeSurahSwipeNavigation,
   computeSurahNavigationByDirection,
   formatSwipeToastMessage,
+  calculateTouchDistance,
+  detectPinchGesture,
+  detectPlayerGesture,
+  detectSheetDismissGesture,
+  detectEdgeSwipeGesture,
+  detectTabSwipeGesture,
 } from "../src/utils/swipeNavigation.js";
 
 const mockSurahs = [
@@ -392,3 +398,259 @@ describe("computeSurahNavigationByDirection (button-based navigation)", () => {
     expect(res.reason).toBe("INVALID_DIRECTION");
   });
 });
+
+describe("calculateTouchDistance", () => {
+  it("calculates accurate euclidean distance between two touch points", () => {
+    const t1 = { clientX: 100, clientY: 100 };
+    const t2 = { clientX: 130, clientY: 140 }; // dx = 30, dy = 40 -> hypot = 50
+    expect(calculateTouchDistance(t1, t2)).toBe(50);
+  });
+
+  it("returns 0 if either touch point is missing", () => {
+    expect(calculateTouchDistance(null, { clientX: 10 })).toBe(0);
+    expect(calculateTouchDistance({ clientX: 10 }, null)).toBe(0);
+  });
+});
+
+describe("detectPinchGesture", () => {
+  it("detects pinch-to-zoom out (increasing distance enlarges font size)", () => {
+    const pinch = detectPinchGesture({
+      initialDistance: 100,
+      currentDistance: 150, // 1.5x scale
+      initialFontSize: 24,
+      minFontSize: 16,
+      maxFontSize: 48,
+    });
+    expect(pinch.isPinching).toBe(true);
+    expect(pinch.scaleRatio).toBe(1.5);
+    expect(pinch.newFontSize).toBe(36); // 24 * 1.5 = 36
+    expect(pinch.deltaFontSize).toBe(12);
+  });
+
+  it("detects pinch-to-zoom in (decreasing distance shrinks font size)", () => {
+    const pinch = detectPinchGesture({
+      initialDistance: 100,
+      currentDistance: 80, // 0.8x scale
+      initialFontSize: 30,
+      minFontSize: 16,
+      maxFontSize: 48,
+    });
+    expect(pinch.isPinching).toBe(true);
+    expect(pinch.scaleRatio).toBe(0.8);
+    expect(pinch.newFontSize).toBe(24); // 30 * 0.8 = 24
+  });
+
+  it("clamps font size to maxFontSize and minFontSize", () => {
+    const zoomedInTooMuch = detectPinchGesture({
+      initialDistance: 50,
+      currentDistance: 250, // 5x scale
+      initialFontSize: 30,
+      minFontSize: 16,
+      maxFontSize: 48,
+    });
+    expect(zoomedInTooMuch.newFontSize).toBe(48);
+
+    const zoomedOutTooMuch = detectPinchGesture({
+      initialDistance: 200,
+      currentDistance: 30,
+      initialFontSize: 24,
+      minFontSize: 16,
+      maxFontSize: 48,
+    });
+    expect(zoomedOutTooMuch.newFontSize).toBe(16);
+  });
+
+  it("ignores micro adjustments below threshold", () => {
+    const subtle = detectPinchGesture({
+      initialDistance: 100,
+      currentDistance: 105,
+      initialFontSize: 26,
+    });
+    expect(subtle.isPinching).toBe(false);
+  });
+});
+
+describe("detectPlayerGesture", () => {
+  it("detects double tap to toggle play/pause", () => {
+    const res = detectPlayerGesture({
+      startX: 150,
+      startY: 200,
+      endX: 152,
+      endY: 201,
+      startTime: 1000,
+      endTime: 1100,
+      lastTapTime: 900, // 200ms ago -> within 350ms window
+      doubleTapWindow: 350,
+    });
+    expect(res.action).toBe("toggle_play");
+    expect(res.isDoubleTap).toBe(true);
+  });
+
+  it("detects single tap when not within double-tap window", () => {
+    const res = detectPlayerGesture({
+      startX: 150,
+      startY: 200,
+      endX: 151,
+      endY: 200,
+      startTime: 2000,
+      endTime: 2100,
+      lastTapTime: 1000, // 1100ms ago -> exceeds doubleTapWindow
+    });
+    expect(res.action).toBe("tap");
+    expect(res.isDoubleTap).toBe(false);
+  });
+
+  it("detects swipe up on player to open audio options", () => {
+    const res = detectPlayerGesture({
+      startX: 150,
+      startY: 300,
+      endX: 155,
+      endY: 240, // dy = -60 (upward movement)
+      startTime: 1000,
+      endTime: 1200,
+    });
+    expect(res.action).toBe("open_options");
+  });
+
+  it("detects horizontal swipe left on player for next verse", () => {
+    const res = detectPlayerGesture({
+      startX: 250,
+      startY: 300,
+      endX: 170, // dx = -80
+      endY: 305,
+      startTime: 1000,
+      endTime: 1250,
+    });
+    expect(res.action).toBe("next");
+  });
+
+  it("detects horizontal swipe right on player for previous verse", () => {
+    const res = detectPlayerGesture({
+      startX: 100,
+      startY: 300,
+      endX: 180, // dx = +80
+      endY: 298,
+      startTime: 1000,
+      endTime: 1250,
+    });
+    expect(res.action).toBe("prev");
+  });
+});
+
+describe("detectSheetDismissGesture", () => {
+  it("detects downward pull gesture to dismiss modal", () => {
+    const res = detectSheetDismissGesture({
+      startY: 100,
+      endY: 180, // dy = +80
+      startX: 200,
+      endX: 205, // dx = 5
+      minDismissDistance: 55,
+    });
+    expect(res.shouldDismiss).toBe(true);
+    expect(res.deltaY).toBe(80);
+  });
+
+  it("rejects upward drag or horizontal drag", () => {
+    const upward = detectSheetDismissGesture({
+      startY: 200,
+      endY: 120, // dy = -80
+      startX: 200,
+      endX: 200,
+    });
+    expect(upward.shouldDismiss).toBe(false);
+
+    const horizontal = detectSheetDismissGesture({
+      startY: 100,
+      endY: 140, // dy = 40
+      startX: 100,
+      endX: 250, // dx = 150
+    });
+    expect(horizontal.shouldDismiss).toBe(false);
+  });
+});
+
+describe("detectEdgeSwipeGesture", () => {
+  it("opens drawer on swipe right starting near left screen edge", () => {
+    const res = detectEdgeSwipeGesture({
+      startX: 15, // <= 35px from edge
+      endX: 95, // dx = 80 >= 50
+      startY: 200,
+      endY: 205,
+      isOpen: false,
+    });
+    expect(res.action).toBe("open_drawer");
+  });
+
+  it("does not open drawer if swipe did not start from screen edge", () => {
+    const res = detectEdgeSwipeGesture({
+      startX: 120, // Not near edge
+      endX: 200,
+      startY: 200,
+      endY: 205,
+      isOpen: false,
+    });
+    expect(res.action).toBeNull();
+  });
+
+  it("closes drawer on swipe left when drawer is open", () => {
+    const res = detectEdgeSwipeGesture({
+      startX: 220,
+      endX: 140, // dx = -80
+      startY: 200,
+      endY: 205,
+      isOpen: true,
+    });
+    expect(res.action).toBe("close_drawer");
+  });
+});
+
+describe("detectTabSwipeGesture", () => {
+  const tabs = ["tajweed", "silence", "loop", "reciter"];
+
+  it("swipes left to advance to next tab", () => {
+    const res = detectTabSwipeGesture({
+      startX: 250,
+      endX: 180, // dx = -70
+      startY: 100,
+      endY: 105,
+      currentTab: "tajweed",
+      tabs,
+    });
+    expect(res.shouldChange).toBe(true);
+    expect(res.targetTab).toBe("silence");
+    expect(res.direction).toBe("next");
+  });
+
+  it("swipes right to retreat to previous tab", () => {
+    const res = detectTabSwipeGesture({
+      startX: 150,
+      endX: 230, // dx = +80
+      startY: 100,
+      endY: 98,
+      currentTab: "loop",
+      tabs,
+    });
+    expect(res.shouldChange).toBe(true);
+    expect(res.targetTab).toBe("silence");
+    expect(res.direction).toBe("prev");
+  });
+
+  it("does not advance beyond boundary tabs", () => {
+    const atLast = detectTabSwipeGesture({
+      startX: 250,
+      endX: 180,
+      currentTab: "reciter",
+      tabs,
+    });
+    expect(atLast.shouldChange).toBe(false);
+
+    const atFirst = detectTabSwipeGesture({
+      startX: 150,
+      endX: 230,
+      currentTab: "tajweed",
+      tabs,
+    });
+    expect(atFirst.shouldChange).toBe(false);
+  });
+});
+

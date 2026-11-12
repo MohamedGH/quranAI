@@ -11,6 +11,7 @@ import { masteryColor } from "./Mastery.jsx";
 import { SilenceReviseControl } from "../audio/SilenceReviseControl.jsx";
 import { TajweedAudioCoachControl } from "../audio/TajweedAudioCoachControl.jsx";
 import { isSimplifiedUxMode, getUxProfile } from "../../utils/uxProfileManager.js";
+import { calculateTouchDistance, detectPinchGesture, detectSheetDismissGesture } from "../../utils/swipeNavigation.js";
 
 // Helper for Arabic Eastern digits: e.g. 108 -> ۱۰۸
 function toArabicDigits(num) {
@@ -161,10 +162,11 @@ export function AyatFullScreenModal({
   const activeTajweedCount = [tjQalqala, tjMadd, tjIzhar, tjIdgham, tjIkhfa, tjIqlab, tjGhunnah, tjTone].filter(Boolean).length;
   const anyTajweedActive = activeTajweedCount > 0;
 
-  // Touch swipe handling for mobile
+  // Touch swipe & pinch handling for mobile / tablet
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const touchIsIgnored = useRef(false);
+  const pinchStartRef = useRef(null);
 
   const isSwipeIgnoredTarget = (target) => {
     if (!target) return false;
@@ -178,6 +180,17 @@ export function AyatFullScreenModal({
 
   const handleTouchStart = (e) => {
     if (!e.touches || e.touches.length === 0) return;
+    // 2-finger touch -> Pinch to zoom font size
+    if (e.touches.length === 2) {
+      const dist = calculateTouchDistance(e.touches[0], e.touches[1]);
+      pinchStartRef.current = {
+        initialDist: dist,
+        initialFontSize: fontSize,
+      };
+      touchStartX.current = null;
+      touchStartY.current = null;
+      return;
+    }
     if (isSwipeIgnoredTarget(e.target)) {
       touchIsIgnored.current = true;
       touchStartX.current = null;
@@ -189,7 +202,28 @@ export function AyatFullScreenModal({
     touchStartY.current = e.touches[0].clientY;
   };
 
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches.length === 2 && pinchStartRef.current) {
+      const currentDist = calculateTouchDistance(e.touches[0], e.touches[1]);
+      const pinch = detectPinchGesture({
+        initialDistance: pinchStartRef.current.initialDist,
+        currentDistance: currentDist,
+        initialFontSize: pinchStartRef.current.initialFontSize,
+        minFontSize: 18,
+        maxFontSize: 54,
+      });
+      if (pinch.isPinching && pinch.newFontSize !== fontSize) {
+        setFontSize(pinch.newFontSize);
+      }
+    }
+  };
+
   const handleTouchEnd = (e) => {
+    if (pinchStartRef.current) {
+      if (!e.touches || e.touches.length < 2) {
+        pinchStartRef.current = null;
+      }
+    }
     if (touchIsIgnored.current || touchStartX.current == null || touchStartY.current == null) {
       touchIsIgnored.current = false;
       touchStartX.current = null;
@@ -203,17 +237,38 @@ export function AyatFullScreenModal({
       return;
     }
 
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    const startX = touchStartX.current;
+    const startY = touchStartY.current;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const dx = endX - startX;
+    const dy = endY - startY;
     touchStartX.current = null;
     touchStartY.current = null;
 
-    // Horizontal swipe must dominate vertical scroll and exceed threshold
-    if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 2.0) {
-      if (dx < -80 && ayat && ayat.numberInSurah < (selectedSurah?.numberOfAyahs || ayats.length)) {
+    // 1. Pull down downward gesture to exit fullscreen / dismiss
+    const dismissRes = detectSheetDismissGesture({
+      startY,
+      endY,
+      startX,
+      endX,
+      minDismissDistance: 80,
+    });
+    if (dismissRes.shouldDismiss) {
+      if (typeof onExitToNormalMode === "function") {
+        onExitToNormalMode();
+      } else if (typeof onClose === "function") {
+        onClose();
+      }
+      return;
+    }
+
+    // 2. Horizontal swipe must dominate vertical scroll and exceed threshold
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < -70 && ayat && ayat.numberInSurah < (selectedSurah?.numberOfAyahs || ayats.length)) {
         // Swipe left -> Next verse
         onSelectAyat?.(ayat.numberInSurah + 1);
-      } else if (dx > 80 && ayat && ayat.numberInSurah > 1) {
+      } else if (dx > 70 && ayat && ayat.numberInSurah > 1) {
         // Swipe right -> Previous verse
         onSelectAyat?.(ayat.numberInSurah - 1);
       }
@@ -2131,6 +2186,7 @@ export function AyatFullScreenModal({
         ref={scrollContainerRef}
         className="fs-body"
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         style={{
           flex: 1,

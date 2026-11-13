@@ -315,10 +315,17 @@ export const formatFriendlyErrorMessage = (error, uxMode = UX_MODES.STANDARD) =>
 /**
  * Pure getter returning navigation tabs tailored to the user profile.
  */
-export const getNavigationTabs = (uxMode = UX_MODES.STANDARD) => {
+export const getNavigationTabs = (uxMode = UX_MODES.STANDARD, isQuranUnlocked = true) => {
   const mode = sanitizeUxMode(uxMode);
 
   if (mode === UX_MODES.CHILD) {
+    if (!isQuranUnlocked) {
+      return Object.freeze([
+        { id: "prononciation", icon: "🌟", label: "LETTRES",      title: "Valide les 28 lettres pour débloquer le Coran !" },
+        { id: "revision",      icon: "⭐", label: "JEUX & QUIZ",  title: "Jeux, quiz et révision amusante" },
+      ]);
+    }
+
     return Object.freeze([
       { id: "quran",         icon: "📖", label: "LECTURE",      title: "Lire et écouter les belles sourates" },
       { id: "prononciation", icon: "🌟", label: "LETTRES",      title: "Apprendre à bien prononcer les lettres" },
@@ -508,46 +515,46 @@ export const getUxWizardConfig = (uxMode = UX_MODES.STANDARD) => {
   if (mode === UX_MODES.CHILD) {
     return Object.freeze({
       mode,
-      badge: "Mission Apprenti Coran 🌟",
+      badge: "Mission Alphabet Coran 🌟 (Apprenti Récitateur)",
       title: "Bienvenue, jeune explorateur du Coran !",
-      subtitle: "Découvre les trésors du Coran en t'amusant avec de belles couleurs",
+      subtitle: "Valide les 28 lettres de l'alphabet arabe pour débloquer le Saint Coran !",
       theme,
       steps: Object.freeze([
         {
           step: 1,
           icon: "🌟",
-          title: "Des Versets Magiques & Très Grands",
-          shortDesc: "Des lettres géantes dorées pour bien lire sans fatiguer",
-          body: "Regarde comme les lettres arabes sont grandes et lumineuses ! Chaque verset ressemble à une carte d'étoile dorée avec sa traduction en français.",
-          highlightTip: "Chaque verset porte son numéro d'étoile pour te repérer facilement.",
-          keyAction: "Clique sur une carte de verset pour la voir en plein écran !"
+          title: "Ta Première Mission : Les Lettres Arabes Magiques !",
+          shortDesc: "Pour ouvrir le Saint Coran, apprends d'abord les 28 lettres magiques",
+          body: "Bienvenue petit champion ! Dans ton château d'apprentissage, le Saint Coran est un trésor précieux. Pour y accéder, ta première mission est de découvrir et valider les 28 lettres de l'alphabet arabe dans l'onglet LETTRES !",
+          highlightTip: "Chaque lettre validée te donne une belle étoile dorée ⭐ !",
+          keyAction: "Valide les 28 lettres pour débloquer l'accès au Saint Coran !"
         },
         {
           step: 2,
-          icon: "🎧",
-          title: "Écoute & Répète avec le Récitateur",
-          shortDesc: "Les mots s'illuminent pendant que le cheikh récite",
-          body: "Appuie sur le gros bouton jaune '▶ ÉCOUTER'. Les mots s'allument les uns après les autres comme des petites lanternes. Répète après le cheikh !",
-          highlightTip: "Tu as de gros boutons rigolos : PRÉC., ÉCOUTER, SUIV. et TAJWID.",
-          keyAction: "Appuie sur '▶ ÉCOUTER' pour chanter et apprendre les versets."
+          icon: "🎤",
+          title: "Écoute & Prononce Chaque Lettre",
+          shortDesc: "Écoute la bonne prononciation et entraîne-toi avec les voyelles",
+          body: "Dans la salle des LETTRES, appuie sur chaque carte pour entendre son son avec Fatḥa, Kasra et Ḍamma. Répète à voix haute puis clique sur le bouton doré 'Valider' !",
+          highlightTip: "Tu peux regarder où la lettre se forme dans la bouche ou la gorge !",
+          keyAction: "Écoute et valide chaque lettre pour faire grandir ton trésor."
         },
         {
           step: 3,
-          icon: "🎮",
-          title: "Quiz & Jeux de Récitation",
-          shortDesc: "Gagne des points et débloque des étoiles de champion",
-          body: "Dans l'onglet RÉVISION, découvre des quiz rigolos à choix multiples. Réponds sans stress, prends tout ton temps et fête tes victoires avec des sons joyeux !",
-          highlightTip: "Pas de panique si tu te trompes, tu peux recommencer autant de fois que tu veux !",
-          keyAction: "Deviens un champion de la mémorisation !"
+          icon: "🏆",
+          title: "Quiz & 28 Étoiles = Le Menu Coran Débloqué !",
+          shortDesc: "Toutes les lettres doivent être validées pour ouvrir le Coran",
+          body: "Tant que toutes les lettres ne sont pas validées, le Coran reste protégé. Dès que tu as tes 28 étoiles, une fête magique s'allume et le menu LECTURE DU CORAN apparaît dans ta barre !",
+          highlightTip: "Une barre d'étoiles te montre toujours combien de lettres il te reste à valider.",
+          keyAction: "Un vrai trophée de champion t'attend à l'arrivée !"
         },
         {
           step: 4,
           icon: "🚀",
-          title: "Prêt pour l'Aventure ?",
-          shortDesc: "Explore les sourates et amuse-toi bien",
-          body: "Tu as maintenant ta cape d'Apprenti du Coran. Choisis ta première sourate et commence ton beau voyage !",
-          highlightTip: "Clique sur ☰ en haut pour choisir ta sourate préférée.",
-          keyAction: "C'est parti ! Que la paix soit sur toi 🌟"
+          title: "En Route vers l'Alphabet !",
+          shortDesc: "On t'emmène directement dans l'onglet LETTRES pour démarrer !",
+          body: "Es-tu prêt à relever le grand défi ? Clique sur le bouton ci-dessous pour aller directement aux LETTRES et valider ta première lettre aujourd'hui !",
+          highlightTip: "C'est facile, joyeux et plein de belles surprises ⭐ !",
+          keyAction: "Clique sur 'ALLER AUX LETTRES 🌟' pour commencer !"
         }
       ])
     });

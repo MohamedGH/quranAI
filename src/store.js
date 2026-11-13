@@ -53,6 +53,9 @@ const uiSlice = createSlice({
     showBeginnerGuides:  load("quran_showBeginnerGuides", true),
     showUxWizard:        false,
     uxWizardStep:        0,
+    validatedLetters:    load("quran_validatedLetters", []),
+    childWizardSeen:     load("quran_child_wizard_seen", false),
+    showChildCelebrationModal: false,
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -314,6 +317,59 @@ const uiSlice = createSlice({
     },
     setUxWizardStep: (s, a) => {
       s.uxWizardStep = Math.max(0, Number(a.payload) || 0);
+    },
+    validateLetter: (s, a) => {
+      const letter = String(a.payload || "").trim();
+      if (!letter) return;
+      if (!Array.isArray(s.validatedLetters)) s.validatedLetters = [];
+      if (!s.validatedLetters.includes(letter)) {
+        s.validatedLetters.push(letter);
+        save("quran_validatedLetters", s.validatedLetters);
+        if (s.validatedLetters.length >= 28 && s.uxMode === "child") {
+          s.showChildCelebrationModal = true;
+        }
+      }
+    },
+    unvalidateLetter: (s, a) => {
+      const letter = String(a.payload || "").trim();
+      if (!Array.isArray(s.validatedLetters)) return;
+      s.validatedLetters = s.validatedLetters.filter((l) => l !== letter);
+      save("quran_validatedLetters", s.validatedLetters);
+    },
+    toggleValidateLetter: (s, a) => {
+      const letter = String(a.payload || "").trim();
+      if (!letter) return;
+      if (!Array.isArray(s.validatedLetters)) s.validatedLetters = [];
+      if (s.validatedLetters.includes(letter)) {
+        s.validatedLetters = s.validatedLetters.filter((l) => l !== letter);
+      } else {
+        s.validatedLetters.push(letter);
+        if (s.validatedLetters.length >= 28 && s.uxMode === "child") {
+          s.showChildCelebrationModal = true;
+        }
+      }
+      save("quran_validatedLetters", s.validatedLetters);
+    },
+    validateAllLetters: (s) => {
+      const allLetters = [
+        "ب", "ت", "ث", "ج", "ح", "خ", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "ه", "و", "ي", "ا"
+      ];
+      s.validatedLetters = allLetters;
+      save("quran_validatedLetters", s.validatedLetters);
+      if (s.uxMode === "child") {
+        s.showChildCelebrationModal = true;
+      }
+    },
+    resetValidatedLetters: (s) => {
+      s.validatedLetters = [];
+      save("quran_validatedLetters", []);
+    },
+    setChildWizardSeen: (s, a) => {
+      s.childWizardSeen = Boolean(a.payload);
+      save("quran_child_wizard_seen", s.childWizardSeen);
+    },
+    setShowChildCelebrationModal: (s, a) => {
+      s.showChildCelebrationModal = Boolean(a.payload);
     },
   },
   extraReducers: (builder) => {
@@ -1011,6 +1067,12 @@ const rawSel = {
   showBeginnerGuides:  (s) => s.ui.showBeginnerGuides !== false,
   showUxWizard:        (s) => Boolean(s.ui.showUxWizard),
   uxWizardStep:        (s) => Number(s.ui.uxWizardStep || 0),
+  validatedLetters:    (s) => s.ui.validatedLetters || [],
+  validatedLettersCount:(s) => (s.ui.validatedLetters || []).length,
+  allLettersValidated: (s) => (s.ui.validatedLetters || []).length >= 28,
+  isQuranUnlockedForChild:(s) => (s.ui.uxMode !== "child") || ((s.ui.validatedLetters || []).length >= 28),
+  childWizardSeen:     (s) => Boolean(s.ui.childWizardSeen),
+  showChildCelebrationModal:(s) => Boolean(s.ui.showChildCelebrationModal),
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

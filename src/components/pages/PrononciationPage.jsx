@@ -1,5 +1,7 @@
 import React, { useState, useRef } from "react";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
+import { sel, uiActions } from "../../store.js";
 import { ARABIC_LETTERS, HARAKATS } from "../../utils/arabicUtils.js";
 import {
   DETAILED_ARABIC_LETTERS,
@@ -13,9 +15,15 @@ import {
 } from "../../utils/makharijData.js";
 import { MakharijAnatomyDiagram } from "../common/MakharijAnatomyDiagram.jsx";
 import { HeavyLettersGuide } from "../common/HeavyLettersGuide.jsx";
+import { ChildUnlockQuranCelebrationModal } from "../common/ChildUnlockQuranCelebrationModal.jsx";
 
 export function PrononciationPage() {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
   const isChild = useSelector((state) => (state?.ui?.uxMode || "standard") === "child");
+  const validatedLetters = useSelector(sel.validatedLetters);
+  const validatedCount = useSelector(sel.validatedLettersCount);
+  const allLettersValidated = useSelector(sel.allLettersValidated);
   const [tab, setTab] = useState("lettres"); // lettres | graves | harakat | tajwid
   const [selected, setSelected] = useState(0); // Default to letter 0 (Ba)
   const [organFilter, setOrganFilter] = useState("all"); // all | lisan | halq | shafatayn | jawf | heavy
@@ -101,6 +109,141 @@ export function PrononciationPage() {
         </div>
       </div>
 
+      {/* ── CHILD LETTERS QUEST BANNER ── */}
+      {isChild && (
+        <div
+          id="child-letters-quest-banner"
+          style={{
+            margin: "14px 28px 0",
+            padding: "12px 18px",
+            borderRadius: 14,
+            background: "linear-gradient(135deg, rgba(255, 209, 102, 0.15) 0%, rgba(224, 159, 62, 0.08) 100%)",
+            border: "1.5px solid rgba(255, 209, 102, 0.45)",
+            boxShadow: "0 4px 18px rgba(0,0,0,0.25)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 26 }}>🏰</span>
+              <div>
+                <div style={{ fontFamily: "'Cinzel', serif", fontWeight: 800, fontSize: 13, color: "#ffd166", letterSpacing: 1 }}>
+                  DÉFI DU PETIT CHAMPION : LES 28 LETTRES DU SAINT CORAN
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>
+                  {allLettersValidated
+                    ? "🎉 BRAVO ! Toutes les lettres sont validées ! Le menu CORAN est maintenant débloqué !"
+                    : `Valide toutes les lettres pour faire apparaître le menu LECTURE DU CORAN ! (encore ${Math.max(0, 28 - validatedCount)} à faire)`}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {allLettersValidated ? (
+                <button
+                  id="btn-quest-go-quran"
+                  onClick={() => {
+                    dispatch(uiActions.setActivePage("quran"));
+                    navigate("/quran");
+                  }}
+                  style={{
+                    padding: "7px 16px",
+                    borderRadius: 8,
+                    border: "1px solid #ffd166",
+                    background: "linear-gradient(135deg, #ffd166 0%, #e09f3e 100%)",
+                    color: "#121624",
+                    fontWeight: 800,
+                    fontSize: 11,
+                    fontFamily: "'Cinzel', serif",
+                    cursor: "pointer",
+                    boxShadow: "0 2px 10px rgba(255, 209, 102, 0.35)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span>📖</span>
+                  <span>OUVRIR LE CORAN DÉBLOQUÉ</span>
+                  <span>🚀</span>
+                </button>
+              ) : (
+                <div
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: 8,
+                    background: "rgba(0,0,0,0.3)",
+                    border: "1px solid rgba(255, 209, 102, 0.3)",
+                    color: "#ffd166",
+                    fontWeight: 700,
+                    fontSize: 11,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span>🔒 Coran verrouillé</span>
+                  <span>·</span>
+                  <span>{validatedCount} / 28 ⭐</span>
+                </div>
+              )}
+
+              <button
+                id="btn-quest-validate-all"
+                onClick={() => dispatch(uiActions.validateAllLetters())}
+                title="Valider toutes les lettres d'un coup (Aide parent / testeur)"
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "var(--text3)",
+                  fontSize: 9.5,
+                  cursor: "pointer",
+                }}
+              >
+                ⚡ Valider tout
+              </button>
+              {validatedCount > 0 && (
+                <button
+                  id="btn-quest-reset-all"
+                  onClick={() => dispatch(uiActions.resetValidatedLetters())}
+                  title="Réinitialiser les lettres pour recommencer le défi"
+                  style={{
+                    padding: "5px 10px",
+                    borderRadius: 6,
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    background: "rgba(255,255,255,0.06)",
+                    color: "var(--text3)",
+                    fontSize: 9.5,
+                    cursor: "pointer",
+                  }}
+                >
+                  🔄 Réinitialiser
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div style={{ width: "100%", height: 8, background: "rgba(0,0,0,0.35)", borderRadius: 4, overflow: "hidden", position: "relative" }}>
+            <div
+              style={{
+                width: `${Math.min(100, (validatedCount / 28) * 100)}%`,
+                height: "100%",
+                background: allLettersValidated
+                  ? "linear-gradient(90deg, #56d4bc, #ffd166)"
+                  : "linear-gradient(90deg, #ffd166, #ffb703)",
+                borderRadius: 4,
+                transition: "width .3s ease",
+                boxShadow: "0 0 10px rgba(255, 209, 102, 0.5)",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="pronon-page">
         {/* ══════════════════════════════════════════════════════════════════════ */}
         {/* ── TAB 1 : LETTRES & ANATOMIE DE LA BOUCHE ──                        */}
@@ -152,21 +295,65 @@ export function PrononciationPage() {
                   const isSelected = selected === origIdx;
                   const isPlaying = playingId === `letter-${origIdx}`;
                   const isLtrHeavy = isHeavyLetter(l.letter);
+                  const isValidated = validatedLetters.includes(l.letter);
 
                   return (
                     <div
                       key={l.letter}
-                      className={`pronon-card${isSelected ? " selected" : ""}${isPlaying ? " playing" : ""}`}
+                      className={`pronon-card${isSelected ? " selected" : ""}${isPlaying ? " playing" : ""}${isValidated ? " validated-card" : ""}`}
                       onClick={() => {
                         setSelected(origIdx);
                         speak(l.letter, `letter-${origIdx}`);
                       }}
-                      style={
-                        isLtrHeavy
+                      style={{
+                        position: "relative",
+                        ...(isLtrHeavy
                           ? { borderColor: isSelected ? "#ffb703" : "rgba(255, 183, 3, 0.35)", background: isSelected ? "rgba(255, 183, 3, 0.14)" : "var(--surface2)" }
-                          : {}
-                      }
+                          : {}),
+                        ...(isValidated && !isSelected
+                          ? { borderColor: "rgba(86, 212, 188, 0.4)", boxShadow: "0 0 10px rgba(86, 212, 188, 0.12)" }
+                          : {}),
+                      }}
                     >
+                      {/* Validation Star Badge */}
+                      {isValidated ? (
+                        <div
+                          title="Lettre validée ! ⭐"
+                          style={{
+                            position: "absolute",
+                            top: 5,
+                            left: 5,
+                            fontSize: 9,
+                            fontWeight: 800,
+                            color: "#ffd166",
+                            display: "flex",
+                            alignItems: "center",
+                            background: "rgba(0, 0, 0, 0.5)",
+                            padding: "1px 4px",
+                            borderRadius: 6,
+                            border: "1px solid rgba(255, 209, 102, 0.5)",
+                          }}
+                        >
+                          ⭐
+                        </div>
+                      ) : (
+                        isChild && (
+                          <div
+                            title="Lettre à valider"
+                            style={{
+                              position: "absolute",
+                              top: 5,
+                              left: 5,
+                              fontSize: 8,
+                              color: "var(--text3)",
+                              opacity: 0.5,
+                            }}
+                          >
+                            ⚪
+                          </div>
+                        )
+                      )}
+
                       <div className="pronon-letter" style={isLtrHeavy ? { color: "#ffd166" } : {}}>
                         {l.letter}
                       </div>
@@ -270,19 +457,48 @@ export function PrononciationPage() {
                       )}
                     </div>
 
-                    <button
-                      className={`pronon-play-btn${playingId === `letter-${selected}` ? " playing" : ""}`}
-                      onClick={() =>
-                        playingId === `letter-${selected}` ? stopSpeak() : speak(sel.letter, `letter-${selected}`)
-                      }
-                      style={{
-                        padding: "8px 16px",
-                        fontSize: 10,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {playingId === `letter-${selected}` ? "⏹ STOP" : isChild ? "▶ ÉCOUTER LE SON" : "▶ ÉCOUTER"}
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className={`pronon-play-btn${playingId === `letter-${selected}` ? " playing" : ""}`}
+                        onClick={() =>
+                          playingId === `letter-${selected}` ? stopSpeak() : speak(sel.letter, `letter-${selected}`)
+                        }
+                        style={{
+                          padding: "8px 16px",
+                          fontSize: 10,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {playingId === `letter-${selected}` ? "⏹ STOP" : isChild ? "▶ ÉCOUTER LE SON" : "▶ ÉCOUTER"}
+                      </button>
+
+                      <button
+                        id="btn-validate-current-letter"
+                        onClick={() => dispatch(uiActions.toggleValidateLetter(sel.letter))}
+                        title={validatedLetters.includes(sel.letter) ? "Cliquer pour retirer la validation" : "Valider cette lettre pour gagner une étoile"}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: 8,
+                          fontSize: 10,
+                          fontFamily: "'Cinzel', serif",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          border: validatedLetters.includes(sel.letter)
+                            ? "1.5px solid #56d4bc"
+                            : "1.5px solid #ffd166",
+                          background: validatedLetters.includes(sel.letter)
+                            ? "linear-gradient(135deg, rgba(86, 212, 188, 0.22) 0%, rgba(86, 212, 188, 0.1) 100%)"
+                            : "linear-gradient(135deg, rgba(255, 209, 102, 0.22) 0%, rgba(255, 209, 102, 0.1) 100%)",
+                          color: validatedLetters.includes(sel.letter) ? "var(--teal2)" : "#ffd166",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          transition: "all .15s",
+                        }}
+                      >
+                        <span>{validatedLetters.includes(sel.letter) ? "✅ LETTRE VALIDÉE !" : "⭐ VALIDER CETTE LETTRE"}</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Lettre géante & Titre */}
@@ -726,6 +942,9 @@ export function PrononciationPage() {
           </>
         )}
       </div>
+
+      {/* ── CHILD UNLOCK CELEBRATION MODAL ── */}
+      <ChildUnlockQuranCelebrationModal />
     </main>
   );
 }

@@ -29,8 +29,16 @@ export function UxLevelWizardModal() {
       dispatch(uiActions.setUxWizardStep(currentStep + 1));
     } else {
       handleClose();
+      if (uxMode === "child") {
+        dispatch(uiActions.setChildWizardSeen(true));
+        dispatch(uiActions.setActivePage("prononciation"));
+        if (typeof window !== "undefined") {
+          window.history.pushState({}, "", "/prononciation");
+          window.dispatchEvent(new PopStateEvent("popstate"));
+        }
+      }
     }
-  }, [currentStep, totalSteps, dispatch, handleClose]);
+  }, [currentStep, totalSteps, dispatch, handleClose, uxMode]);
 
   const handlePrev = useCallback(() => {
     if (currentStep > 0) {
@@ -438,7 +446,13 @@ export function UxLevelWizardModal() {
                 gap: 6,
               }}
             >
-              <span>{currentStep === totalSteps - 1 ? "COMMENCER" : "SUIVANT"}</span>
+              <span>
+                {currentStep === totalSteps - 1
+                  ? uxMode === "child"
+                    ? "ALLER AUX LETTRES 🌟"
+                    : "COMMENCER"
+                  : "SUIVANT"}
+              </span>
               <span>→</span>
             </button>
           </div>

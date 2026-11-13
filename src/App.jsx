@@ -19,6 +19,7 @@ import { ScheduledRemindersModal } from "./components/common/ScheduledRemindersM
 import { HeaderToolsModal } from "./components/common/HeaderToolsModal.jsx";
 import { UxModeSelectorModal } from "./components/common/UxModeSelectorModal.jsx";
 import { UxLevelWizardModal } from "./components/common/UxLevelWizardModal.jsx";
+import { ChildUnlockQuranCelebrationModal } from "./components/common/ChildUnlockQuranCelebrationModal.jsx";
 import { PlayerAudioOptionsModal } from "./components/common/PlayerAudioOptionsModal.jsx";
 import { BeginnerGuideBanner } from "./components/common/BeginnerGuideBanner.jsx";
 import { getUxProfile, getUxModeClassName, isSimplifiedUxMode, getNavigationTabs, getPlayerConfig, getSidebarConfig } from "./utils/uxProfileManager.js";
@@ -148,9 +149,13 @@ function AppInner({ currentUser, onSignOut }) {
   const uxMode          = useSelector(sel.uxMode || ((s) => s?.ui?.uxMode || "standard"));
   const isBeginner      = useSelector(sel.isBeginnerUx || ((s) => (s?.ui?.uxMode || "standard") === "beginner"));
   const isChild         = useSelector(sel.isChildUx || ((s) => (s?.ui?.uxMode || "standard") === "child"));
-  const showUxModeModal = useSelector(sel.showUxModeModal || ((s) => Boolean(s?.ui?.showUxModeModal)));
+  const isQuranUnlocked = useSelector(sel.isQuranUnlockedForChild);
+  const validatedLettersCount = useSelector(sel.validatedLettersCount);
+  const allLettersValidated = useSelector(sel.allLettersValidated);
+  const childWizardSeen = useSelector(sel.childWizardSeen);
+  const showUxModeModal = useSelector(sel.showUxModeModal);
   const currentUxProfile = useMemo(() => getUxProfile(uxMode), [uxMode]);
-  const navTabs          = useMemo(() => getNavigationTabs(uxMode), [uxMode]);
+  const navTabs          = useMemo(() => getNavigationTabs(uxMode, isQuranUnlocked), [uxMode, isQuranUnlocked]);
   const playerConfig     = useMemo(() => getPlayerConfig(uxMode), [uxMode]);
   const sidebarConfig    = useMemo(() => getSidebarConfig(uxMode), [uxMode]);
   // ── High-frequency play state → refs + version counter (avoids full re-render) ──
@@ -218,6 +223,21 @@ function AppInner({ currentUser, onSignOut }) {
       dispatch(uiActions.setUxMode(parsedRoute.uxMode));
     }
   }, [parsedRoute.uxMode, dispatch]);
+
+  // ── Child Mode First Connection: Launch Wizard & direct to letters (/prononciation) ──
+  useEffect(() => {
+    if (isChild && !isQuranUnlocked) {
+      const seen = localStorage.getItem("quran_child_wizard_seen");
+      if (!seen && !childWizardSeen) {
+        dispatch(uiActions.setShowUxWizard(true));
+        dispatch(uiActions.setUxWizardStep(0));
+        dispatch(uiActions.setChildWizardSeen(true));
+        if (activePage === "quran") {
+          setActivePage("prononciation");
+        }
+      }
+    }
+  }, [isChild, isQuranUnlocked, childWizardSeen, activePage, dispatch]);
 
   // ── Sync URL → Redux (selectedSurah, openAyatNum) ──
   useEffect(() => {
@@ -2438,6 +2458,26 @@ function AppInner({ currentUser, onSignOut }) {
                 <span className="nav-label">{label}</span>
               </button>
             ))}
+            {isChild && !isQuranUnlocked && (
+              <button
+                id="btn-child-nav-locked-quran"
+                className="header-nav-btn child-locked-nav-chip"
+                onClick={() => {
+                  showToast(`🔒 Valide les 28 lettres dans LETTRES pour débloquer le Coran ! (${validatedLettersCount}/28 ⭐)`, "info");
+                  setActivePage("prononciation");
+                }}
+                title="Valide les 28 lettres dans LETTRES pour débloquer le Coran !"
+                style={{
+                  opacity: 0.85,
+                  border: "1px dashed rgba(255, 209, 102, 0.5)",
+                  color: "#ffd166",
+                  background: "rgba(0, 0, 0, 0.25)",
+                }}
+              >
+                <span className="nav-icon">🔒</span>
+                <span className="nav-label">CORAN ({validatedLettersCount}/28 ⭐)</span>
+              </button>
+            )}
           </nav>
 
           {/* Right Action buttons & Compact Modal Hub */}
@@ -2636,6 +2676,55 @@ function AppInner({ currentUser, onSignOut }) {
               </div>
             )}
             <div className="sidebar-list">
+              {isChild && !isQuranUnlocked && (
+                <div
+                  id="sidebar-child-locked-notice"
+                  style={{
+                    margin: "8px 12px 14px",
+                    padding: "12px",
+                    borderRadius: 12,
+                    background: "linear-gradient(135deg, rgba(255, 209, 102, 0.15) 0%, rgba(224, 159, 62, 0.08) 100%)",
+                    border: "1.5px dashed rgba(255, 209, 102, 0.45)",
+                    textAlign: "center",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontSize: 24 }}>🔒 🌟</div>
+                  <div style={{ fontFamily: "'Cinzel', serif", fontWeight: 800, fontSize: 11, color: "#ffd166", letterSpacing: 0.8 }}>
+                    LE CORAN EST BLOQUÉ
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--text2)", lineHeight: 1.4 }}>
+                    Valide d'abord les 28 lettres dans l'onglet LETTRES pour ouvrir le Saint Coran !
+                  </div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "var(--teal2)" }}>
+                    {validatedLettersCount} / 28 lettres validées ⭐
+                  </div>
+                  <button
+                    id="btn-sidebar-go-letters"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      setActivePage("prononciation");
+                    }}
+                    style={{
+                      marginTop: 4,
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #ffd166",
+                      background: "#ffd166",
+                      color: "#121624",
+                      fontSize: 10,
+                      fontWeight: 800,
+                      fontFamily: "'Cinzel', serif",
+                      cursor: "pointer",
+                    }}
+                  >
+                    👉 Aller aux Lettres 🌟
+                  </button>
+                </div>
+              )}
               {loadingSurahs
                 ? <div className="loading"><div className="loading-ring" /><span>CHARGEMENT</span></div>
                 : filteredSurahs.map(s => (
@@ -2862,7 +2951,83 @@ function AppInner({ currentUser, onSignOut }) {
             <Route path="/quran/:surahNum?/:ayatNum?" element={(
             <AnimatedPage pageKey="quran"><main className="main">
               <BeginnerGuideBanner context="quran" />
-              {!selectedSurah ? (
+              {isChild && !isQuranUnlocked ? (
+                <div
+                  id="child-quran-locked-screen"
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "36px 20px",
+                    textAlign: "center",
+                    minHeight: "65vh",
+                    gap: 16,
+                  }}
+                >
+                  <div style={{ fontSize: 60, lineHeight: 1, animation: "bounce 1.5s infinite" }}>
+                    🔒 📖 ⭐
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "'Cinzel', serif",
+                      fontSize: 20,
+                      fontWeight: 800,
+                      color: "#ffd166",
+                      letterSpacing: 1,
+                    }}
+                  >
+                    LE SAINT CORAN EST BLOQUÉ !
+                  </div>
+                  <p style={{ maxWidth: 460, fontSize: 13.5, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>
+                    Pour ouvrir le Livre Sacré et lire toutes ses belles sourates, tu dois d'abord apprendre et valider les 28 lettres de l'alphabet arabe dans l'onglet <strong>LETTRES</strong> !
+                  </p>
+                  <div
+                    style={{
+                      background: "rgba(255, 209, 102, 0.12)",
+                      border: "1px solid rgba(255, 209, 102, 0.4)",
+                      borderRadius: 14,
+                      padding: "10px 20px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: "#ffd166",
+                    }}
+                  >
+                    <span>⭐ Ton trésor :</span>
+                    <span>{validatedLettersCount} / 28 lettres validées</span>
+                  </div>
+                  <button
+                    id="btn-gate-go-letters"
+                    onClick={() => {
+                      setActivePage("prononciation");
+                    }}
+                    style={{
+                      padding: "12px 24px",
+                      borderRadius: 12,
+                      border: "1px solid #ffd166",
+                      background: "linear-gradient(135deg, #ffd166 0%, #e09f3e 100%)",
+                      color: "#121624",
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      fontFamily: "'Cinzel', serif",
+                      letterSpacing: 1,
+                      cursor: "pointer",
+                      boxShadow: "0 6px 20px rgba(255, 209, 102, 0.35)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <span>👉</span>
+                    <span>ALLER VALIDER MES LETTRES MAINTENANT !</span>
+                    <span>🌟</span>
+                  </button>
+                </div>
+              ) : !selectedSurah ? (
               <div className="empty-state">
                 <div className="empty-arabic">القرآن الكريم</div>
                 <span>SÉLECTIONNEZ UNE SOURATE</span>
@@ -5191,6 +5356,7 @@ function AppInner({ currentUser, onSignOut }) {
         </Suspense>
       )}
       <UxLevelWizardModal />
+      <ChildUnlockQuranCelebrationModal />
     </>
     </ArabicKeyboardContext.Provider>
   );

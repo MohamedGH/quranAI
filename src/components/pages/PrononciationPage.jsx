@@ -13,6 +13,7 @@ import {
   isItbaqLetter,
   HEAVY_LETTERS_DATA,
 } from "../../utils/makharijData.js";
+import { getCompleteLetterProfile } from "../../utils/arabicLetterEncyclopedia.js";
 import { MakharijAnatomyDiagram } from "../common/MakharijAnatomyDiagram.jsx";
 import { HeavyLettersGuide } from "../common/HeavyLettersGuide.jsx";
 import { ChildUnlockQuranCelebrationModal } from "../common/ChildUnlockQuranCelebrationModal.jsx";
@@ -27,6 +28,7 @@ export function PrononciationPage() {
   const [tab, setTab] = useState("lettres"); // lettres | graves | harakat | tajwid
   const [selected, setSelected] = useState(0); // Default to letter 0 (Ba)
   const [organFilter, setOrganFilter] = useState("all"); // all | lisan | halq | shafatayn | jawf | heavy
+  const [detailSection, setDetailSection] = useState("all"); // all | anatomie | tajweed | sons | ecriture
   const [playingId, setPlayingId] = useState(null);
   const synthRef = useRef(null);
 
@@ -60,6 +62,7 @@ export function PrononciationPage() {
 
   const selectedLetter = selected !== null && selected < ARABIC_LETTERS.length ? ARABIC_LETTERS[selected] : ARABIC_LETTERS[0];
   const selDetail = selectedLetter ? getLetterAnatomy(selectedLetter.letter) : null;
+  const letterProfile = selectedLetter ? getCompleteLetterProfile(selectedLetter.letter) : null;
   const isSelectedHeavy = selectedLetter ? isHeavyLetter(selectedLetter.letter) : false;
   const isSelectedItbaq = selectedLetter ? isItbaqLetter(selectedLetter.letter) : false;
 
@@ -415,11 +418,11 @@ export function PrononciationPage() {
 
             {/* Colonne droite : Fiche détaillée + Schéma anatomique SVG interactif */}
             <div>
-              {selectedLetter ? (
-                <div className="pronon-detail-panel">
-                  {/* En-tête : Makhraj + Statut Grave/Fin + Bouton Play */}
+              {selectedLetter && letterProfile ? (
+                <div className="pronon-detail-panel" id="letter-encyclopedia-panel">
+                  {/* En-tête : Makhraj + Statut Grave/Fin + Bouton Play & Validation */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <div className="pronon-makhraj-tag">
                         📍 {isChild ? (selDetail?.childOrgan || selDetail?.organTitle || selectedLetter.makhraj) : (selDetail?.organTitle || selectedLetter.makhraj)}
                       </div>
@@ -428,7 +431,7 @@ export function PrononciationPage() {
                         <span
                           style={{
                             padding: "3px 8px",
-                            borderRadius: 10,
+                            borderRadius: 6,
                             background: "rgba(255, 183, 3, 0.18)",
                             border: "1px solid rgba(255, 183, 3, 0.5)",
                             color: "#ffb703",
@@ -443,7 +446,7 @@ export function PrononciationPage() {
                         <span
                           style={{
                             padding: "3px 8px",
-                            borderRadius: 10,
+                            borderRadius: 6,
                             background: "rgba(86, 212, 188, 0.12)",
                             border: "1px solid rgba(86, 212, 188, 0.4)",
                             color: "var(--teal2)",
@@ -501,165 +504,523 @@ export function PrononciationPage() {
                     </div>
                   </div>
 
-                  {/* Lettre géante & Titre */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14 }}>
-                    <div className="pronon-detail-letter" style={isSelectedHeavy ? { color: "#ffe082" } : {}}>
-                      {selectedLetter.letter}
-                    </div>
-                    <div>
-                      <div className="pronon-detail-name">
-                        {selectedLetter.name.toUpperCase()} · /{selectedLetter.trans}/
+                  {/* Identité complète de la lettre */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, paddingBottom: 10, borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, flexWrap: "wrap" }}>
+                      <div className="pronon-detail-letter" style={isSelectedHeavy ? { color: "#ffe082" } : {}}>
+                        {selectedLetter.letter}
                       </div>
-                      <div style={{ fontSize: 10, color: "var(--text3)", textAlign: "center", marginTop: 2 }}>
-                        {isChild ? (selDetail?.childOrgan || selDetail?.makhrajLabel || selectedLetter.makhraj) : (selDetail?.makhrajLabel || selectedLetter.makhraj)}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                          <span className="pronon-detail-name">
+                            {selectedLetter.name.toUpperCase()} · /{selectedLetter.trans}/
+                          </span>
+                          <span style={{ fontFamily: "'Amiri Quran', serif", fontSize: 18, color: "var(--gold2)", direction: "rtl" }}>
+                            {letterProfile.arabicName}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 10, color: "var(--text2)" }}>
+                          {isChild ? (selDetail?.childOrgan || selDetail?.makhrajLabel || selectedLetter.makhraj) : (selDetail?.makhrajLabel || selectedLetter.makhraj)}
+                        </div>
+                        <div id="letter-identity-meta" style={{ fontSize: 9.5, color: "var(--text3)", lineHeight: 1.5 }}>
+                          <span>N° {letterProfile.alphabetOrder}/29</span>
+                          <span aria-hidden="true"> · </span>
+                          <span>{letterProfile.dots}</span>
+                          {!isChild && (
+                            <>
+                              <span aria-hidden="true"> · </span>
+                              <span style={{ fontVariantNumeric: "tabular-nums" }}>Abjad : {letterProfile.abjadValue}</span>
+                              <span aria-hidden="true"> · </span>
+                              <span style={{ fontFamily: "monospace" }}>{letterProfile.unicodeHex}</span>
+                            </>
+                          )}
+                          <span aria-hidden="true"> · </span>
+                          <span style={{ color: letterProfile.forms.connectsLeft ? "var(--teal2)" : "#fbbf24" }}>
+                            {isChild ? letterProfile.forms.childConnectivityLabel : letterProfile.forms.connectivityLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* ── SCHÉMA ANATOMIQUE SVG INTERACTIF DE LA BOUCHE / GORGE / LANGUE ── */}
-                  <div style={{ margin: "4px 0" }}>
-                    <MakharijAnatomyDiagram
-                      activeLetter={selectedLetter.letter}
-                      isHeavyMode={isSelectedHeavy}
-                      isChild={isChild}
-                      showLabels={true}
-                    />
-                  </div>
-
-                  {/* Description d'articulation adaptée */}
-                  {isChild ? (
+                    {/* Barre de filtre rapide des sections encyclopédiques */}
                     <div
+                      id="letter-detail-section-tabs"
                       style={{
-                        background: "rgba(255, 183, 3, 0.08)",
-                        border: "1.5px solid rgba(255, 183, 3, 0.35)",
-                        borderRadius: 12,
-                        padding: "12px 14px",
                         display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
+                        gap: 4,
+                        flexWrap: "wrap",
+                        justifyContent: "center",
+                        background: "var(--surface3)",
+                        padding: 4,
+                        borderRadius: 8,
+                        border: "1px solid var(--border)",
+                        width: "100%",
+                        marginTop: 4,
                       }}
                     >
-                      <div style={{ fontSize: 10.5, letterSpacing: 1.2, color: "#ffe082", fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
-                        🌟 ASTUCE MAGIQUE DU PETIT CHAMPION :
+                      {[
+                        ["all", "📋 Tout voir"],
+                        ["anatomie", "🔬 Anatomie & Formes"],
+                        ["tajweed", "⚖️ Tajweed & Sifât"],
+                        ["sons", "🎙️ Sons & Exemples"],
+                        ["ecriture", "✍️ Tracé & Pièges"],
+                      ].map(([secId, secLabel]) => (
+                        <button
+                          key={secId}
+                          type="button"
+                          onClick={() => setDetailSection(secId)}
+                          style={{
+                            flex: "1 1 auto",
+                            padding: "6px 10px",
+                            borderRadius: 6,
+                            border: "none",
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                            fontSize: 9.5,
+                            fontFamily: "'Cinzel', serif",
+                            fontWeight: 700,
+                            background: detailSection === secId ? "rgba(255, 183, 3, 0.22)" : "transparent",
+                            color: detailSection === secId ? "#ffd166" : "var(--text3)",
+                            transition: "all .15s",
+                          }}
+                        >
+                          {secLabel}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── SECTION 1 : ANATOMIE, POSTURE TAFKHÎM & FORMES CONTEXTUELLES ── */}
+                  {(detailSection === "all" || detailSection === "anatomie") && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ margin: "2px 0" }}>
+                        <MakharijAnatomyDiagram
+                          activeLetter={selectedLetter.letter}
+                          isHeavyMode={isSelectedHeavy}
+                          isChild={isChild}
+                        />
                       </div>
-                      <div style={{ fontSize: 12, color: "#fff", lineHeight: 1.6, fontWeight: 500 }}>
-                        {selDetail?.childTip || selDetail?.howToPronounce || selectedLetter.tip}
-                      </div>
-                      {selDetail?.howToPronounceChild && (
-                        <div style={{ fontSize: 10.5, color: "var(--teal2)", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 5, marginTop: 2 }}>
-                          👉 <strong>Comment faire :</strong> {selDetail.howToPronounceChild}
+
+                      {isChild ? (
+                        <div
+                          style={{
+                            background: "rgba(255, 183, 3, 0.08)",
+                            border: "1.5px solid rgba(255, 183, 3, 0.35)",
+                            borderRadius: 12,
+                            padding: "12px 14px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                          }}
+                        >
+                          <div style={{ fontSize: 10.5, letterSpacing: 1.2, color: "#ffe082", fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
+                            🌟 ASTUCE MAGIQUE DU PETIT CHAMPION :
+                          </div>
+                          <div style={{ fontSize: 12, color: "#fff", lineHeight: 1.6, fontWeight: 500 }}>
+                            {selDetail?.childTip || selDetail?.howToPronounce || selectedLetter.tip}
+                          </div>
+                          {selDetail?.howToPronounceChild && (
+                            <div style={{ fontSize: 10.5, color: "var(--teal2)", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 5, marginTop: 2 }}>
+                              👉 <strong>Comment faire :</strong> {selDetail.howToPronounceChild}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            background: "rgba(255, 255, 255, 0.03)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 10,
+                            padding: "10px 14px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                          }}
+                        >
+                          <div style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--gold2)", fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
+                            POSITION ANATOMIQUE DES ORGANES (LANGUE, GORGE, LÈVRES) :
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.6 }}>
+                            {selDetail?.howToPronounce || selectedLetter.tip}
+                          </div>
+                          {selDetail?.anatomicalTip && (
+                            <div style={{ fontSize: 10, color: "var(--teal2)", borderTop: "1px solid var(--border2)", paddingTop: 4, marginTop: 2 }}>
+                              🔬 <em>Détail anatomique :</em> {selDetail.anatomicalTip}
+                            </div>
+                          )}
                         </div>
                       )}
+
+                      {/* Formes selon la position (strictement fidèles à la connectivité à gauche) */}
+                      <div>
+                        <div className="pronon-section-title" style={{ marginBottom: 8 }}>
+                          FORMES SELON LA POSITION DANS LE MOT · {!letterProfile.forms.connectsLeft ? "NE S'ATTACHE PAS À GAUCHE" : "ATTACHE DES 2 CÔTÉS"}
+                        </div>
+                        <div className="pronon-detail-forms">
+                          {[
+                            ["Isolée", letterProfile.forms.isolated],
+                            ["Initiale", letterProfile.forms.initial],
+                            ["Médiane", letterProfile.forms.medial],
+                            ["Finale", letterProfile.forms.final],
+                          ].map(([pos, form]) => (
+                            <div
+                              key={pos}
+                              className="pronon-form-item"
+                              onClick={() => speak(selectedLetter.letter, `form-${pos}`)}
+                              style={{ cursor: "pointer" }}
+                              title="Cliquer pour écouter la prononciation"
+                            >
+                              <div className="pronon-form-arabic">{form}</div>
+                              <div className="pronon-form-label">{pos.toUpperCase()}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <div
-                      style={{
-                        background: "rgba(255, 255, 255, 0.03)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 10,
-                        padding: "10px 14px",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                      }}
-                    >
-                      <div style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--gold2)", fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
-                        POSITION ANATOMIQUE DES ORGANES (LANGUE, GORGE, LÈVRES) :
+                  )}
+
+                  {/* ── SECTION 2 : TAJWEED COMPLET (SIFÂT & RÈGLES CORANIQUES) ── */}
+                  {(detailSection === "all" || detailSection === "tajweed") && (
+                    <div id="letter-tajweed-encyclopedia" style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: detailSection === "all" ? 10 : 0, borderTop: detailSection === "all" ? "1px solid var(--border)" : "none" }}>
+                      <div className="pronon-section-title">
+                        {isChild ? "✨ SUPER-POUVOIRS & RÈGLES MAGIQUES (TAJWEED)" : "PROPRIÉTÉS PHONÉTIQUES (صِفَاتُ الْحُرُوف) & RÈGLES CORANIQUES"}
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.6 }}>
-                        {selDetail?.howToPronounce || selectedLetter.tip}
+
+                      {/* Les 5 Sifât à contraires */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(175px, 1fr))", gap: 8 }}>
+                        {[
+                          { label: "Souffle", title: letterProfile.sifat.airflow.name, desc: isChild ? letterProfile.sifat.airflow.childMeaning : letterProfile.sifat.airflow.meaning },
+                          { label: "Écoulement du son", title: letterProfile.sifat.duration.name, desc: isChild ? letterProfile.sifat.duration.childMeaning : letterProfile.sifat.duration.meaning },
+                          { label: "Posture de langue", title: letterProfile.sifat.elevation.name, desc: isChild ? letterProfile.sifat.elevation.childMeaning : letterProfile.sifat.elevation.meaning },
+                          { label: "Voûte palatine", title: letterProfile.sifat.adhesion.name, desc: isChild ? letterProfile.sifat.adhesion.childMeaning : letterProfile.sifat.adhesion.meaning },
+                          { label: "Fluidité", title: letterProfile.sifat.fluency.name, desc: isChild ? letterProfile.sifat.fluency.childMeaning : letterProfile.sifat.fluency.meaning },
+                        ].map((item) => (
+                          <div
+                            key={item.label}
+                            style={{
+                              padding: "8px 10px",
+                              borderRadius: 8,
+                              background: "var(--surface2)",
+                              border: "1px solid var(--border)",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 2,
+                            }}
+                          >
+                            <div style={{ fontSize: 8.5, color: "var(--text3)", letterSpacing: 0.6 }}>{item.label.toUpperCase()}</div>
+                            <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)" }}>{item.title}</div>
+                            <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.35 }}>{item.desc}</div>
+                          </div>
+                        ))}
                       </div>
-                      {selDetail?.anatomicalTip && (
-                        <div style={{ fontSize: 10, color: "var(--teal2)", borderTop: "1px solid var(--border2)", paddingTop: 4, marginTop: 2 }}>
-                          🔬 <em>Détail anatomique :</em> {selDetail.anatomicalTip}
+
+                      {/* Sifât uniques (Qalqalah, Safîr, Ghunnah, Istiṭâlah, Tafash-shî, etc.) */}
+                      {letterProfile.sifat.unique.length > 0 && (
+                        <div
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            background: "rgba(255, 183, 3, 0.08)",
+                            border: "1px solid rgba(255, 183, 3, 0.35)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                          }}
+                        >
+                          <div style={{ fontSize: 9.5, fontWeight: 700, color: "#ffd166", fontFamily: "'Cinzel', serif" }}>
+                            {isChild ? "🌟 ATTRIBUTS SPÉCIAUX DE CETTE LETTRE :" : "ATTRIBUTS UNIQUES SANS CONTRAIRE :"}
+                          </div>
+                          {letterProfile.sifat.unique.map((u) => (
+                            <div key={u.name} style={{ fontSize: 10, color: "var(--text)", lineHeight: 1.45 }}>
+                              <strong>{u.name}</strong> — {isChild ? u.childDesc : u.desc}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Solaire / Lunaire, Nûn Sâkin, Mîm Sâkin, Muqaṭṭa'ât */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 8 }}>
+                        {/* Solaire / Lunaire avec écoute audio */}
+                        <div
+                          onClick={() => letterProfile.quranRules.solarLunar.example && speak(letterProfile.quranRules.solarLunar.example.arabic, "solar-lunar-ex")}
+                          style={{
+                            padding: "9px 12px",
+                            borderRadius: 8,
+                            background: "var(--surface3)",
+                            border: "1px solid var(--border)",
+                            cursor: letterProfile.quranRules.solarLunar.example ? "pointer" : "default",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                          }}
+                          title="Cliquer pour écouter l'exemple avec Al-"
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                            <span style={{ fontSize: 9.5, fontWeight: 700, color: letterProfile.quranRules.solarLunar.isSolar ? "#ffd166" : "#56d4bc" }}>
+                              {letterProfile.quranRules.solarLunar.isSolar ? "☀️" : "🌙"} {letterProfile.quranRules.solarLunar.type}
+                            </span>
+                            {letterProfile.quranRules.solarLunar.example && (
+                              <span style={{ fontFamily: "'Amiri Quran', serif", fontSize: 16, color: "var(--gold2)", direction: "rtl" }}>
+                                {letterProfile.quranRules.solarLunar.example.arabic} 🔊
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
+                            {isChild ? letterProfile.quranRules.solarLunar.childDesc : letterProfile.quranRules.solarLunar.desc}
+                          </div>
+                        </div>
+
+                        {/* Nûn Sâkin & Tanwîn */}
+                        <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--surface3)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 3 }}>
+                          <div style={{ fontSize: 8.5, color: "var(--text3)" }}>APRÈS NÛN SÂKIN (نْ) OU TANWÎN</div>
+                          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--teal2)" }}>{letterProfile.quranRules.nunSakinRule.rule}</div>
+                          <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
+                            {isChild ? letterProfile.quranRules.nunSakinRule.childDesc : letterProfile.quranRules.nunSakinRule.desc}
+                          </div>
+                        </div>
+
+                        {/* Mîm Sâkin */}
+                        <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--surface3)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 3 }}>
+                          <div style={{ fontSize: 8.5, color: "var(--text3)" }}>APRÈS MÎM SÂKIN (مْ)</div>
+                          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)" }}>{letterProfile.quranRules.mimSakinRule.rule}</div>
+                          <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
+                            {isChild ? letterProfile.quranRules.mimSakinRule.childDesc : letterProfile.quranRules.mimSakinRule.desc}
+                          </div>
+                        </div>
+
+                        {/* Muqaṭṭa'ât si applicable */}
+                        {letterProfile.quranRules.muqattaat && (
+                          <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.3)", display: "flex", flexDirection: "column", gap: 3 }}>
+                            <div style={{ fontSize: 8.5, color: "#38bdf8", fontWeight: 700 }}>✨ LETTRE LUMINEUSE (الْحُرُوفُ الْمُقَطَّعَة)</div>
+                            <div style={{ fontSize: 10, color: "var(--text)", fontFamily: "'Amiri Quran', serif", direction: "rtl", textAlign: "right" }}>
+                              {letterProfile.quranRules.muqattaat.combinations.join(" · ")}
+                            </div>
+                            <div style={{ fontSize: 9, color: "var(--text2)" }}>
+                              Ouvre {letterProfile.quranRules.muqattaat.surahsCount} sourate(s) du Coran (lue par son nom complet).
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── SECTION 3 : VOYELLES COURTES, LONGUES (MADD), CHADDA/TANWÎN & MOTS CORANIQUES ── */}
+                  {(detailSection === "all" || detailSection === "sons") && (
+                    <div id="letter-sounds-encyclopedia" style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: detailSection === "all" ? 10 : 0, borderTop: detailSection === "all" ? "1px solid var(--border)" : "none" }}>
+                      <div>
+                        <div className="pronon-section-title" style={{ marginBottom: 8 }}>
+                          PRONONCIATION AVEC LES VOYELLES COURTES (حَرَكَات)
+                        </div>
+                        <div className="pronon-detail-harakats">
+                          {HARAKATS.slice(0, 4).map((h, hi) => {
+                            const withH = selectedLetter.letter + h.sign;
+                            const pid = `detail-h-${selected}-${hi}`;
+                            return (
+                              <div
+                                key={hi}
+                                className={`pronon-detail-hbtn${playingId === pid ? " playing" : ""}`}
+                                onClick={() => speak(withH, pid)}
+                              >
+                                <div className="pronon-detail-hbtn-arabic">{withH}</div>
+                                <div className="pronon-detail-hbtn-name">{h.name.toUpperCase()}</div>
+                                <div className="pronon-detail-hbtn-desc">{h.desc}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Voyelles longues (Madd) & Chadda/Tanwîn */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                        <div>
+                          <div className="pronon-section-title" style={{ marginBottom: 6 }}>
+                            VOYELLES LONGUES (مَدّ · 2 TEMPS)
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                            {letterProfile.maddaForms.map((m, mi) => {
+                              const pid = `madd-${selected}-${mi}`;
+                              return (
+                                <button
+                                  key={m.label}
+                                  type="button"
+                                  onClick={() => speak(m.synth, pid)}
+                                  style={{
+                                    padding: "8px 6px",
+                                    borderRadius: 8,
+                                    border: `1px solid ${playingId === pid ? "var(--teal)" : "var(--border)"}`,
+                                    background: playingId === pid ? "rgba(86, 212, 188, 0.14)" : "var(--surface3)",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "center",
+                                    gap: 2,
+                                  }}
+                                  title={m.desc}
+                                >
+                                  <span style={{ fontFamily: "'Amiri Quran', serif", fontSize: 22, color: "var(--gold2)", direction: "rtl" }}>
+                                    {m.arabic}
+                                  </span>
+                                  <span style={{ fontSize: 8.5, color: "var(--text3)" }}>{m.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="pronon-section-title" style={{ marginBottom: 6 }}>
+                            CHADDA & TANWÎN (شَدَّة وَتَنْوِين)
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+                            {letterProfile.advancedHarakatForms.map((ah, ahi) => {
+                              const pid = `adv-h-${selected}-${ahi}`;
+                              return (
+                                <button
+                                  key={ah.label}
+                                  type="button"
+                                  onClick={() => speak(ah.synth, pid)}
+                                  style={{
+                                    padding: "8px 4px",
+                                    borderRadius: 8,
+                                    border: `1px solid ${playingId === pid ? "var(--teal)" : "var(--border)"}`,
+                                    background: playingId === pid ? "rgba(86, 212, 188, 0.14)" : "var(--surface3)",
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "center",
+                                    gap: 2,
+                                  }}
+                                  title={ah.desc}
+                                >
+                                  <span style={{ fontFamily: "'Amiri Quran', serif", fontSize: 20, color: "var(--teal2)", direction: "rtl" }}>
+                                    {ah.arabic}
+                                  </span>
+                                  <span style={{ fontSize: 8, color: "var(--text3)" }}>{ah.label.split(" ")[0]}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Exemples coraniques avec écoute audio */}
+                      {selDetail?.exampleWords && (
+                        <div>
+                          <div className="pronon-section-title" style={{ marginBottom: 8 }}>
+                            EXEMPLES DE MOTS CORANIQUES
+                          </div>
+                          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                            {selDetail.exampleWords.map((ex, exi) => (
+                              <div
+                                key={exi}
+                                style={{
+                                  flex: "1 1 130px",
+                                  padding: "8px 12px",
+                                  background: "var(--surface3)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: 8,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  cursor: "pointer",
+                                }}
+                                onClick={() => speak(ex.arabic, `ex-word-${exi}`)}
+                                title="Cliquer pour écouter ce mot"
+                              >
+                                <div>
+                                  <div style={{ fontFamily: "'Amiri Quran', serif", fontSize: 20, color: "var(--gold2)", direction: "rtl" }}>
+                                    {ex.arabic}
+                                  </div>
+                                  <div style={{ fontSize: 9, color: "var(--text3)" }}>
+                                    {ex.trans} · {ex.meaning}
+                                  </div>
+                                </div>
+                                <span style={{ fontSize: 11, color: "var(--teal2)" }}>🔊</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
                   )}
 
-                  {/* Formes selon la position */}
-                  <div>
-                    <div className="pronon-section-title" style={{ marginBottom: 8 }}>
-                      FORMES SELON LA POSITION DANS LE MOT
-                    </div>
-                    <div className="pronon-detail-forms">
-                      {[
-                        ["Isolée", selectedLetter.isolated],
-                        ["Initiale", selectedLetter.initial],
-                        ["Médiane", selectedLetter.medial],
-                        ["Finale", selectedLetter.final],
-                      ].map(([pos, form]) => (
-                        <div
-                          key={pos}
-                          className="pronon-form-item"
-                          onClick={() => speak(form, `form-${pos}`)}
-                          style={{ cursor: "pointer" }}
-                          title="Cliquer pour écouter la prononciation"
-                        >
-                          <div className="pronon-form-arabic">{form}</div>
-                          <div className="pronon-form-label">{pos.toUpperCase()}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Entraînement avec voyelles courtes */}
-                  <div>
-                    <div className="pronon-section-title" style={{ marginBottom: 8 }}>
-                      PRONONCIATION AVEC LES VOYELLES
-                    </div>
-                    <div className="pronon-detail-harakats">
-                      {HARAKATS.slice(0, 4).map((h, hi) => {
-                        const withH = selectedLetter.letter + h.sign;
-                        const pid = `detail-h-${selected}-${hi}`;
-                        return (
-                          <div
-                            key={hi}
-                            className={`pronon-detail-hbtn${playingId === pid ? " playing" : ""}`}
-                            onClick={() => speak(withH, pid)}
-                          >
-                            <div className="pronon-detail-hbtn-arabic">{withH}</div>
-                            <div className="pronon-detail-hbtn-name">{h.name.toUpperCase()}</div>
-                            <div className="pronon-detail-hbtn-desc">{h.desc}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Exemples coraniques avec écoute audio */}
-                  {selDetail?.exampleWords && (
-                    <div>
-                      <div className="pronon-section-title" style={{ marginBottom: 8 }}>
-                        EXEMPLES DE MOTS CORANIQUES
+                  {/* ── SECTION 4 : ÉCRITURE, LETTRES PROCHES & PIÈGES CORANIQUES ── */}
+                  {(detailSection === "all" || detailSection === "ecriture") && (
+                    <div id="letter-writing-pitfalls" style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: detailSection === "all" ? 10 : 0, borderTop: detailSection === "all" ? "1px solid var(--border)" : "none" }}>
+                      <div className="pronon-section-title">
+                        {isChild ? "✍️ COMMENT L'ÉCRIRE & SECRETS DU CORAN" : "CALLIGRAPHIE, PIÈGES À ÉVITER & REPÈRES CORANIQUES"}
                       </div>
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                        {selDetail.exampleWords.map((ex, exi) => (
-                          <div
-                            key={exi}
-                            style={{
-                              flex: "1 1 120px",
-                              padding: "8px 12px",
-                              background: "var(--surface3)",
-                              border: "1px solid var(--border)",
-                              borderRadius: 8,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              cursor: "pointer",
-                            }}
-                            onClick={() => speak(ex.arabic, `ex-word-${exi}`)}
-                            title="Cliquer pour écouter ce mot"
-                          >
-                            <div>
-                              <div style={{ fontFamily: "'Amiri Quran', serif", fontSize: 20, color: "var(--gold2)", direction: "rtl" }}>
-                                {ex.arabic}
-                              </div>
-                              <div style={{ fontSize: 9, color: "var(--text3)" }}>{ex.meaning}</div>
-                            </div>
-                            <span style={{ fontSize: 11, color: "var(--teal2)" }}>🔊</span>
+
+                      {/* Guide d'écriture */}
+                      <div style={{ padding: "10px 12px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ fontSize: 9.5, fontWeight: 700, color: "var(--teal2)" }}>
+                          ✍️ {isChild ? "ASTUCE DE DESSIN MAGIQUE :" : "TRACÉ PAS-À-PAS (DROITE → GAUCHE) :"}
+                        </div>
+                        <div style={{ fontSize: 10.5, color: "var(--text)", lineHeight: 1.5 }}>
+                          {isChild ? letterProfile.childWritingTip : letterProfile.writingSteps}
+                        </div>
+                      </div>
+
+                      {/* Lettres proches / confondues avec comparaison audio directe */}
+                      {letterProfile.confusionPairs.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ fontSize: 9.5, fontWeight: 700, color: "#ffd166" }}>
+                            🔍 NE PAS CONFONDRE AVEC (CLIQUER POUR COMPARER LE SON) :
                           </div>
-                        ))}
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 8 }}>
+                            {letterProfile.confusionPairs.map((pair, pi) => (
+                              <button
+                                key={pair.letter + pi}
+                                type="button"
+                                onClick={() => speak(pair.letter, `cmp-${pi}`)}
+                                style={{
+                                  textAlign: "left",
+                                  padding: "8px 10px",
+                                  borderRadius: 8,
+                                  background: "var(--surface3)",
+                                  border: "1px solid var(--border)",
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 10,
+                                }}
+                              >
+                                <span style={{ fontFamily: "'Amiri Quran', serif", fontSize: 26, color: "#ffd166", minWidth: 28, textAlign: "center" }}>
+                                  {pair.letter}
+                                </span>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text)" }}>
+                                    vs {pair.name} 🔊
+                                  </span>
+                                  <span style={{ fontSize: 9, color: "var(--text2)", lineHeight: 1.35 }}>
+                                    {pair.difference}
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Piège courant + Fait coranique */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                        <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(244, 63, 94, 0.08)", border: "1px solid rgba(244, 63, 94, 0.3)", display: "flex", flexDirection: "column", gap: 3 }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#fda4af" }}>
+                            ⚠️ {isChild ? "PETIT PIÈGE À ÉVITER" : "ERREUR FRÉQUENTE À CORRIGER"}
+                          </div>
+                          <div style={{ fontSize: 10, color: "var(--text2)", lineHeight: 1.45 }}>
+                            {isChild ? letterProfile.childMistakeTip : letterProfile.commonMistake}
+                          </div>
+                        </div>
+
+                        <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(255, 183, 3, 0.08)", border: "1px solid rgba(255, 183, 3, 0.3)", display: "flex", flexDirection: "column", gap: 3 }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: "#ffd166" }}>
+                            📖 {isChild ? "LE SAVIEZ-VOUS ?" : "REPÈRE DANS LE SAINT CORAN"}
+                          </div>
+                          <div style={{ fontSize: 10, color: "var(--text2)", lineHeight: 1.45 }}>
+                            {isChild ? letterProfile.childFact : letterProfile.quranFact}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}

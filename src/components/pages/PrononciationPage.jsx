@@ -58,10 +58,10 @@ export function PrononciationPage() {
     return detail.makhrajGeneral === organFilter;
   });
 
-  const sel = selected !== null && selected < ARABIC_LETTERS.length ? ARABIC_LETTERS[selected] : ARABIC_LETTERS[0];
-  const selDetail = sel ? getLetterAnatomy(sel.letter) : null;
-  const isSelectedHeavy = sel ? isHeavyLetter(sel.letter) : false;
-  const isSelectedItbaq = sel ? isItbaqLetter(sel.letter) : false;
+  const selectedLetter = selected !== null && selected < ARABIC_LETTERS.length ? ARABIC_LETTERS[selected] : ARABIC_LETTERS[0];
+  const selDetail = selectedLetter ? getLetterAnatomy(selectedLetter.letter) : null;
+  const isSelectedHeavy = selectedLetter ? isHeavyLetter(selectedLetter.letter) : false;
+  const isSelectedItbaq = selectedLetter ? isItbaqLetter(selectedLetter.letter) : false;
 
   return (
     <main className="main" style={{ background: "var(--bg)" }}>
@@ -415,13 +415,13 @@ export function PrononciationPage() {
 
             {/* Colonne droite : Fiche détaillée + Schéma anatomique SVG interactif */}
             <div>
-              {sel ? (
+              {selectedLetter ? (
                 <div className="pronon-detail-panel">
                   {/* En-tête : Makhraj + Statut Grave/Fin + Bouton Play */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <div className="pronon-makhraj-tag">
-                        📍 {isChild ? (selDetail?.childOrgan || selDetail?.organTitle || sel.makhraj) : (selDetail?.organTitle || sel.makhraj)}
+                        📍 {isChild ? (selDetail?.childOrgan || selDetail?.organTitle || selectedLetter.makhraj) : (selDetail?.organTitle || selectedLetter.makhraj)}
                       </div>
 
                       {isSelectedHeavy ? (
@@ -461,7 +461,7 @@ export function PrononciationPage() {
                       <button
                         className={`pronon-play-btn${playingId === `letter-${selected}` ? " playing" : ""}`}
                         onClick={() =>
-                          playingId === `letter-${selected}` ? stopSpeak() : speak(sel.letter, `letter-${selected}`)
+                          playingId === `letter-${selected}` ? stopSpeak() : speak(selectedLetter.letter, `letter-${selected}`)
                         }
                         style={{
                           padding: "8px 16px",
@@ -474,8 +474,8 @@ export function PrononciationPage() {
 
                       <button
                         id="btn-validate-current-letter"
-                        onClick={() => dispatch(uiActions.toggleValidateLetter(sel.letter))}
-                        title={validatedLetters.includes(sel.letter) ? "Cliquer pour retirer la validation" : "Valider cette lettre pour gagner une étoile"}
+                        onClick={() => dispatch(uiActions.toggleValidateLetter(selectedLetter.letter))}
+                        title={validatedLetters.includes(selectedLetter.letter) ? "Cliquer pour retirer la validation" : "Valider cette lettre pour gagner une étoile"}
                         style={{
                           padding: "8px 14px",
                           borderRadius: 8,
@@ -483,20 +483,20 @@ export function PrononciationPage() {
                           fontFamily: "'Cinzel', serif",
                           fontWeight: 700,
                           cursor: "pointer",
-                          border: validatedLetters.includes(sel.letter)
+                          border: validatedLetters.includes(selectedLetter.letter)
                             ? "1.5px solid #56d4bc"
                             : "1.5px solid #ffd166",
-                          background: validatedLetters.includes(sel.letter)
+                          background: validatedLetters.includes(selectedLetter.letter)
                             ? "linear-gradient(135deg, rgba(86, 212, 188, 0.22) 0%, rgba(86, 212, 188, 0.1) 100%)"
                             : "linear-gradient(135deg, rgba(255, 209, 102, 0.22) 0%, rgba(255, 209, 102, 0.1) 100%)",
-                          color: validatedLetters.includes(sel.letter) ? "var(--teal2)" : "#ffd166",
+                          color: validatedLetters.includes(selectedLetter.letter) ? "var(--teal2)" : "#ffd166",
                           display: "inline-flex",
                           alignItems: "center",
                           gap: 6,
                           transition: "all .15s",
                         }}
                       >
-                        <span>{validatedLetters.includes(sel.letter) ? "✅ LETTRE VALIDÉE !" : "⭐ VALIDER CETTE LETTRE"}</span>
+                        <span>{validatedLetters.includes(selectedLetter.letter) ? "✅ LETTRE VALIDÉE !" : "⭐ VALIDER CETTE LETTRE"}</span>
                       </button>
                     </div>
                   </div>
@@ -504,14 +504,14 @@ export function PrononciationPage() {
                   {/* Lettre géante & Titre */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14 }}>
                     <div className="pronon-detail-letter" style={isSelectedHeavy ? { color: "#ffe082" } : {}}>
-                      {sel.letter}
+                      {selectedLetter.letter}
                     </div>
                     <div>
                       <div className="pronon-detail-name">
-                        {sel.name.toUpperCase()} · /{sel.trans}/
+                        {selectedLetter.name.toUpperCase()} · /{selectedLetter.trans}/
                       </div>
                       <div style={{ fontSize: 10, color: "var(--text3)", textAlign: "center", marginTop: 2 }}>
-                        {isChild ? (selDetail?.childOrgan || selDetail?.makhrajLabel || sel.makhraj) : (selDetail?.makhrajLabel || sel.makhraj)}
+                        {isChild ? (selDetail?.childOrgan || selDetail?.makhrajLabel || selectedLetter.makhraj) : (selDetail?.makhrajLabel || selectedLetter.makhraj)}
                       </div>
                     </div>
                   </div>
@@ -519,7 +519,7 @@ export function PrononciationPage() {
                   {/* ── SCHÉMA ANATOMIQUE SVG INTERACTIF DE LA BOUCHE / GORGE / LANGUE ── */}
                   <div style={{ margin: "4px 0" }}>
                     <MakharijAnatomyDiagram
-                      activeLetter={sel.letter}
+                      activeLetter={selectedLetter.letter}
                       isHeavyMode={isSelectedHeavy}
                       isChild={isChild}
                       showLabels={true}
@@ -543,7 +543,7 @@ export function PrononciationPage() {
                         🌟 ASTUCE MAGIQUE DU PETIT CHAMPION :
                       </div>
                       <div style={{ fontSize: 12, color: "#fff", lineHeight: 1.6, fontWeight: 500 }}>
-                        {selDetail?.childTip || selDetail?.howToPronounce || sel.tip}
+                        {selDetail?.childTip || selDetail?.howToPronounce || selectedLetter.tip}
                       </div>
                       {selDetail?.howToPronounceChild && (
                         <div style={{ fontSize: 10.5, color: "var(--teal2)", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 5, marginTop: 2 }}>
@@ -567,7 +567,7 @@ export function PrononciationPage() {
                         POSITION ANATOMIQUE DES ORGANES (LANGUE, GORGE, LÈVRES) :
                       </div>
                       <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.6 }}>
-                        {selDetail?.howToPronounce || sel.tip}
+                        {selDetail?.howToPronounce || selectedLetter.tip}
                       </div>
                       {selDetail?.anatomicalTip && (
                         <div style={{ fontSize: 10, color: "var(--teal2)", borderTop: "1px solid var(--border2)", paddingTop: 4, marginTop: 2 }}>
@@ -584,10 +584,10 @@ export function PrononciationPage() {
                     </div>
                     <div className="pronon-detail-forms">
                       {[
-                        ["Isolée", sel.isolated],
-                        ["Initiale", sel.initial],
-                        ["Médiane", sel.medial],
-                        ["Finale", sel.final],
+                        ["Isolée", selectedLetter.isolated],
+                        ["Initiale", selectedLetter.initial],
+                        ["Médiane", selectedLetter.medial],
+                        ["Finale", selectedLetter.final],
                       ].map(([pos, form]) => (
                         <div
                           key={pos}
@@ -610,7 +610,7 @@ export function PrononciationPage() {
                     </div>
                     <div className="pronon-detail-harakats">
                       {HARAKATS.slice(0, 4).map((h, hi) => {
-                        const withH = sel.letter + h.sign;
+                        const withH = selectedLetter.letter + h.sign;
                         const pid = `detail-h-${selected}-${hi}`;
                         return (
                           <div

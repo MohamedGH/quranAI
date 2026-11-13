@@ -1,7 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+// @vitest-environment jsdom
+import React from "react";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { Provider } from "react-redux";
+import { MemoryRouter } from "react-router-dom";
 import { store, sel, uiActions } from "../src/store.js";
-import { getNavigationTabs, getUxWizardConfig, UX_MODES } from "../src/utils/uxProfileManager.js";
-import { ARABIC_LETTERS } from "../src/utils/arabicUtils.js";
+import { getNavigationTabs, getUxWizardConfig } from "../src/utils/uxProfileManager.js";
+import { PrononciationPage } from "../src/components/pages/PrononciationPage.jsx";
 
 describe("Child Mode Wizard & Letter Validation to Unlock Quran Menu", () => {
   beforeEach(() => {
@@ -156,6 +161,59 @@ describe("Child Mode Wizard & Letter Validation to Unlock Quran Menu", () => {
 
       store.dispatch(uiActions.setUxMode("expert"));
       expect(sel.isQuranUnlockedForChild(store.getState())).toBe(true);
+    });
+  });
+
+  describe("PrononciationPage Component Rendering & Validation Interaction", () => {
+    afterEach(() => {
+      cleanup();
+    });
+
+    it("renders PrononciationPage in child mode without TDZ/ReferenceError and toggles letter validation", () => {
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            { initialEntries: ["/prononciation"] },
+            React.createElement(PrononciationPage)
+          )
+        )
+      );
+
+      expect(screen.getByText(/DÉFI DU PETIT CHAMPION/i)).toBeTruthy();
+      expect(screen.getByText(/Coran verrouillé/i)).toBeTruthy();
+
+      const validateBtn = document.getElementById("btn-validate-current-letter");
+      expect(validateBtn).toBeTruthy();
+      expect(validateBtn.textContent).toContain("VALIDER CETTE LETTRE");
+
+      fireEvent.click(validateBtn);
+      expect(sel.validatedLettersCount(store.getState())).toBe(1);
+      expect(validateBtn.textContent).toContain("LETTRE VALIDÉE");
+    });
+
+    it("validates all letters from the quest banner button and reveals unlock CTA", () => {
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            { initialEntries: ["/prononciation"] },
+            React.createElement(PrononciationPage)
+          )
+        )
+      );
+
+      const validateAllBtn = document.getElementById("btn-quest-validate-all");
+      expect(validateAllBtn).toBeTruthy();
+      fireEvent.click(validateAllBtn);
+
+      expect(sel.allLettersValidated(store.getState())).toBe(true);
+      expect(sel.isQuranUnlockedForChild(store.getState())).toBe(true);
+      expect(document.getElementById("btn-quest-go-quran")).toBeTruthy();
     });
   });
 });

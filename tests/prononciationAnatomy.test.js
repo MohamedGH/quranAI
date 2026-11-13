@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
+// @vitest-environment jsdom
+import { describe, it, expect, afterEach } from "vitest";
 import React from "react";
+import { render, fireEvent, cleanup } from "@testing-library/react";
 import {
   GENERAL_MAKHAREJ,
   ANATOMICAL_ZONES,
@@ -8,6 +10,7 @@ import {
   getLetterAnatomy,
   isHeavyLetter,
   isItbaqLetter,
+  getTonguePostureSpec,
 } from "../src/utils/makharijData.js";
 import { MakharijAnatomyDiagram } from "../src/components/common/MakharijAnatomyDiagram.jsx";
 import { HeavyLettersGuide } from "../src/components/common/HeavyLettersGuide.jsx";
@@ -238,6 +241,10 @@ describe("makharijData - Anatomical speech organs & Tajweed phonetics", () => {
 });
 
 describe("Prononciation Visual Components", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("exports MakharijAnatomyDiagram as a valid React component", () => {
     expect(typeof MakharijAnatomyDiagram).toBe("function");
   });
@@ -248,5 +255,130 @@ describe("Prononciation Visual Components", () => {
 
   it("exports PrononciationPage as a valid React component", () => {
     expect(typeof PrononciationPage).toBe("function");
+  });
+
+  describe("getTonguePostureSpec - Pure Functional Tafkhim & Tarqiq Posture Logic", () => {
+    it("returns tafkhim_itbaq posture with spoon concavity for the 4 Itbaq letters (ط, ض, ص, ظ)", () => {
+      ["ط", "ض", "ص", "ظ"].forEach((ltr) => {
+        const spec = getTonguePostureSpec(ltr);
+        expect(spec.category).toBe("tafkhim_itbaq");
+        expect(spec.isTafkhim).toBe(true);
+        expect(spec.isItbaq).toBe(true);
+        expect(spec.showElevationArrow).toBe(true);
+        expect(spec.showSpoonConcavity).toBe(true);
+        expect(spec.showPalatalResonance).toBe(true);
+        expect(spec.ghostThinPath).toBeTruthy();
+        expect(spec.tonguePath).not.toBe(spec.ghostThinPath);
+        expect(spec.postureLabel).toContain("TAFKHÎM");
+        expect(spec.postureLabel).toContain("ITBÂQ");
+      });
+    });
+
+    it("returns tafkhim_istila posture for the 3 non-Itbaq heavy letters (ق, غ, خ)", () => {
+      ["ق", "غ", "خ"].forEach((ltr) => {
+        const spec = getTonguePostureSpec(ltr);
+        expect(spec.category).toBe("tafkhim_istila");
+        expect(spec.isTafkhim).toBe(true);
+        expect(spec.isItbaq).toBe(false);
+        expect(spec.showElevationArrow).toBe(true);
+        expect(spec.showSpoonConcavity).toBe(false);
+        expect(spec.showPalatalResonance).toBe(true);
+        expect(spec.ghostThinPath).toBeTruthy();
+        expect(spec.postureLabel).toContain("TAFKHÎM");
+      });
+    });
+
+    it("returns tarqiq flat tongue posture for thin letters (ت, د, س, ك, ب)", () => {
+      ["ت", "د", "س", "ك", "ب"].forEach((ltr) => {
+        const spec = getTonguePostureSpec(ltr);
+        expect(spec.category).toBe("tarqiq");
+        expect(spec.isTafkhim).toBe(false);
+        expect(spec.isItbaq).toBe(false);
+        expect(spec.showElevationArrow).toBe(false);
+        expect(spec.showSpoonConcavity).toBe(false);
+        expect(spec.ghostThinPath).toBeNull();
+        expect(spec.postureLabel).toContain("TARQÎQ");
+      });
+    });
+
+    it("respects isHeavyOverride=true when no activeLetter is supplied", () => {
+      const spec = getTonguePostureSpec(null, true);
+      expect(spec.isTafkhim).toBe(true);
+      expect(spec.category).toBe("tafkhim_istila");
+      expect(spec.showElevationArrow).toBe(true);
+    });
+  });
+
+  describe("MakharijAnatomyDiagram - Automatic Tafkhim SVG Visualization", () => {
+    it("automatically shows Tafkhim + Itbaq tongue posture when heavy letter ط is selected", () => {
+      const { container } = render(
+        React.createElement(MakharijAnatomyDiagram, {
+          activeLetter: "ط",
+          isHeavyMode: true,
+          isChild: false,
+        })
+      );
+
+      const svg = container.querySelector("svg.makharij-svg");
+      expect(svg.getAttribute("data-tafkhim")).toBe("true");
+      expect(svg.getAttribute("data-itbaq")).toBe("true");
+
+      expect(container.querySelector(".tafkhim-posture-layer")).toBeTruthy();
+      expect(container.querySelector(".istila-arrow")).toBeTruthy();
+      expect(container.querySelector(".itbaq-spoon-indicator")).toBeTruthy();
+      expect(container.querySelector(".tarqiq-posture-layer")).toBeNull();
+
+      const status = document.getElementById("diagram-posture-status");
+      expect(status.getAttribute("data-posture")).toBe("tafkhim_itbaq");
+      expect(status.textContent).toContain("TAFKHÎM");
+      expect(status.textContent).toContain("ITBÂQ");
+    });
+
+    it("automatically shows Tafkhim Isti'la' posture even if caller omits isHeavyMode prop (e.g. activeLetter='ق')", () => {
+      const { container } = render(
+        React.createElement(MakharijAnatomyDiagram, {
+          activeLetter: "ق",
+        })
+      );
+
+      const svg = container.querySelector("svg.makharij-svg");
+      expect(svg.getAttribute("data-tafkhim")).toBe("true");
+      expect(svg.getAttribute("data-itbaq")).toBe("false");
+      expect(container.querySelector(".tafkhim-posture-layer")).toBeTruthy();
+      expect(container.querySelector(".istila-arrow")).toBeTruthy();
+      expect(container.querySelector(".tafkhim-resonance-arcs")).toBeTruthy();
+    });
+
+    it("renders flat Tarqiq tongue posture for thin letter ت and allows toggling Fine vs Grave comparison", () => {
+      const { container } = render(
+        React.createElement(MakharijAnatomyDiagram, {
+          activeLetter: "ت",
+          isHeavyMode: false,
+        })
+      );
+
+      const svg = container.querySelector("svg.makharij-svg");
+      expect(svg.getAttribute("data-tafkhim")).toBe("false");
+      expect(container.querySelector(".tarqiq-posture-layer")).toBeTruthy();
+      expect(container.querySelector(".tafkhim-posture-layer")).toBeNull();
+
+      const compareBtn = document.getElementById("btn-diagram-compare-tafkhim");
+      fireEvent.click(compareBtn);
+      expect(container.querySelector(".tafkhim-posture-layer")).toBeTruthy();
+    });
+
+    it("adapts Tafkhim posture descriptions for Child Mode (isChild=true)", () => {
+      const { container } = render(
+        React.createElement(MakharijAnatomyDiagram, {
+          activeLetter: "ص",
+          isHeavyMode: true,
+          isChild: true,
+        })
+      );
+
+      const status = document.getElementById("diagram-posture-status");
+      expect(status.textContent).toContain("POSITION CHAMPION");
+      expect(container.querySelector(".tafkhim-posture-layer").textContent).toContain("Cuillère d'écho");
+    });
   });
 });

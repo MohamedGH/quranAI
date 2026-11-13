@@ -1029,3 +1029,82 @@ export const isItbaqLetter = (letterChar) => {
   if (!letterChar) return false;
   return HEAVY_LETTERS_DATA.itbaqLetters.includes(letterChar);
 };
+
+const TONGUE_PATHS = Object.freeze({
+  TARQIQ:
+    "M 185 285 C 192 250 208 232 238 225 C 272 218 304 214 326 210 C 316 238 292 262 250 282 C 215 296 195 295 185 285 Z",
+  TAFKHIM_ISTILA:
+    "M 176 290 C 174 246 186 205 210 192 C 232 204 264 212 296 212 C 314 212 322 210 326 208 C 314 238 290 266 246 288 C 210 300 188 298 176 290 Z",
+  TAFKHIM_ITBAQ:
+    "M 174 290 C 170 242 184 200 212 188 C 236 212 268 216 298 202 C 314 194 324 188 330 190 C 318 234 292 265 246 288 C 208 302 186 300 174 290 Z",
+});
+
+/**
+ * Pure functional descriptor returning anatomical tongue posture, SVG geometry,
+ * and Tafkhim/Tarqiq indicators for any Arabic letter.
+ */
+export const getTonguePostureSpec = (letterChar, isHeavyOverride = false) => {
+  const heavy = Boolean(isHeavyOverride || isHeavyLetter(letterChar));
+  const itbaq = Boolean(isItbaqLetter(letterChar));
+
+  if (heavy && itbaq) {
+    return Object.freeze({
+      category: "tafkhim_itbaq",
+      isTafkhim: true,
+      isItbaq: true,
+      tonguePath: TONGUE_PATHS.TAFKHIM_ITBAQ,
+      ghostThinPath: TONGUE_PATHS.TARQIQ,
+      postureLabel: "TAFKHÎM MAXIMAL · ISTI'LÂ' + ITBÂQ",
+      childPostureLabel: "🦁 POSITION CHAMPION : DOS RELEVÉ + CUILLÈRE",
+      postureDetail:
+        "Arrière de la langue élevé vers le palais mou, milieu creusé en cuillère et avant collé à la voûte palatine : le son résonne pleinement.",
+      childPostureDetail:
+        "Ta langue monte à l'arrière comme un toboggan et se creuse au milieu comme une coupelle pour faire résonner une grosse voix de lion !",
+      mechanisms: Object.freeze(["Isti'lâ' (الاستعلاء)", "Itbâq (الإطباق)", "Résonance Palatine"]),
+      showElevationArrow: true,
+      showSpoonConcavity: true,
+      showPalatalResonance: true,
+      showPharyngealConstriction: true,
+    });
+  }
+
+  if (heavy) {
+    return Object.freeze({
+      category: "tafkhim_istila",
+      isTafkhim: true,
+      isItbaq: false,
+      tonguePath: TONGUE_PATHS.TAFKHIM_ISTILA,
+      ghostThinPath: TONGUE_PATHS.TARQIQ,
+      postureLabel: "TAFKHÎM · ISTI'LÂ' (التَّفْخِيم)",
+      childPostureLabel: "🦁 POSITION GRAVE : ARRIÈRE DE LA LANGUE RELEVÉ",
+      postureDetail:
+        "La racine et l'arrière de la langue remontent vers le voile du palais avec léger recul vers le pharynx pour épaissir le timbre.",
+      childPostureDetail:
+        "L'arrière de ta langue remonte tout en haut près de la luette pour fabriquer un beau son grave et profond !",
+      mechanisms: Object.freeze(["Isti'lâ' (الاستعلاء)", "Rétraction Pharyngienne", "Résonance Grave"]),
+      showElevationArrow: true,
+      showSpoonConcavity: false,
+      showPalatalResonance: true,
+      showPharyngealConstriction: true,
+    });
+  }
+
+  return Object.freeze({
+    category: "tarqiq",
+    isTafkhim: false,
+    isItbaq: false,
+    tonguePath: TONGUE_PATHS.TARQIQ,
+    ghostThinPath: null,
+    postureLabel: "TARQÎQ · LANGUE DETENDUE (التَّرْقِيق)",
+    childPostureLabel: "✨ POSITION DOUCE : LANGUE PLATE ET LÉGÈRE",
+    postureDetail:
+      "L'arrière de la langue reste bas et détendu, laissant l'air circuler horizontalement pour un son clair et fin.",
+    childPostureDetail:
+      "Ta langue reste toute plate et détendue au fond de la bouche : l'air sort tout doux comme une petite plume !",
+    mechanisms: Object.freeze(["Tarqîq (الترقيق)", "Langue Plate"]),
+    showElevationArrow: false,
+    showSpoonConcavity: false,
+    showPalatalResonance: false,
+    showPharyngealConstriction: false,
+  });
+};

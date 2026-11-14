@@ -8,6 +8,7 @@ import {
   setLogLevel,
   disableNetwork,
 } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // ─── Firebase config ─────────────────────────────────────────────────────────
 const envApiKey = import.meta.env.VITE_FIREBASE_API_KEY;
@@ -39,6 +40,8 @@ export const firebaseAuth = getAuth(firebaseApp);
 export const firebaseDb = initializeFirestore(firebaseApp, {
   experimentalForceLongPolling: true,
 });
+
+export const firebaseStorage = getStorage(firebaseApp);
 
 // Suppress internal Firestore connection warnings when offline or unconfigured
 setLogLevel("silent");

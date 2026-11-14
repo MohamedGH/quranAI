@@ -11,6 +11,7 @@ export const VALID_PAGES = Object.freeze([
   "collections",
   "revision",
   "offline",
+  "recordings",
 ]);
 
 /**

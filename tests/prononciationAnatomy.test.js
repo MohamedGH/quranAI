@@ -380,5 +380,41 @@ describe("Prononciation Visual Components", () => {
       expect(status.textContent).toContain("POSITION CHAMPION");
       expect(container.querySelector(".tafkhim-posture-layer").textContent).toContain("Cuillère d'écho");
     });
+
+    it("renders active zone legend below the SVG stage without overlapping the tongue diagram", () => {
+      const { rerender } = render(
+        React.createElement(MakharijAnatomyDiagram, {
+          activeLetter: "ط",
+          isHeavyMode: true,
+        })
+      );
+
+      const stage = document.getElementById("makharij-svg-stage");
+      const zoneCard = document.getElementById("diagram-active-zone-card");
+      const legendBar = document.getElementById("diagram-organ-legend");
+
+      expect(stage).toBeTruthy();
+      expect(zoneCard).toBeTruthy();
+      expect(legendBar).toBeTruthy();
+
+      // The active zone card must NOT sit inside the SVG stage or use absolute overlay positioning
+      expect(stage.contains(zoneCard)).toBe(false);
+      expect(zoneCard.style.position).not.toBe("absolute");
+      expect(stage.querySelectorAll("div")).toHaveLength(0);
+
+      // Interactive click on organ legend updates active zone and resets when activeLetter changes
+      const organButtons = legendBar.querySelectorAll("button");
+      expect(organButtons).toHaveLength(5);
+      fireEvent.click(organButtons[0]); // Gorge (halq)
+      expect(zoneCard.textContent).toContain("gorge");
+
+      rerender(
+        React.createElement(MakharijAnatomyDiagram, {
+          activeLetter: "ف",
+          isHeavyMode: false,
+        })
+      );
+      expect(document.getElementById("diagram-active-zone-card").textContent).toContain("Lèvre inférieure");
+    });
   });
 });

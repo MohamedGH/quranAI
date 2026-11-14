@@ -56,6 +56,8 @@ const uiSlice = createSlice({
     validatedLetters:    load("quran_validatedLetters", []),
     childWizardSeen:     load("quran_child_wizard_seen", false),
     showChildCelebrationModal: false,
+    voiceCompressionPreset: load("quran_voiceCompressionPreset", "balanced"),
+    storagePersisted:    false,
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -370,6 +372,14 @@ const uiSlice = createSlice({
     },
     setShowChildCelebrationModal: (s, a) => {
       s.showChildCelebrationModal = Boolean(a.payload);
+    },
+    setVoiceCompressionPreset: (s, a) => {
+      const preset = ["compact", "balanced", "high"].includes(a.payload) ? a.payload : "balanced";
+      s.voiceCompressionPreset = preset;
+      save("quran_voiceCompressionPreset", preset);
+    },
+    setStoragePersisted: (s, a) => {
+      s.storagePersisted = Boolean(a.payload);
     },
   },
   extraReducers: (builder) => {
@@ -1073,6 +1083,8 @@ const rawSel = {
   isQuranUnlockedForChild:(s) => (s.ui.uxMode !== "child") || ((s.ui.validatedLetters || []).length >= 28),
   childWizardSeen:     (s) => Boolean(s.ui.childWizardSeen),
   showChildCelebrationModal:(s) => Boolean(s.ui.showChildCelebrationModal),
+  voiceCompressionPreset:(s) => s.ui.voiceCompressionPreset || "balanced",
+  storagePersisted:    (s) => Boolean(s.ui.storagePersisted),
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

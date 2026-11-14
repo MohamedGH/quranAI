@@ -16,22 +16,41 @@ export function MakharijAnatomyDiagram({
   onSelectZone = () => {},
 }) {
   const [hoveredZone, setHoveredZone] = useState(null);
+  const [manualSelection, setManualSelection] = useState(null);
   const [viewAngle, setViewAngle] = useState("auto"); // "auto" | "tafkhim_compare"
 
   const posture = getTonguePostureSpec(activeLetter, isHeavyMode);
   const showTafkhimComparison = viewAngle === "tafkhim_compare" || posture.isTafkhim;
 
-  // Trouve la zone active
-  const currentZone = Object.values(ANATOMICAL_ZONES).find(
-    (z) => z.id === activeZoneId || (activeLetter && z.letters.includes(activeLetter))
-  );
+  const manualZoneId = manualSelection && manualSelection.forLetter === activeLetter ? manualSelection.zoneId : null;
+
+  // Trouve la zone active (priorité : survol > sélection manuelle pour cette lettre > prop activeZoneId > lettre active)
+  const currentZone =
+    (manualZoneId ? Object.values(ANATOMICAL_ZONES).find((z) => z.id === manualZoneId) : null) ||
+    Object.values(ANATOMICAL_ZONES).find(
+      (z) => z.id === activeZoneId || (activeLetter && z.letters.includes(activeLetter))
+    );
 
   const activeZone = hoveredZone ? ANATOMICAL_ZONES[hoveredZone] : currentZone;
 
+  const handleSelectZoneId = (zoneIdOrArea) => {
+    const exact = Object.values(ANATOMICAL_ZONES).find((z) => z.id === zoneIdOrArea);
+    const byArea =
+      exact ||
+      Object.values(ANATOMICAL_ZONES).find((z) => z.area === zoneIdOrArea && activeLetter && z.letters.includes(activeLetter)) ||
+      Object.values(ANATOMICAL_ZONES).find((z) => z.area === zoneIdOrArea);
+    if (byArea) {
+      setManualSelection({ forLetter: activeLetter, zoneId: byArea.id });
+      onSelectZone(byArea.id);
+    } else {
+      onSelectZone(zoneIdOrArea);
+    }
+  };
+
   return (
-    <div className="makharij-diagram-container" style={{ position: "relative", width: "100%", maxWidth: 520, margin: "0 auto" }}>
+    <div className="makharij-diagram-container" style={{ position: "relative", width: "100%", maxWidth: 520, margin: "0 auto", display: "flex", flexDirection: "column", gap: 8 }}>
       {/* Barre d'outils du diagramme */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 13 }}>{posture.isTafkhim ? "🦁" : isChild ? "🌟" : "🔬"}</span>
           <span style={{ fontSize: 11, fontFamily: "'Cinzel', serif", fontWeight: 700, color: posture.isTafkhim ? "#ffb703" : "var(--gold2)", letterSpacing: 0.8 }}>
@@ -91,7 +110,6 @@ export function MakharijAnatomyDiagram({
         id="diagram-posture-status"
         data-posture={posture.category}
         style={{
-          marginBottom: 8,
           padding: "7px 11px",
           borderRadius: 8,
           background: posture.isTafkhim ? "rgba(255, 183, 3, 0.10)" : "rgba(86, 212, 188, 0.08)",
@@ -114,8 +132,9 @@ export function MakharijAnatomyDiagram({
         </div>
       </div>
 
-      {/* SVG Container */}
+      {/* SVG Stage (100% dégagé — aucune légende superposée sur le dessin) */}
       <div
+        id="makharij-svg-stage"
         style={{
           background: posture.isTafkhim
             ? "radial-gradient(ellipse at 45% 45%, #241d12 0%, #0d0f17 100%)"
@@ -124,7 +143,6 @@ export function MakharijAnatomyDiagram({
           borderRadius: 14,
           padding: 8,
           boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-          position: "relative",
           overflow: "hidden",
         }}
       >
@@ -198,21 +216,19 @@ export function MakharijAnatomyDiagram({
             stroke={activeZone?.area === "khayshum" ? "#38bdf8" : "rgba(56, 189, 248, 0.3)"}
             strokeWidth={activeZone?.area === "khayshum" ? "2.5" : "1.2"}
             style={{ cursor: "pointer", transition: "all .2s" }}
-            onClick={() => onSelectZone("nasal_cavity")}
+            onClick={() => handleSelectZoneId("nasal_cavity")}
           />
-          <text x="280" y="125" textAnchor="middle" fill="#38bdf8" fontSize="10" fontFamily="'Cinzel', serif" opacity="0.8">
+          <text x="280" y="128" textAnchor="middle" fill="#38bdf8" fontSize="10" fontFamily="'Cinzel', serif" opacity="0.85">
             الخَيْشُوم (Nez)
           </text>
 
           {/* 2. Palais dur & Palais mou (Voile) + Luette */}
-          {/* Os du palais dur */}
           <path
             d="M 220 185 C 250 170 290 168 332 178 C 336 179 336 186 332 188 C 290 178 250 180 220 195 Z"
             fill="url(#palateGrad)"
             stroke={showTafkhimComparison ? "#fbbf24" : "rgba(255,255,255,0.3)"}
             strokeWidth={showTafkhimComparison ? "1.4" : "1"}
           />
-          {/* Voile du palais mou et luette qui pend */}
           <path
             d="M 220 185 C 195 190 182 205 180 222 C 178 228 184 230 186 225 C 190 210 200 198 220 195 Z"
             fill="#e2e8f0"
@@ -278,7 +294,15 @@ export function MakharijAnatomyDiagram({
                 strokeDasharray="4 3"
                 opacity="0.85"
               />
-              <text x="268" y="266" fill="#56d4bc" fontSize="8.5" fontWeight="700" textAnchor="middle">
+              <text
+                x="268"
+                y="272"
+                fill="#56d4bc"
+                fontSize="8.5"
+                fontWeight="700"
+                textAnchor="middle"
+                style={{ paintOrder: "stroke", stroke: "#0d0f17", strokeWidth: 3, strokeLinejoin: "round" }}
+              >
                 {viewAngle === "tafkhim_compare" ? "1. Fine (Tarqîq) : Langue plate" : "Réf. fine (plate)"}
               </text>
 
@@ -310,8 +334,8 @@ export function MakharijAnatomyDiagram({
                   strokeLinejoin="round"
                   fill="none"
                 />
-                <line x1="175" y1="84" x2="202" y2="184" stroke="#ffe082" strokeWidth="1" strokeDasharray="3 2" opacity="0.6" />
-                <text x="175" y="76" fill="#ffe082" fontSize="9.5" fontWeight="800" fontFamily="'Cinzel', serif" textAnchor="middle">
+                <line x1="172" y1="62" x2="202" y2="184" stroke="#ffe082" strokeWidth="1" strokeDasharray="3 2" opacity="0.6" />
+                <text x="172" y="54" fill="#ffe082" fontSize="9.5" fontWeight="800" fontFamily="'Cinzel', serif" textAnchor="middle">
                   {isChild ? "🦁 Arrière relevé (Tafkhîm)" : "⬆ TAFKHÎM · ISTI'LÂ'"}
                 </text>
               </g>
@@ -341,8 +365,8 @@ export function MakharijAnatomyDiagram({
                     strokeLinejoin="round"
                     fill="none"
                   />
-                  <line x1="292" y1="84" x2="262" y2="194" stroke="#ffd166" strokeWidth="1" strokeDasharray="3 2" opacity="0.55" />
-                  <text x="292" y="76" fill="#ffd166" fontSize="8.5" fontWeight="700" textAnchor="middle">
+                  <line x1="296" y1="62" x2="262" y2="194" stroke="#ffd166" strokeWidth="1" strokeDasharray="3 2" opacity="0.55" />
+                  <text x="296" y="54" fill="#ffd166" fontSize="8.5" fontWeight="700" textAnchor="middle">
                     {isChild ? "🥣 Cuillère d'écho" : "🥣 Creux (Itbâq)"}
                   </text>
                 </g>
@@ -353,7 +377,7 @@ export function MakharijAnatomyDiagram({
                 <g className="tafkhim-resonance-arcs" opacity="0.88">
                   <path d="M 218 196 Q 238 184 260 192" fill="none" stroke="#ffd166" strokeWidth="1.6" strokeDasharray="3 2" />
                   <path d="M 224 189 Q 244 178 266 186" fill="none" stroke="#ffe082" strokeWidth="1.3" />
-                  <text x="292" y="76" fill="#ffd166" fontSize="8.5" fontWeight="700" textAnchor="middle">
+                  <text x="296" y="54" fill="#ffd166" fontSize="8.5" fontWeight="700" textAnchor="middle">
                     🔊 Écho grave
                   </text>
                 </g>
@@ -385,7 +409,7 @@ export function MakharijAnatomyDiagram({
           {Object.values(ANATOMICAL_ZONES).map((z) => {
             const isTarget = currentZone?.id === z.id;
             const isHover = hoveredZone === z.id;
-            const hasLetter = activeLetter && z.letters.includes(activeLetter);
+            const hasLetter = !manualZoneId && activeLetter && z.letters.includes(activeLetter);
             const isHighlighted = isTarget || isHover || hasLetter;
 
             return (
@@ -395,7 +419,7 @@ export function MakharijAnatomyDiagram({
                 style={{ cursor: "pointer" }}
                 onMouseEnter={() => setHoveredZone(z.id)}
                 onMouseLeave={() => setHoveredZone(null)}
-                onClick={() => onSelectZone(z.id)}
+                onClick={() => handleSelectZoneId(z.id)}
               >
                 {/* Halo d'aura si actif */}
                 {isHighlighted && (
@@ -453,74 +477,68 @@ export function MakharijAnatomyDiagram({
             );
           })}
         </svg>
-
-        {/* Fiche flottante de zone active ou survolée */}
-        {activeZone && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: 8,
-              left: 8,
-              right: 8,
-              background: "rgba(11, 15, 25, 0.94)",
-              backdropFilter: "blur(8px)",
-              border: "1.5px solid #ffb703",
-              borderRadius: 10,
-              padding: "8px 12px",
-              boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-              zIndex: 10,
-              animation: "fadeIn .2s ease",
-            }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 13, color: "#ffb703" }}>{isChild ? "⭐" : "📍"}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", fontFamily: "'Cinzel', serif" }}>
-                  {isChild ? (activeZone.childLabel || activeZone.label) : activeZone.label}
-                </span>
-                <span style={{ fontSize: 11, color: "#ffe082", fontFamily: "'Amiri Quran', serif", direction: "rtl" }}>
-                  ({activeZone.arabic})
-                </span>
-              </div>
-              <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.35 }}>
-                {isChild ? (activeZone.childDescription || activeZone.description) : activeZone.description}
-              </div>
-            </div>
-
-            {/* Lettres du point d'articulation */}
-            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-              {activeZone.letters.map((ltr) => (
-                <span
-                  key={ltr}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 26,
-                    height: 26,
-                    borderRadius: 6,
-                    background: ltr === activeLetter ? "linear-gradient(135deg, #ffb703 0%, #fb8500 100%)" : "rgba(255,255,255,0.08)",
-                    border: ltr === activeLetter ? "1.5px solid #ffd166" : "1px solid rgba(255,255,255,0.15)",
-                    color: ltr === activeLetter ? "#000" : "#fff",
-                    fontFamily: "'Amiri Quran', serif",
-                    fontSize: 16,
-                    fontWeight: 700,
-                  }}
-                >
-                  {ltr}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Légende rapide des 5 grands organes */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, justifyContent: "center" }}>
+      {/* Fiche détaillée de la zone active placée SOUS le schéma (aucun chevauchement sur le SVG) */}
+      {activeZone && (
+        <div
+          id="diagram-active-zone-card"
+          style={{
+            background: "rgba(11, 15, 25, 0.92)",
+            border: "1px solid rgba(255, 183, 3, 0.45)",
+            borderRadius: 10,
+            padding: "9px 12px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: "1 1 200px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: "#ffb703" }}>{isChild ? "⭐" : "📍"}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", fontFamily: "'Cinzel', serif" }}>
+                {isChild ? (activeZone.childLabel || activeZone.label) : activeZone.label}
+              </span>
+              <span style={{ fontSize: 11, color: "#ffe082", fontFamily: "'Amiri Quran', serif", direction: "rtl" }}>
+                ({activeZone.arabic})
+              </span>
+            </div>
+            <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
+              {isChild ? (activeZone.childDescription || activeZone.description) : activeZone.description}
+            </div>
+          </div>
+
+          {/* Lettres du point d'articulation */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+            {activeZone.letters.map((ltr) => (
+              <span
+                key={ltr}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 26,
+                  height: 26,
+                  borderRadius: 6,
+                  background: ltr === activeLetter ? "linear-gradient(135deg, #ffb703 0%, #fb8500 100%)" : "rgba(255,255,255,0.08)",
+                  border: ltr === activeLetter ? "1.5px solid #ffd166" : "1px solid rgba(255,255,255,0.15)",
+                  color: ltr === activeLetter ? "#000" : "#fff",
+                  fontFamily: "'Amiri Quran', serif",
+                  fontSize: 16,
+                  fontWeight: 700,
+                }}
+              >
+                {ltr}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Légende interactive des 5 grands organes */}
+      <div id="diagram-organ-legend" style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
         {[
           { key: "halq", icon: "🔴", label: isChild ? "Grotte de la Gorge" : "Gorge (الحلق)", color: "#ff7eb3" },
           { key: "lisan", icon: "👅", label: isChild ? "Langue Magicienne" : "Langue (اللسان)", color: "#ffb703" },
@@ -531,13 +549,13 @@ export function MakharijAnatomyDiagram({
           <button
             key={item.key}
             type="button"
-            onClick={() => onSelectZone(item.key)}
+            onClick={() => handleSelectZoneId(item.key)}
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 4,
-              padding: "3px 8px",
-              borderRadius: 14,
+              padding: "4px 9px",
+              borderRadius: 6,
               border: `1px solid ${activeZone?.area === item.key ? item.color : "rgba(255,255,255,0.12)"}`,
               background: activeZone?.area === item.key ? "rgba(255,255,255,0.08)" : "transparent",
               color: item.color,

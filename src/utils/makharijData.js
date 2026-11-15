@@ -1108,3 +1108,163 @@ export const getTonguePostureSpec = (letterChar, isHeavyOverride = false) => {
     showPharyngealConstriction: false,
   });
 };
+
+/**
+ * Pure adjacency map of anatomically neighboring Makhraj zones along the vocal tract.
+ */
+export const MAKHRAJ_NEIGHBOR_LINKS = Object.freeze({
+  throat_deep: Object.freeze(["throat_mid", "oral_cavity_jawf"]),
+  throat_mid: Object.freeze(["throat_deep", "throat_high"]),
+  throat_high: Object.freeze(["throat_mid", "tongue_root_uvula"]),
+  tongue_root_uvula: Object.freeze(["tongue_back_hard", "throat_high"]),
+  tongue_back_hard: Object.freeze(["tongue_root_uvula", "tongue_middle_palate"]),
+  tongue_middle_palate: Object.freeze(["tongue_back_hard", "tongue_lateral_molars", "tongue_front_palate", "oral_cavity_jawf"]),
+  tongue_lateral_molars: Object.freeze(["tongue_front_palate", "tongue_middle_palate", "tongue_tip_incisors_base"]),
+  tongue_front_palate: Object.freeze(["tongue_tip_alveolar", "tongue_lateral_molars", "tongue_middle_palate"]),
+  tongue_tip_alveolar: Object.freeze(["tongue_front_palate", "tongue_tip_incisors_base", "nasal_cavity"]),
+  tongue_tip_incisors_base: Object.freeze(["tongue_tip_alveolar", "tongue_tip_incisors_gap", "tongue_tip_incisors_edge"]),
+  tongue_tip_incisors_gap: Object.freeze(["tongue_tip_incisors_edge", "tongue_tip_incisors_base"]),
+  tongue_tip_incisors_edge: Object.freeze(["tongue_tip_incisors_gap", "tongue_tip_incisors_base", "lips_labiodental"]),
+  lips_labiodental: Object.freeze(["lips_bilabial", "tongue_tip_incisors_edge"]),
+  lips_bilabial: Object.freeze(["lips_labiodental", "nasal_cavity", "oral_cavity_jawf"]),
+  oral_cavity_jawf: Object.freeze(["tongue_middle_palate", "lips_bilabial", "throat_deep"]),
+  nasal_cavity: Object.freeze(["tongue_tip_alveolar", "lips_bilabial"]),
+});
+
+/**
+ * Pure lookup retrieving an anatomical zone object by its `id`.
+ */
+export const getZoneById = (zoneId) => {
+  if (!zoneId) return null;
+  return Object.values(ANATOMICAL_ZONES).find((z) => z.id === zoneId) || null;
+};
+
+/**
+ * Pure Euclidean anatomical coordinate distance between two zones on the 420x370 diagram.
+ */
+export const computeAnatomicalDistance = (zoneA, zoneB) => {
+  if (!zoneA || !zoneB) return 999;
+  const dx = (zoneA.cx || 0) - (zoneB.cx || 0);
+  const dy = (zoneA.cy || 0) - (zoneB.cy || 0);
+  return Math.round(Math.hypot(dx, dy));
+};
+
+/**
+ * Pure helper generating a concise, pedagogical contrast note between two letters.
+ */
+export const buildLetterDifferenceNote = (targetDetail, candidateDetail, relationType, isChild = false) => {
+  if (!targetDetail || !candidateDetail) return "";
+  const tPosture = getTonguePostureSpec(targetDetail.letter);
+  const cPosture = getTonguePostureSpec(candidateDetail.letter);
+
+  if (relationType === "same") {
+    if (tPosture.isTafkhim !== cPosture.isTafkhim) {
+      const heavyLtr = tPosture.isTafkhim ? targetDetail.letter : candidateDetail.letter;
+      const thinLtr = tPosture.isTafkhim ? candidateDetail.letter : targetDetail.letter;
+      return isChild
+        ? `Même maison ! Mais ${heavyLtr} relève la langue (voix forte) et ${thinLtr} reste plate et douce.`
+        : `Même makhraj exact · ${heavyLtr} élève l'arrière (Tafkhîm${(tPosture.isItbaq || cPosture.isItbaq) ? " + Itbâq" : ""}) alors que ${thinLtr} reste plate (Tarqîq).`;
+    }
+    return isChild
+      ? `Même endroit exact dans la bouche (${candidateDetail.childOrgan || candidateDetail.makhrajLabel}) — écoute la différence d'air ou de voix !`
+      : `Même makhraj exact (${candidateDetail.makhrajLabel}) — se distingue par ses Sifât (souffle / résonance / Qalqalah).`;
+  }
+
+  const cZone = getZoneById(candidateDetail.makhrajZone);
+  const tZone = getZoneById(targetDetail.makhrajZone);
+  let shiftHint = "zone voisine";
+  if (cZone && tZone) {
+    const dx = cZone.cx - tZone.cx;
+    const dy = cZone.cy - tZone.cy;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      shiftHint = dx > 0 ? "légèrement plus en avant" : "légèrement plus en arrière";
+    } else {
+      shiftHint = dy > 0 ? "légèrement plus bas" : "légèrement plus haut";
+    }
+  }
+
+  return isChild
+    ? `Maison voisine (${shiftHint}) : ${candidateDetail.childOrgan || candidateDetail.makhrajLabel}.`
+    : `Point proche (${shiftHint}) · ${candidateDetail.makhrajLabel}.`;
+};
+
+/**
+ * Pure helper returning all letters sharing the same Makhraj or an adjacent Makhraj,
+ * enriched with anatomical zones, tongue posture geometry, and contrast summaries.
+ */
+export const getRelatedArticulationLetters = (
+  letterChar,
+  { maxNearby = 6, isChild = false } = {}
+) => {
+  const normalizedChar = letterChar === "ء" ? "أ" : letterChar;
+  const targetDetail = getLetterAnatomy(normalizedChar) || DETAILED_ARABIC_LETTERS[0];
+  const targetZone = getZoneById(targetDetail.makhrajZone);
+  const targetPosture = getTonguePostureSpec(targetDetail.letter);
+
+  // 1. Same exact Makhraj zone
+  const sameZone = DETAILED_ARABIC_LETTERS.filter(
+    (item) => item.letter !== targetDetail.letter && item.makhrajZone === targetDetail.makhrajZone
+  ).map((item) => {
+    const zone = getZoneById(item.makhrajZone);
+    return Object.freeze({
+      letter: item.letter,
+      name: item.name,
+      trans: item.trans,
+      relationType: "same",
+      relationLabel: isChild ? "Même maison exacte" : "Même makhraj exact",
+      distance: 0,
+      zone,
+      posture: getTonguePostureSpec(item.letter),
+      anatomy: item,
+      diffNote: buildLetterDifferenceNote(targetDetail, item, "same", isChild),
+    });
+  });
+
+  // 2. Nearby Makhraj zones (ordered by explicit adjacency priority + anatomical distance)
+  const neighborZoneIds = new Set(MAKHRAJ_NEIGHBOR_LINKS[targetDetail.makhrajZone] || []);
+
+  // Also capture shared Madd/Ghunnah dual-zone links (e.g., ا/و/ي for jawf, ن/م for nasal)
+  if (targetDetail.letter === "ن") neighborZoneIds.add("lips_bilabial");
+  if (targetDetail.letter === "م") neighborZoneIds.add("tongue_tip_alveolar");
+  if (targetDetail.letter === "ا") {
+    neighborZoneIds.add("lips_bilabial");
+    neighborZoneIds.add("tongue_middle_palate");
+  }
+
+  const nearbyRaw = DETAILED_ARABIC_LETTERS.filter(
+    (item) =>
+      item.letter !== targetDetail.letter &&
+      item.makhrajZone !== targetDetail.makhrajZone &&
+      neighborZoneIds.has(item.makhrajZone)
+  ).map((item) => {
+    const zone = getZoneById(item.makhrajZone);
+    const neighborOrder = Array.from(neighborZoneIds).indexOf(item.makhrajZone);
+    return Object.freeze({
+      letter: item.letter,
+      name: item.name,
+      trans: item.trans,
+      relationType: "nearby",
+      relationLabel: isChild ? "Maison voisine" : "Makhraj proche",
+      distance: computeAnatomicalDistance(targetZone, zone),
+      _order: neighborOrder >= 0 ? neighborOrder : 99,
+      zone,
+      posture: getTonguePostureSpec(item.letter),
+      anatomy: item,
+      diffNote: buildLetterDifferenceNote(targetDetail, item, "nearby", isChild),
+    });
+  });
+
+  nearbyRaw.sort((a, b) => a._order - b._order || a.distance - b.distance);
+  const nearbyZones = nearbyRaw.slice(0, Math.max(1, maxNearby));
+
+  return Object.freeze({
+    targetLetter: targetDetail.letter,
+    targetDetail,
+    targetZone,
+    targetPosture,
+    sameZone: Object.freeze(sameZone),
+    nearbyZones: Object.freeze(nearbyZones),
+    items: Object.freeze([...sameZone, ...nearbyZones]),
+  });
+};
+

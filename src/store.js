@@ -58,6 +58,7 @@ const uiSlice = createSlice({
     showChildCelebrationModal: false,
     voiceCompressionPreset: load("quran_voiceCompressionPreset", "balanced"),
     storagePersisted:    false,
+    similarLettersFilter: load("quran_similarLettersFilter", "all"),
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -380,6 +381,11 @@ const uiSlice = createSlice({
     },
     setStoragePersisted: (s, a) => {
       s.storagePersisted = Boolean(a.payload);
+    },
+    setSimilarLettersFilter: (s, a) => {
+      const val = ["all", "same", "nearby"].includes(a.payload) ? a.payload : "all";
+      s.similarLettersFilter = val;
+      save("quran_similarLettersFilter", val);
     },
   },
   extraReducers: (builder) => {
@@ -1085,6 +1091,7 @@ const rawSel = {
   showChildCelebrationModal:(s) => Boolean(s.ui.showChildCelebrationModal),
   voiceCompressionPreset:(s) => s.ui.voiceCompressionPreset || "balanced",
   storagePersisted:    (s) => Boolean(s.ui.storagePersisted),
+  similarLettersFilter:(s) => s.ui.similarLettersFilter || "all",
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

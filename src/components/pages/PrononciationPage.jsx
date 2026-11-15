@@ -1,7 +1,8 @@
 import React, { useState, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { sel, uiActions } from "../../store.js";
+import { sel, uiActions, errorActions } from "../../store.js";
+import { ERROR_CODES, createAppError, trySync } from "../../utils/errorManager.js";
 import { ARABIC_LETTERS, HARAKATS } from "../../utils/arabicUtils.js";
 import {
   DETAILED_ARABIC_LETTERS,
@@ -15,6 +16,7 @@ import {
 } from "../../utils/makharijData.js";
 import { getCompleteLetterProfile } from "../../utils/arabicLetterEncyclopedia.js";
 import { MakharijAnatomyDiagram } from "../common/MakharijAnatomyDiagram.jsx";
+import { MakharijSimilarLettersDiagrams } from "../common/MakharijSimilarLettersDiagrams.jsx";
 import { HeavyLettersGuide } from "../common/HeavyLettersGuide.jsx";
 import { ChildUnlockQuranCelebrationModal } from "../common/ChildUnlockQuranCelebrationModal.jsx";
 
@@ -28,26 +30,40 @@ export function PrononciationPage() {
   const [tab, setTab] = useState("lettres"); // lettres | graves | harakat | tajwid
   const [selected, setSelected] = useState(0); // Default to letter 0 (Ba)
   const [organFilter, setOrganFilter] = useState("all"); // all | lisan | halq | shafatayn | jawf | heavy
-  const [detailSection, setDetailSection] = useState("all"); // all | anatomie | tajweed | sons | ecriture
+  const [detailSection, setDetailSection] = useState("all"); // all | anatomie | proches | tajweed | sons | ecriture
   const [playingId, setPlayingId] = useState(null);
   const synthRef = useRef(null);
 
   const speak = (text, id, lang = "ar-SA") => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.lang = lang;
-    utt.rate = 0.65;
-    utt.pitch = 1;
-    setPlayingId(id);
-    utt.onend = () => setPlayingId(null);
-    utt.onerror = () => setPlayingId(null);
-    synthRef.current = utt;
-    window.speechSynthesis.speak(utt);
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const res = trySync(() => {
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.lang = lang;
+      utt.rate = 0.65;
+      utt.pitch = 1;
+      setPlayingId(id);
+      utt.onend = () => setPlayingId(null);
+      utt.onerror = () => setPlayingId(null);
+      synthRef.current = utt;
+      window.speechSynthesis.speak(utt);
+    }, null, { text, id });
+
+    if (!res.ok) {
+      setPlayingId(null);
+      dispatch(
+        errorActions.reportError(
+          createAppError(ERROR_CODES.AUDIO_PLAYBACK_ERROR, "Impossible de lire la synthèse vocale pour cette lettre.", {
+            letter: text,
+            id,
+          })
+        )
+      );
+    }
   };
 
   const stopSpeak = () => {
-    window.speechSynthesis?.cancel();
+    trySync(() => window?.speechSynthesis?.cancel());
     setPlayingId(null);
   };
 
@@ -561,6 +577,7 @@ export function PrononciationPage() {
                       {[
                         ["all", "📋 Tout voir"],
                         ["anatomie", "🔬 Anatomie & Formes"],
+                        ["proches", "🔀 Similaires"],
                         ["tajweed", "⚖️ Tajweed & Sifât"],
                         ["sons", "🎙️ Sons & Exemples"],
                         ["ecriture", "✍️ Tracé & Pièges"],
@@ -677,6 +694,23 @@ export function PrononciationPage() {
                         </div>
                       </div>
                     </div>
+                  )}
+
+                  {/* ── SECTION 1B : MULTI-SCHÉMAS LETTRES AU MÊME MAKHRAJ OU PROCHES (1 SCHÉMA / LETTRE) ── */}
+                  {(detailSection === "all" || detailSection === "anatomie" || detailSection === "proches") && (
+                    <MakharijSimilarLettersDiagrams
+                      activeLetter={selectedLetter.letter}
+                      isChild={isChild}
+                      playingId={playingId}
+                      onSpeak={(ltr, id) => (playingId === id ? stopSpeak() : speak(ltr, id))}
+                      onSelectLetter={(ltr) => {
+                        const idx = ARABIC_LETTERS.findIndex((x) => x.letter === ltr);
+                        if (idx >= 0) {
+                          setSelected(idx);
+                          speak(ltr, `letter-${idx}`);
+                        }
+                      }}
+                    />
                   )}
 
                   {/* ── SECTION 2 : TAJWEED COMPLET (SIFÂT & RÈGLES CORANIQUES) ── */}

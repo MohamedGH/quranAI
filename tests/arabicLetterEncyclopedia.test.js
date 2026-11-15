@@ -263,16 +263,16 @@ describe("PrononciationPage Encyclopedic UI Integration", () => {
 
     const tabsContainer = document.getElementById("letter-detail-section-tabs");
     const buttons = tabsContainer.querySelectorAll("button");
-    expect(buttons).toHaveLength(5);
+    expect(buttons).toHaveLength(6);
 
     // Click "Tajweed & Sifât"
-    fireEvent.click(buttons[2]);
+    fireEvent.click(buttons[3]);
     expect(document.getElementById("letter-tajweed-encyclopedia")).toBeTruthy();
     expect(document.getElementById("letter-sounds-encyclopedia")).toBeNull();
     expect(document.getElementById("letter-writing-pitfalls")).toBeNull();
 
     // Click "Tracé & Pièges"
-    fireEvent.click(buttons[4]);
+    fireEvent.click(buttons[5]);
     expect(document.getElementById("letter-writing-pitfalls")).toBeTruthy();
     expect(document.getElementById("letter-tajweed-encyclopedia")).toBeNull();
 

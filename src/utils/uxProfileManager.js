@@ -344,25 +344,27 @@ export const getNavigationTabs = (uxMode = UX_MODES.STANDARD, isQuranUnlocked = 
 
   if (mode === UX_MODES.EXPERT) {
     return Object.freeze([
-      { id: "quran",         icon: "📖", label: "CORAN",   title: "Coran (Texte, Audio, Synchronisation mot à mot)" },
-      { id: "prononciation", icon: "🔤", label: "TAJWEED", title: "Analyse acoustique et règles de Tajweed" },
-      { id: "dashboard",     icon: "📊", label: "MÉTRIQUES",title: "Analytique détaillée de mémorisation" },
-      { id: "collections",   icon: "🗂", label: "COLL.",   title: "Collections et concordances thématiques" },
-      { id: "revision",      icon: "⚡", label: "RÉVISION",title: "Révision active avec silences paramétrables" },
-      { id: "recordings",    icon: "🎙", label: "ENREG.",  title: "Studio d'enregistrement et spectrogramme" },
-      { id: "offline",       icon: "💾", label: "OFFLINE", title: "Gestion avancée du cache et stockage hors-ligne" },
+      { id: "quran",         icon: "📖", label: "CORAN",     title: "Coran (Texte, Audio, Synchronisation mot à mot)" },
+      { id: "prononciation", icon: "🔤", label: "TAJWEED",   title: "Analyse acoustique et règles de Tajweed" },
+      { id: "glossaire",     icon: "📚", label: "GLOSSAIRE", title: "Glossaire exhaustif du Tajweed et des termes techniques" },
+      { id: "dashboard",     icon: "📊", label: "MÉTRIQUES", title: "Analytique détaillée de mémorisation" },
+      { id: "collections",   icon: "🗂", label: "COLL.",     title: "Collections et concordances thématiques" },
+      { id: "revision",      icon: "⚡", label: "RÉVISION",  title: "Révision active avec silences paramétrables" },
+      { id: "recordings",    icon: "🎙", label: "ENREG.",    title: "Studio d'enregistrement et spectrogramme" },
+      { id: "offline",       icon: "💾", label: "OFFLINE",   title: "Gestion avancée du cache et stockage hors-ligne" },
     ]);
   }
 
   // Standard / Balanced
   return Object.freeze([
-    { id: "quran",         icon: "📖", label: "CORAN",    title: "Lecture du Saint Coran" },
-    { id: "prononciation", icon: "🔤", label: "PRONON.",  title: "Prononciation et Tajweed" },
-    { id: "dashboard",     icon: "📊", label: "DASH",     title: "Tableau de bord" },
-    { id: "collections",   icon: "🗂", label: "COLL.",    title: "Collections de versets" },
-    { id: "revision",      icon: "✏",  label: "RÉVISION", title: "Révision et mémorisation" },
-    { id: "recordings",    icon: "🎙",  label: "ENREG.",   title: "Enregistrements audio" },
-    { id: "offline",       icon: "💾", label: "OFFLINE",  title: "Mode hors-ligne" },
+    { id: "quran",         icon: "📖", label: "CORAN",     title: "Lecture du Saint Coran" },
+    { id: "prononciation", icon: "🔤", label: "PRONON.",   title: "Prononciation et Tajweed" },
+    { id: "glossaire",     icon: "📚", label: "GLOSSAIRE", title: "Glossaire exhaustif des termes de Tajweed" },
+    { id: "dashboard",     icon: "📊", label: "DASH",      title: "Tableau de bord" },
+    { id: "collections",   icon: "🗂", label: "COLL.",     title: "Collections de versets" },
+    { id: "revision",      icon: "✏",  label: "RÉVISION",  title: "Révision et mémorisation" },
+    { id: "recordings",    icon: "🎙",  label: "ENREG.",    title: "Enregistrements audio" },
+    { id: "offline",       icon: "💾", label: "OFFLINE",   title: "Mode hors-ligne" },
   ]);
 };
 

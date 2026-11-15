@@ -2,6 +2,7 @@ import React, { useId } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { sel, uiActions } from "../../store.js";
 import { getRelatedArticulationLetters } from "../../utils/makharijData.js";
+import { GlossaryTermTooltip, GlossaryAutoText } from "./GlossaryTermTooltip.jsx";
 
 /**
  * SingleVocalTractCardSvg
@@ -347,9 +348,17 @@ export function MakharijSimilarLettersDiagrams({
               margin: 0,
             }}
           >
-            {isChild
-              ? "🔀 SCHÉMAS COMPARATIFS : LETTRES JUMELLES ET VOISINES"
-              : "🔀 COMPARAISON MULTI-SCHÉMAS · MÊME MAKHRAJ & POINTS PROCHES"}
+            {isChild ? (
+              "🔀 SCHÉMAS COMPARATIFS : LETTRES JUMELLES ET VOISINES"
+            ) : (
+              <>
+                🔀 COMPARAISON MULTI-SCHÉMAS · MÊME{" "}
+                <GlossaryTermTooltip termId="makhraj" isChild={isChild}>
+                  MAKHRAJ
+                </GlossaryTermTooltip>{" "}
+                &amp; POINTS PROCHES
+              </>
+            )}
           </h3>
           <div style={{ fontSize: 10, color: "var(--text2)" }}>
             <span>Un schéma individuel par lettre</span>
@@ -494,7 +503,24 @@ export function MakharijSimilarLettersDiagrams({
 
               {/* Métadonnée textuelle sobre */}
               <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.35 }}>
-                <span>{isTafkhim ? (item.posture?.isItbaq ? "Tafkhîm + Itbâq (Grave)" : "Tafkhîm (Grave)") : "Tarqîq (Fine)"}</span>
+                <span>
+                  {isTafkhim ? (
+                    item.posture?.isItbaq ? (
+                      <>
+                        <GlossaryTermTooltip termId="tafkhim" isChild={isChild}>Tafkhîm</GlossaryTermTooltip> +{" "}
+                        <GlossaryTermTooltip termId="itbaq" isChild={isChild}>Itbâq</GlossaryTermTooltip> (Grave)
+                      </>
+                    ) : (
+                      <>
+                        <GlossaryTermTooltip termId="tafkhim" isChild={isChild}>Tafkhîm</GlossaryTermTooltip> (Grave)
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <GlossaryTermTooltip termId="tarqiq" isChild={isChild}>Tarqîq</GlossaryTermTooltip> (Fine)
+                    </>
+                  )}
+                </span>
                 <span aria-hidden="true"> · </span>
                 <span>{item.zone?.label || item.anatomy?.makhrajLabel}</span>
               </div>
@@ -511,7 +537,7 @@ export function MakharijSimilarLettersDiagrams({
 
               {/* Explication comparative */}
               <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.45, flex: 1 }}>
-                {item.diffNote}
+                <GlossaryAutoText text={item.diffNote} isChild={isChild} />
               </div>
 
               {/* Actions fonctionnelles (taille tactile mobile >= 40px) */}

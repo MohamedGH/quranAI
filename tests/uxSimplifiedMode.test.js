@@ -191,9 +191,9 @@ describe("Simplified UX Mode (Child & Beginner) & Tooltip Accuracy", () => {
       expect(beginnerTabs).toHaveLength(4);
       expect(beginnerTabs.map(t => t.id)).toEqual(["quran", "prononciation", "dashboard", "revision"]);
 
-      // In contrast, standard has 7 tabs
+      // In contrast, standard has 8 tabs (including Glossaire)
       const standardTabs = getNavigationTabs("standard");
-      expect(standardTabs.length).toBe(7);
+      expect(standardTabs.length).toBe(8);
     });
 
     it("beginner player hides fast backward, loop button, and standalone reciter for a clean 4-button player", async () => {

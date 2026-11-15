@@ -17,6 +17,8 @@ import {
 import { getCompleteLetterProfile } from "../../utils/arabicLetterEncyclopedia.js";
 import { MakharijAnatomyDiagram } from "../common/MakharijAnatomyDiagram.jsx";
 import { MakharijSimilarLettersDiagrams } from "../common/MakharijSimilarLettersDiagrams.jsx";
+import { GlossaryTermTooltip, GlossaryAutoText } from "../common/GlossaryTermTooltip.jsx";
+import { buildGlossaryRoute } from "../../utils/routeManager.js";
 import { HeavyLettersGuide } from "../common/HeavyLettersGuide.jsx";
 import { ChildUnlockQuranCelebrationModal } from "../common/ChildUnlockQuranCelebrationModal.jsx";
 
@@ -100,6 +102,26 @@ export function PrononciationPage() {
           {isChild ? "🌟 مَخَارِجُ الحُرُوفِ لِلأَطْفَالِ" : "مَخَارِجُ الحُرُوفِ وَالتَّجْوِيد"}
         </div>
         <div style={{ flex: 1 }} />
+        <button
+          type="button"
+          id="btn-pronon-open-glossary"
+          onClick={() => navigate(buildGlossaryRoute())}
+          style={{
+            minHeight: 34,
+            padding: "5px 11px",
+            borderRadius: 7,
+            border: "1px solid rgba(255, 209, 102, 0.45)",
+            background: "rgba(255, 209, 102, 0.12)",
+            color: "#ffd166",
+            fontSize: 10,
+            fontWeight: 700,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+          }}
+        >
+          📚 Glossaire
+        </button>
         <div style={{ fontSize: 9, letterSpacing: 2, color: "var(--text3)", fontFamily: "'Cinzel', serif" }}>
           {isChild ? "LE CHÂTEAU MAGIQUE DES LETTRES · SECRETS DU PETIT CHAMPION" : "POINTS D'ARTICULATION · ANATOMIE · LETTRES GRAVES"}
         </div>
@@ -425,7 +447,7 @@ export function PrononciationPage() {
                   </span>
                 ) : (
                   <span>
-                    💡 <strong>Règle d'or :</strong> Chaque lettre a un point de sortie précis (<em>Makhraj</em>) et des caractéristiques d'air et de voix (<em>Sifât</em>).
+                    💡 <strong>Règle d'or :</strong> Chaque lettre a un point de sortie précis (<GlossaryTermTooltip termId="makhraj" isChild={isChild}>Makhraj</GlossaryTermTooltip>) et des caractéristiques d'air et de voix (<GlossaryTermTooltip termId="sifat" isChild={isChild}>Sifât</GlossaryTermTooltip>).
                     Cliquez sur n'importe quelle lettre pour voir exactement où elle se forme dans la bouche, la langue ou la gorge sur le diagramme anatomique.
                   </span>
                 )}
@@ -456,7 +478,19 @@ export function PrononciationPage() {
                             fontWeight: 700,
                           }}
                         >
-                          {isChild ? "🦁 LETTRE CHAMPIONNE (GRAVE)" : `⚖️ GRAVE (TAFKHÎM)${isSelectedItbaq ? " · ITBÂQ" : ""}`}
+                          {isChild ? (
+                            "🦁 LETTRE CHAMPIONNE (GRAVE)"
+                          ) : (
+                            <>
+                              ⚖️ GRAVE (<GlossaryTermTooltip termId="tafkhim" isChild={isChild}>TAFKHÎM</GlossaryTermTooltip>)
+                              {isSelectedItbaq && (
+                                <>
+                                  {" · "}
+                                  <GlossaryTermTooltip termId="itbaq" isChild={isChild}>ITBÂQ</GlossaryTermTooltip>
+                                </>
+                              )}
+                            </>
+                          )}
                         </span>
                       ) : (
                         <span
@@ -471,7 +505,13 @@ export function PrononciationPage() {
                             fontWeight: 700,
                           }}
                         >
-                          {isChild ? "✨ LETTRE DOUCE" : "✨ FINE (TARQÎQ)"}
+                          {isChild ? (
+                            "✨ LETTRE DOUCE"
+                          ) : (
+                            <>
+                              ✨ FINE (<GlossaryTermTooltip termId="tarqiq" isChild={isChild}>TARQÎQ</GlossaryTermTooltip>)
+                            </>
+                          )}
                         </span>
                       )}
                     </div>
@@ -742,8 +782,12 @@ export function PrononciationPage() {
                             }}
                           >
                             <div style={{ fontSize: 8.5, color: "var(--text3)", letterSpacing: 0.6 }}>{item.label.toUpperCase()}</div>
-                            <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)" }}>{item.title}</div>
-                            <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.35 }}>{item.desc}</div>
+                            <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)" }}>
+                              <GlossaryAutoText text={item.title} isChild={isChild} />
+                            </div>
+                            <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.35 }}>
+                              <GlossaryAutoText text={item.desc} isChild={isChild} />
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -766,7 +810,7 @@ export function PrononciationPage() {
                           </div>
                           {letterProfile.sifat.unique.map((u) => (
                             <div key={u.name} style={{ fontSize: 10, color: "var(--text)", lineHeight: 1.45 }}>
-                              <strong>{u.name}</strong> — {isChild ? u.childDesc : u.desc}
+                              <strong><GlossaryAutoText text={u.name} isChild={isChild} /></strong> — <GlossaryAutoText text={isChild ? u.childDesc : u.desc} isChild={isChild} />
                             </div>
                           ))}
                         </div>

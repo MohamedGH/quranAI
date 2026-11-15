@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { ANATOMICAL_ZONES, getTonguePostureSpec } from "../../utils/makharijData.js";
+import { GlossaryAutoText } from "./GlossaryTermTooltip.jsx";
 
 /**
  * MakharijAnatomyDiagram
@@ -121,10 +122,10 @@ export function MakharijAnatomyDiagram({
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 10, fontFamily: "'Cinzel', serif", fontWeight: 800, color: posture.isTafkhim ? "#ffd166" : "var(--teal2)" }}>
-            {isChild ? posture.childPostureLabel : posture.postureLabel}
+            <GlossaryAutoText text={isChild ? posture.childPostureLabel : posture.postureLabel} isChild={isChild} />
           </span>
           <span style={{ fontSize: 9, color: posture.isTafkhim ? "#fbbf24" : "var(--text3)", fontWeight: 600 }}>
-            {posture.mechanisms.join(" · ")}
+            <GlossaryAutoText text={posture.mechanisms.join(" · ")} isChild={isChild} />
           </span>
         </div>
         <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>

@@ -1000,6 +1000,42 @@ const quizSlice = createSlice({
 });
 export const quizActions = quizSlice.actions;
 
+// ─── Slice : Glossaire Technique Tajweed & Phonétique ────────────────────────
+const glossarySlice = createSlice({
+  name: "glossary",
+  initialState: {
+    searchQuery: "",
+    category: load("quran_glossary_category", "all"),
+    activeTermId: null,
+    recentTermIds: load("quran_glossary_recent", []),
+  },
+  reducers: {
+    setSearchQuery: (state, action) => {
+      state.searchQuery = String(action.payload || "");
+    },
+    setCategory: (state, action) => {
+      const cat = String(action.payload || "all").trim() || "all";
+      state.category = cat;
+      save("quran_glossary_category", cat);
+    },
+    setActiveTermId: (state, action) => {
+      const id = action.payload ? String(action.payload).trim() : null;
+      state.activeTermId = id;
+      if (id) {
+        const nextRecent = [id, ...(state.recentTermIds || []).filter((x) => x !== id)].slice(0, 8);
+        state.recentTermIds = nextRecent;
+        save("quran_glossary_recent", nextRecent);
+      }
+    },
+    clearFilters: (state) => {
+      state.searchQuery = "";
+      state.category = "all";
+      save("quran_glossary_category", "all");
+    },
+  },
+});
+export const glossaryActions = glossarySlice.actions;
+
 export const store = configureStore({
   reducer: {
     revision:    revisionSlice.reducer,
@@ -1013,6 +1049,7 @@ export const store = configureStore({
     errors:      errorsSlice.reducer,
     offline:     offlineSlice.reducer,
     quiz:        quizSlice.reducer,
+    glossary:    glossarySlice.reducer,
   },
   // Les timestamps et learnData peuvent être grands — désactiver le check de sérialisation sur ces champs
   middleware: (getDefaultMiddleware) =>
@@ -1179,6 +1216,11 @@ const rawSel = {
   goals:           (s) => s.goals,
   activity:        (s) => s.goals.activity,
   revision:        (s) => s.revision?.mastery || {},
+  // glossary
+  glossaryQuery:       (s) => s.glossary?.searchQuery || "",
+  glossaryCategory:    (s) => s.glossary?.category || "all",
+  glossaryActiveTermId:(s) => s.glossary?.activeTermId || null,
+  glossaryRecentIds:   (s) => s.glossary?.recentTermIds || [],
   // ─── Sélecteur de Maîtrise de la Sourate ───
   revisionMastery: (state, surahNum, totalVerses) => {
     if (!state.revision?.mastery) return 0;
@@ -1243,5 +1285,6 @@ export const act = {
   ...errorActions,
   ...offlineActions,
   ...quizActions,
+  ...glossaryActions,
   setLDataThunk,
 };

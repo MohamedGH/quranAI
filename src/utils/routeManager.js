@@ -6,6 +6,7 @@ import { ERROR_CODES, trySync } from "./errorManager.js";
 export const VALID_PAGES = Object.freeze([
   "quran",
   "prononciation",
+  "glossaire",
   "dashboard",
   "concordance",
   "collections",
@@ -58,6 +59,12 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       const uxParam = params.get("ux") || params.get("uxMode");
       const uxMode = ["beginner", "standard", "expert", "child"].includes(uxParam) ? uxParam : null;
 
+      const glossaryTermId =
+        activePage === "glossaire"
+          ? (segs[1] ? decodeURIComponent(segs[1]) : params.get("term") || null)
+          : null;
+      const glossaryCategory = activePage === "glossaire" ? params.get("cat") || null : null;
+
       return Object.freeze({
         activePage,
         surahNum,
@@ -71,6 +78,8 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
         silenceRevise,
         silenceMode,
         uxMode,
+        glossaryTermId,
+        glossaryCategory,
       });
     },
     Object.freeze({
@@ -86,9 +95,25 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       silenceRevise: false,
       silenceMode: null,
       uxMode: null,
+      glossaryTermId: null,
+      glossaryCategory: null,
     }),
     { code: ERROR_CODES.ROUTE_PARSE_ERROR, pathname, search }
   ).value;
+
+/**
+ * Purely builds a canonical Glossary route path.
+ */
+export const buildGlossaryRoute = (termId = null, { category = null, query = null, uxMode = null } = {}) => {
+  const cleanId = termId ? encodeURIComponent(String(termId).trim()) : "";
+  const basePath = cleanId ? `/glossaire/${cleanId}` : "/glossaire";
+  const params = new URLSearchParams();
+  if (category && category !== "all") params.set("cat", String(category));
+  if (query && String(query).trim()) params.set("q", String(query).trim());
+  if (uxMode && ["beginner", "standard", "expert", "child"].includes(uxMode)) params.set("ux", uxMode);
+  const qs = params.toString();
+  return qs ? `${basePath}?${qs}` : basePath;
+};
 
 /**
  * Purely builds a canonical Quran route path from route parameters.
@@ -107,11 +132,17 @@ export const buildQuranRoute = ({
   silenceMode = null,
   uxMode = null,
   ux = null,
+  glossaryTermId = null,
+  glossaryCategory = null,
 } = {}) => {
   const query = new URLSearchParams();
   const effectiveUx = uxMode || ux;
   if (effectiveUx && ["beginner", "standard", "expert", "child"].includes(effectiveUx)) {
     query.set("ux", effectiveUx);
+  }
+
+  if (activePage === "glossaire") {
+    return buildGlossaryRoute(glossaryTermId, { category: glossaryCategory, uxMode: effectiveUx });
   }
 
   if (activePage && activePage !== "quran") {

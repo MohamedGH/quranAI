@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { HEAVY_LETTERS_DATA, DETAILED_ARABIC_LETTERS } from "../../utils/makharijData.js";
 import { MakharijAnatomyDiagram } from "./MakharijAnatomyDiagram.jsx";
+import { GlossaryTermTooltip } from "./GlossaryTermTooltip.jsx";
 
 /**
  * HeavyLettersGuide
@@ -71,9 +72,9 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null, isChild 
             </span>
           ) : (
             <span>
-              En langue arabe et en Tajweed, le <strong>Tafkhîm (تَفْخِيم)</strong> signifie « rendre le son gras, lourd et profond ».
-              La bouche s'emplit de la résonance du son grâce à l'élévation de l'arrière de la langue (<em>Istilâ'</em>) vers le voile du palais.
-              À l'inverse, les autres lettres de l'alphabet sont fines (<em>Tarqîq</em>) et se prononcent avec la bouche plate comme un léger sourire.
+              En langue arabe et en Tajweed, le <strong><GlossaryTermTooltip termId="tafkhim" isChild={isChild}>Tafkhîm (تَفْخِيم)</GlossaryTermTooltip></strong> signifie « rendre le son gras, lourd et profond ».
+              La bouche s'emplit de la résonance du son grâce à l'élévation de l'arrière de la langue (<GlossaryTermTooltip termId="istila" isChild={isChild}>Isti‘lâ’</GlossaryTermTooltip>) vers le voile du palais.
+              À l'inverse, les autres lettres de l'alphabet sont fines (<GlossaryTermTooltip termId="tarqiq" isChild={isChild}>Tarqîq</GlossaryTermTooltip>) et se prononcent avec la bouche plate comme un léger sourire.
             </span>
           )}
         </p>

@@ -53,6 +53,7 @@ import { ConcordancePage } from "./components/pages/ConcordancePage.jsx";
 import { QuranBookPage } from "./components/pages/QuranBookPage.jsx";
 const QuranBook3DPage = lazy(() => import("./components/pages/QuranBook3DPage.jsx").then(m => ({ default: m.QuranBook3DPage })));
 import { PrononciationPage } from "./components/pages/PrononciationPage.jsx";
+import { GlossairePage } from "./components/pages/GlossairePage.jsx";
 import { RecordingsPage } from "./components/pages/RecordingsPage.jsx";
 import { OfflinePage } from "./components/pages/OfflinePage.jsx";
 
@@ -2782,6 +2783,7 @@ function AppInner({ currentUser, onSignOut }) {
             <Route path="/" element={<Navigate to="/quran" replace />} />
             <Route path="/offline" element={<AnimatedPage pageKey="offline"><OfflinePage /></AnimatedPage>} />
             <Route path="/prononciation" element={<AnimatedPage pageKey="prononciation"><PrononciationPage /></AnimatedPage>} />
+            <Route path="/glossaire/:termId?" element={<AnimatedPage pageKey="glossaire"><GlossairePage /></AnimatedPage>} />
             <Route path="/dashboard" element={
               <AnimatedPage pageKey="dashboard"><DashboardPage
                 learnData={learnData}

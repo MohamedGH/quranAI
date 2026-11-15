@@ -220,13 +220,16 @@ describe("MakharijSimilarLettersDiagrams Component (1 dedicated SVG per letter)"
     );
 
     const taCard = container.querySelector('.similar-letter-diagram-card[data-letter="ط"]');
-    const buttons = taCard.querySelectorAll("button");
-    expect(buttons.length).toBe(2);
+    const buttons = Array.from(taCard.querySelectorAll("button"));
+    const listenBtn = buttons.find((b) => b.textContent.includes("Écouter"));
+    const switchBtn = buttons.find((b) => b.textContent.includes("Voir fiche"));
+    expect(listenBtn).toBeTruthy();
+    expect(switchBtn).toBeTruthy();
 
-    fireEvent.click(buttons[0]); // 🔊 Écouter
+    fireEvent.click(listenBtn); // 🔊 Écouter
     expect(onSpeak).toHaveBeenCalledWith("ط", "sim-ط");
 
-    fireEvent.click(buttons[1]); // Voir fiche →
+    fireEvent.click(switchBtn); // Voir fiche →
     expect(onSelectLetter).toHaveBeenCalledWith("ط");
   });
 });
@@ -312,7 +315,9 @@ describe("PrononciationPage Integration with Multi-Diagram Similar Letters & Err
     );
 
     const refCard = container.querySelector('.similar-letter-diagram-card[data-relation="reference"]');
-    const listenBtn = refCard.querySelector("button");
+    const listenBtn = Array.from(refCard.querySelectorAll("button")).find((b) =>
+      b.textContent.includes("Écouter")
+    );
     fireEvent.click(listenBtn);
 
     const lastErr = store.getState().errors.lastError;

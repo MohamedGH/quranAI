@@ -59,6 +59,14 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       const uxParam = params.get("ux") || params.get("uxMode");
       const uxMode = ["beginner", "standard", "expert", "child"].includes(uxParam) ? uxParam : null;
 
+      const compactParam = params.get("compact") ?? params.get("compactMode");
+      const compactMode =
+        compactParam === "1" || compactParam === "true"
+          ? true
+          : compactParam === "0" || compactParam === "false"
+          ? false
+          : null;
+
       const glossaryTermId =
         activePage === "glossaire"
           ? (segs[1] ? decodeURIComponent(segs[1]) : params.get("term") || null)
@@ -78,6 +86,7 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
         silenceRevise,
         silenceMode,
         uxMode,
+        compactMode,
         glossaryTermId,
         glossaryCategory,
       });
@@ -95,6 +104,7 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       silenceRevise: false,
       silenceMode: null,
       uxMode: null,
+      compactMode: null,
       glossaryTermId: null,
       glossaryCategory: null,
     }),
@@ -104,13 +114,14 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
 /**
  * Purely builds a canonical Glossary route path.
  */
-export const buildGlossaryRoute = (termId = null, { category = null, query = null, uxMode = null } = {}) => {
+export const buildGlossaryRoute = (termId = null, { category = null, query = null, uxMode = null, compactMode = null } = {}) => {
   const cleanId = termId ? encodeURIComponent(String(termId).trim()) : "";
   const basePath = cleanId ? `/glossaire/${cleanId}` : "/glossaire";
   const params = new URLSearchParams();
   if (category && category !== "all") params.set("cat", String(category));
   if (query && String(query).trim()) params.set("q", String(query).trim());
   if (uxMode && ["beginner", "standard", "expert", "child"].includes(uxMode)) params.set("ux", uxMode);
+  if (compactMode === true) params.set("compact", "1");
   const qs = params.toString();
   return qs ? `${basePath}?${qs}` : basePath;
 };
@@ -132,17 +143,27 @@ export const buildQuranRoute = ({
   silenceMode = null,
   uxMode = null,
   ux = null,
+  compactMode = null,
+  compact = null,
   glossaryTermId = null,
   glossaryCategory = null,
 } = {}) => {
   const query = new URLSearchParams();
   const effectiveUx = uxMode || ux;
+  const effectiveCompact = compactMode ?? compact;
   if (effectiveUx && ["beginner", "standard", "expert", "child"].includes(effectiveUx)) {
     query.set("ux", effectiveUx);
   }
+  if (effectiveCompact === true) {
+    query.set("compact", "1");
+  }
 
   if (activePage === "glossaire") {
-    return buildGlossaryRoute(glossaryTermId, { category: glossaryCategory, uxMode: effectiveUx });
+    return buildGlossaryRoute(glossaryTermId, {
+      category: glossaryCategory,
+      uxMode: effectiveUx,
+      compactMode: effectiveCompact === true ? true : null,
+    });
   }
 
   if (activePage && activePage !== "quran") {
@@ -190,6 +211,17 @@ export const setRouteUxMode = (pathname = "/quran", search = "", uxMode = "stand
   return buildQuranRoute({
     ...parsed,
     uxMode,
+  });
+};
+
+/**
+ * Purely updates or removes compact query parameter in a route URL.
+ */
+export const setRouteCompactMode = (pathname = "/quran", search = "", compactMode = false) => {
+  const parsed = parseQuranRoute(pathname, search);
+  return buildQuranRoute({
+    ...parsed,
+    compactMode: Boolean(compactMode),
   });
 };
 

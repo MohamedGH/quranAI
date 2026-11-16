@@ -71,6 +71,7 @@ export function HeaderToolsModal({
   const uxMode = useSelector(sel.uxMode);
   const activePage = useSelector(sel.activePage);
   const showBeginnerGuides = useSelector(sel.showBeginnerGuides);
+  const compactMode = useSelector(sel.compactMode);
 
   const handleOpenToolPage = (shortcut) => {
     if (!shortcut) return;
@@ -340,6 +341,81 @@ export function HeaderToolsModal({
                     CHANGER
                   </button>
                 </div>
+              </div>
+
+              {/* Mode Compact (Global pour tous les profils) */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'var(--surface2)',
+                  border: `1px solid ${compactMode ? 'rgba(62, 184, 160, 0.45)' : 'rgba(255, 255, 255, 0.07)'}`,
+                  transition: 'all .2s',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      background: compactMode ? 'rgba(62, 184, 160, 0.16)' : 'rgba(255, 255, 255, 0.04)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                      color: compactMode ? 'var(--teal2)' : 'var(--text2)',
+                    }}
+                  >
+                    ⊟
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>
+                      Mode Compact Global {compactMode && <span style={{ color: 'var(--teal2)', fontSize: 9, fontWeight: 700, marginLeft: 4 }}>· ACTIF</span>}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+                      Densifie l'affichage sur toute l'application et pour tous les profils
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  id="toggle-compact-mode-switch"
+                  role="switch"
+                  aria-checked={compactMode}
+                  aria-label="Activer ou désactiver le mode compact global"
+                  onClick={() => dispatch(uiActions.toggleCompactMode())}
+                  style={{
+                    width: 44,
+                    height: 24,
+                    borderRadius: 12,
+                    border: 'none',
+                    padding: 0,
+                    background: compactMode ? 'var(--teal)' : 'rgba(255, 255, 255, 0.15)',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background .2s',
+                    flexShrink: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 3,
+                      left: compactMode ? 23 : 3,
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: '#fff',
+                      transition: 'left .2s',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                    }}
+                  />
+                </button>
               </div>
 
               {/* Pages & Ressources (déplacées de la barre de navigation vers Outils) */}
@@ -1131,11 +1207,66 @@ export function HeaderToolsModal({
                     padding: 0,
                   }}
                 >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 2,
+                        left: showBeginnerGuides ? 20 : 2,
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        background: '#fff',
+                        transition: 'left .2s',
+                      }}
+                    />
+                  </button>
+                </div>
+
+              {/* Mode Compact dans l'onglet Mode & Profil (accessible même en mode Enfant) */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'var(--surface2)',
+                  border: `1px solid ${compactMode ? 'rgba(62, 184, 160, 0.45)' : 'var(--border2)'}`,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>
+                    ⊟ Mode Compact (Toute l'application)
+                  </div>
+                  <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+                    Affiche plus de contenu par écran sur tous les profils (Enfant, Novice, Équilibré, Expert)
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  id="toggle-ux-compact-mode-switch"
+                  onClick={() => dispatch(uiActions.toggleCompactMode())}
+                  role="switch"
+                  aria-checked={compactMode}
+                  aria-label="Basculer le mode compact"
+                  style={{
+                    width: 40,
+                    height: 22,
+                    borderRadius: 11,
+                    cursor: 'pointer',
+                    background: compactMode ? 'var(--teal)' : 'rgba(255, 255, 255, 0.15)',
+                    border: 'none',
+                    position: 'relative',
+                    transition: 'background .2s',
+                    padding: 0,
+                    flexShrink: 0,
+                  }}
+                >
                   <div
                     style={{
                       position: 'absolute',
                       top: 2,
-                      left: showBeginnerGuides ? 20 : 2,
+                      left: compactMode ? 20 : 2,
                       width: 18,
                       height: 18,
                       borderRadius: '50%',

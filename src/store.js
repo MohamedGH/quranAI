@@ -62,6 +62,7 @@ const uiSlice = createSlice({
     childQuestBannerState: ["expanded", "compact", "closed"].includes(load("quran_childQuestBannerState", "expanded"))
       ? load("quran_childQuestBannerState", "expanded")
       : "expanded",
+    compactMode:         Boolean(load("quran_compactMode", false)),
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -407,6 +408,14 @@ const uiSlice = createSlice({
     reopenChildQuestBanner: (s) => {
       s.childQuestBannerState = "expanded";
       save("quran_childQuestBannerState", "expanded");
+    },
+    setCompactMode: (s, a) => {
+      s.compactMode = Boolean(a.payload);
+      save("quran_compactMode", s.compactMode);
+    },
+    toggleCompactMode: (s) => {
+      s.compactMode = !s.compactMode;
+      save("quran_compactMode", s.compactMode);
     },
   },
   extraReducers: (builder) => {
@@ -1151,6 +1160,7 @@ const rawSel = {
   storagePersisted:    (s) => Boolean(s.ui.storagePersisted),
   similarLettersFilter:(s) => s.ui.similarLettersFilter || "all",
   childQuestBannerState:(s) => s.ui.childQuestBannerState || "expanded",
+  compactMode:         (s) => Boolean(s.ui.compactMode),
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

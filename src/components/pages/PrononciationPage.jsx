@@ -27,6 +27,7 @@ export function PrononciationPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const uxMode = useSelector(sel.uxMode);
+  const compactMode = useSelector(sel.compactMode);
   const layoutCfg = getSimplifiedLayoutConfig(uxMode);
   const isChild = layoutCfg.isChild;
   const isSimplified = layoutCfg.isSimplified;
@@ -92,21 +93,21 @@ export function PrononciationPage() {
   const isSelectedItbaq = selectedLetter ? isItbaqLetter(selectedLetter.letter) : false;
 
   return (
-    <main className="main" style={{ background: "var(--bg)" }}>
+    <main className="main" data-compact-mode={compactMode ? "true" : "false"} style={{ background: "var(--bg)" }}>
       {/* ── TOP HEADER TITLE ── */}
       <div
         style={{
-          padding: "10px 18px",
+          padding: compactMode ? "6px 12px" : "10px 18px",
           borderBottom: "1px solid var(--border)",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
           flexWrap: "wrap",
-          gap: 10,
+          gap: compactMode ? 6 : 10,
           background: "linear-gradient(180deg, var(--surface), var(--bg))",
         }}
       >
-        <div style={{ fontFamily: "'Amiri Quran', serif", fontSize: 21, color: "var(--gold)", direction: "rtl", opacity: 0.9 }}>
+        <div style={{ fontFamily: "'Amiri Quran', serif", fontSize: compactMode ? 18 : 21, color: "var(--gold)", direction: "rtl", opacity: 0.9 }}>
           {isChild ? "🌟 مَخَارِجُ الحُرُوفِ لِلأَطْفَالِ" : "مَخَارِجُ الحُرُوفِ وَالتَّجْوِيد"}
         </div>
         <div style={{ flex: 1 }} />

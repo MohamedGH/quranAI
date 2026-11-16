@@ -4,7 +4,7 @@ import { sel, uiActions, playerActions } from "../../store.js";
 import { masteryColor, computeMastery, computeDisplayedPartMastery } from "./Mastery.jsx";
 import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
-import { getUxProfile, isSimplifiedUxMode, getSimplifiedLayoutConfig } from "../../utils/uxProfileManager.js";
+import { getUxProfile, isSimplifiedUxMode, getSimplifiedLayoutConfig, getCompactLayoutConfig } from "../../utils/uxProfileManager.js";
 import { SurahAllOptionsModal } from "./SurahAllOptionsModal.jsx";
 
 export function SurahHeader({
@@ -98,8 +98,10 @@ export function SurahHeader({
   const isCoachEnabled = useSelector(sel.tajweedCoachEnabled);
   const cachedSurahsMap = useSelector(sel.cachedSurahsMap);
   const uxMode = useSelector(sel.uxMode);
+  const compactMode = useSelector(sel.compactMode);
   const currentUx = getUxProfile(uxMode);
   const layoutCfg = getSimplifiedLayoutConfig(uxMode);
+  const compactCfg = getCompactLayoutConfig(compactMode, uxMode);
 
   // Redux Tajweed selectors with fallback for robust activation
   const storeShowQalqala     = useSelector(sel.showQalqala);
@@ -257,7 +259,11 @@ export function SurahHeader({
   const isMeccan = selectedSurah.revelationType === "Meccan";
 
   return (
-    <div className="m-surah-header-container" id="surah-header-mobile">
+    <div
+      className="m-surah-header-container"
+      id="surah-header-mobile"
+      data-compact-mode={compactMode ? "true" : "false"}
+    >
       {/* Backdrop for mobile bottom sheets */}
       {(showTajweedDrawer || showOptionsDrawer || showLangDrawer) && (
         <div
@@ -297,7 +303,7 @@ export function SurahHeader({
             <span className="m-compact-ar">{selectedSurah.name}</span>
             <span className="m-compact-en">{selectedSurah.englishName}</span>
             <span className="m-compact-meta">
-              {layoutCfg.showHeaderMetrics ? (
+              {compactCfg.showHeaderMetrics ? (
                 <>
                   {selectedSurah.numberOfAyahs}v · {isMeccan ? 'Mecq' : 'Méd'}
                   {displayPage ? ` · P.${displayPage}${pageMode || displayPageMastery.masteryPct > 0 ? ` (${displayPageMastery.masteryPct}%)` : ''}` : ''}
@@ -306,7 +312,7 @@ export function SurahHeader({
                   {cachedSurahsMap?.[selectedSurah.number]?.isComplete ? ' · 💾 ✓' : cachedSurahsMap?.[selectedSurah.number]?.audioCount > 0 ? ` · 💾 ${cachedSurahsMap[selectedSurah.number].audioCount}/${cachedSurahsMap[selectedSurah.number].totalCount}` : ''}
                 </>
               ) : (
-                `${selectedSurah.numberOfAyahs} versets`
+                `${selectedSurah.numberOfAyahs}v`
               )}
             </span>
             <span className="m-compact-chevron">▾</span>

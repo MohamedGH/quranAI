@@ -166,6 +166,44 @@ export const CSS = `
     opacity: 0.75 !important;
   }
 
+  /* ── Header Compact Mode Toggle Button ── */
+  .header-compact-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0 9px;
+    border-radius: 9px;
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .7px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text2);
+    transition: all .18s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .header-compact-btn:hover {
+    border-color: rgba(62, 184, 160, 0.55);
+    color: var(--teal2);
+    background: rgba(62, 184, 160, 0.12);
+  }
+  .header-compact-btn.active {
+    border-color: var(--teal);
+    background: rgba(62, 184, 160, 0.22);
+    color: var(--teal2);
+    box-shadow: 0 0 10px rgba(62, 184, 160, 0.28);
+  }
+  .header-compact-btn .compact-icon {
+    font-size: 13px;
+    line-height: 1;
+  }
+
   .header-user-btn{display:flex;align-items:center;justify-content:center;padding:2px;border-radius:50%;border:1.5px solid rgba(201,168,76,.35);background:transparent;cursor:pointer;transition:all .2s cubic-bezier(0.4, 0, 0.2, 1);flex-shrink:0;-webkit-tap-highlight-color:transparent;}
   .header-user-btn:hover,.header-user-btn.active{border-color:var(--gold2);box-shadow:0 0 12px rgba(201,168,76,.35);transform:scale(1.05);}
   .header-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;}
@@ -3044,6 +3082,262 @@ export const CSS = `
 
   @media(max-width:700px){.concord-page{padding:16px 14px 80px;}.concord-ayat-text{font-size:var(--ayat-font-size, 18px);}.concord-search-bar input{font-size:16px;}}
 
+  /* ══════════════════════════════════════════════════════════════════
+     GLOBAL COMPACT MODE — ALL USER PROFILES & ALL PAGES (MOBILE-FIRST)
+  ══════════════════════════════════════════════════════════════════ */
+  .app.compact-mode {
+    --header-h: calc(40px + env(safe-area-inset-top, 0px));
+    --player-h: 50px;
+    --sidebar-w: 236px;
+  }
+  .app.compact-mode .header {
+    padding: max(env(safe-area-inset-top, 0px), 0px) 8px 0 8px;
+    gap: 5px;
+  }
+  .app.compact-mode .header-menu-btn,
+  .app.compact-mode .voice-btn,
+  .app.compact-mode .header-tool-btn,
+  .app.compact-mode .header-compact-btn,
+  .app.compact-mode .header-ux-badge {
+    height: 30px !important;
+    min-height: 30px !important;
+  }
+  .app.compact-mode .header-nav {
+    padding: 2px;
+    gap: 2px;
+  }
+  .app.compact-mode .header-nav-btn {
+    padding: 3px 6px;
+    font-size: 8px;
+    gap: 3px;
+  }
+  .app.compact-mode .sidebar-search {
+    padding: 7px 8px;
+  }
+  .app.compact-mode .sidebar-search input {
+    padding: 5px 9px;
+    font-size: 10px;
+  }
+  .app.compact-mode .surah-item {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+  .app.compact-mode .surah-num {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+  }
+  .app.compact-mode .surah-name-en {
+    font-size: 10px;
+  }
+  .app.compact-mode .surah-meta {
+    font-size: 8px;
+    margin-top: 1px;
+  }
+  .app.compact-mode .surah-name-ar {
+    font-size: 14px;
+  }
+
+  /* Compact SurahHeader */
+  .app.compact-mode .m-surah-card-compact {
+    padding: 2px 6px;
+    gap: 1px;
+  }
+  .app.compact-mode .m-surah-compact-row {
+    min-height: 26px;
+  }
+  .app.compact-mode .m-compact-bismillah-bar {
+    padding: 1px 6px;
+    font-size: 13px;
+  }
+  .app.compact-mode .m-surah-actions-bar {
+    padding: 2px 6px 3px;
+    gap: 4px;
+  }
+  .app.compact-mode .m-action-btn {
+    padding: 3px 7px;
+    font-size: 8px;
+    min-height: 28px;
+  }
+
+  /* Compact Ayat Rows — All 4 UX Profiles */
+  .app.compact-mode .ayat-main {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+  .app.compact-mode .ayat-number-badge {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+  }
+  .app.compact-mode.ux-profile-standard .ayat-row {
+    margin: 2px 6px 3px;
+    border-radius: 8px;
+  }
+  .app.compact-mode.ux-profile-standard .ayat-arabic {
+    font-size: min(var(--ayat-font-size, 22px), 22px);
+    line-height: 1.7;
+  }
+  .app.compact-mode.ux-profile-standard .ayat-trans {
+    font-size: 12.5px;
+    line-height: 1.38;
+  }
+
+  .app.compact-mode.ux-profile-beginner .ayat-row {
+    margin: 2px 6px 4px;
+    border-radius: 10px;
+  }
+  .app.compact-mode.ux-profile-beginner .ayat-main {
+    padding: 7px 10px;
+    gap: 8px;
+  }
+  .app.compact-mode.ux-profile-beginner .ayat-arabic {
+    font-size: min(var(--ayat-font-size, 24px), 24px) !important;
+    line-height: 1.8 !important;
+  }
+  .app.compact-mode.ux-profile-beginner .ayat-trans {
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 6px 10px;
+  }
+  .app.compact-mode.ux-profile-beginner button:not(.ctrl-btn):not(.player-tajweed-modal-trigger):not(.reciter-option) {
+    min-height: 36px;
+  }
+
+  .app.compact-mode.ux-profile-child .ayat-row {
+    margin: 3px 6px 5px;
+    border-radius: 12px;
+    border-width: 1.5px;
+  }
+  .app.compact-mode.ux-profile-child .ayat-main {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .app.compact-mode.ux-profile-child .ayat-arabic {
+    font-size: min(var(--ayat-font-size, 26px), 27px) !important;
+    line-height: 1.92 !important;
+    padding: 2px 0;
+  }
+  .app.compact-mode.ux-profile-child .ayat-trans {
+    font-size: 13.5px;
+    line-height: 1.42;
+    padding: 6px 10px;
+    border-radius: 8px;
+  }
+  .app.compact-mode.ux-profile-child .ayat-number-badge {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+  }
+
+  .app.compact-mode.ux-profile-expert .ayat-main {
+    padding: 4px 8px;
+    gap: 6px;
+  }
+  .app.compact-mode.ux-profile-expert .ayat-arabic {
+    font-size: min(var(--ayat-font-size, 18.5px), 19px) !important;
+    line-height: 1.58 !important;
+  }
+  .app.compact-mode.ux-profile-expert .ayat-trans {
+    font-size: 11.5px;
+    line-height: 1.32;
+  }
+
+  /* Compact Audio Player Bar */
+  .app.compact-mode .player-row {
+    padding: 4px 10px;
+    gap: 8px;
+    min-height: 50px;
+  }
+  .app.compact-mode .ctrl-btn {
+    width: 28px !important;
+    height: 28px !important;
+    min-height: 28px !important;
+    max-height: 28px !important;
+    font-size: 11px;
+  }
+  .app.compact-mode .child-play-btn,
+  .app.compact-mode .beginner-play-btn {
+    width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    max-height: 34px !important;
+  }
+
+  /* Compact Secondary Pages */
+  .app.compact-mode .pronon-page {
+    padding: 10px 12px 62px;
+    gap: 12px;
+  }
+  .app.compact-mode .pronon-section-title {
+    margin-bottom: 6px;
+  }
+  .app.compact-mode .pronon-grid {
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 6px;
+  }
+  .app.compact-mode .pronon-letter {
+    font-size: 28px;
+  }
+  .app.compact-mode .pronon-detail-letter {
+    font-size: 52px;
+  }
+  .app.compact-mode .dash-page,
+  .app.compact-mode .rev-page,
+  .app.compact-mode .collections-page,
+  .app.compact-mode .concord-page,
+  .app.compact-mode .offline-page,
+  .app.compact-mode .recordings-page {
+    padding: 10px 12px 62px !important;
+    gap: 12px !important;
+  }
+  .app.compact-mode .dash-kpi {
+    padding: 10px 12px;
+    gap: 3px;
+  }
+  .app.compact-mode .dash-kpi-val {
+    font-size: 21px;
+  }
+  .app.compact-mode .dash-card,
+  .app.compact-mode .rev-surah-header,
+  .app.compact-mode .coll-card-header {
+    padding: 10px 12px;
+  }
+  .app.compact-mode .rev-ayat-card-header,
+  .app.compact-mode .rev-ayat-body {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .app.compact-mode .glossary-term-card {
+    padding: 8px 10px !important;
+  }
+
+  @media (max-width: 640px) {
+    .app.compact-mode .header {
+      padding: max(env(safe-area-inset-top, 0px), 0px) 6px 0 6px;
+      gap: 4px;
+    }
+    .app.compact-mode .header-ux-badge {
+      padding: 0 6px !important;
+      font-size: 8.5px !important;
+    }
+    .app.compact-mode .header-compact-btn {
+      padding: 0 7px;
+      min-width: 30px;
+    }
+    .app.compact-mode.ux-profile-child .ayat-arabic {
+      font-size: 24px !important;
+      line-height: 1.85 !important;
+    }
+    .app.compact-mode.ux-profile-beginner .ayat-arabic {
+      font-size: 20px !important;
+      line-height: 1.75 !important;
+    }
+    .app.compact-mode.ux-profile-expert .ayat-arabic {
+      font-size: 16.5px !important;
+      line-height: 1.55 !important;
+    }
+  }
 `;
 
 export const StyleTag = () => {

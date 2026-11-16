@@ -321,6 +321,38 @@ export const getUxModeClassName = (mode) => {
 };
 
 /**
+ * Pure functional configuration for global Compact Mode across all user types.
+ */
+export const getCompactLayoutConfig = (compactMode = false, uxMode = UX_MODES.STANDARD) => {
+  const mode = sanitizeUxMode(uxMode);
+  const isCompact = Boolean(compactMode);
+  const isSimplified = isSimplifiedUxMode(mode);
+
+  return Object.freeze({
+    mode,
+    isCompact,
+    isSimplified,
+    rootClassSuffix: isCompact ? "compact-mode" : "",
+    headerHeightPx: isCompact ? 40 : 48,
+    playerHeightPx: isCompact ? 50 : 64,
+    sidebarWidthPx: isCompact ? 236 : 280,
+    showHeaderMetrics: !isCompact && !isSimplified,
+    showVerboseMeta: !isCompact,
+    showBannerSubtitle: !isCompact,
+    compactTouchTargetPx: 36,
+    badgeLabel: isCompact ? "Compact ON" : "Compact",
+  });
+};
+
+/**
+ * Pure helper combining active UX profile class and global compact-mode class on .app root.
+ */
+export const getAppRootClassNames = (uxMode = UX_MODES.STANDARD, compactMode = false) => {
+  const uxClass = getUxModeClassName(uxMode);
+  return compactMode ? `${uxClass} compact-mode` : uxClass;
+};
+
+/**
  * Transforms any error into a reassuring, plain-language message for beginner users.
  */
 export const formatFriendlyErrorMessage = (error, uxMode = UX_MODES.STANDARD) => {

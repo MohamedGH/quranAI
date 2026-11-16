@@ -13,6 +13,7 @@ export function UxModeSelectorModal({ isOpen, onClose }) {
   const dispatch = useDispatch();
   const currentUxMode = useSelector(sel.uxMode);
   const showBeginnerGuides = useSelector(sel.showBeginnerGuides);
+  const compactMode = useSelector(sel.compactMode);
   const hapticFeedback = useSelector(sel.quizHapticFeedback);
 
   useEffect(() => {
@@ -375,6 +376,65 @@ export function UxModeSelectorModal({ isOpen, onClose }) {
                   position: "absolute",
                   top: 2,
                   left: showBeginnerGuides ? 22 : 2,
+                  width: 20,
+                  height: 20,
+                  borderRadius: "50%",
+                  background: "#fff",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                  transition: "left .2s",
+                }}
+              />
+            </button>
+          </div>
+
+          {/* ── Global Compact Mode Toggle ──────────────────────────────── */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "12px 14px",
+              borderRadius: 10,
+              background: compactMode ? "rgba(62, 184, 160, 0.08)" : "rgba(255, 255, 255, 0.02)",
+              border: compactMode ? "1px solid rgba(62, 184, 160, 0.35)" : "1px solid rgba(255, 255, 255, 0.06)",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
+                ⊟ Mode Compact (Toute l'application)
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 2 }}>
+                Réduit les espacements, en-têtes et cartes sur toutes les pages pour ce profil
+              </div>
+            </div>
+            <button
+              type="button"
+              id="ux-modal-compact-toggle"
+              onClick={() => {
+                dispatch(uiActions.toggleCompactMode());
+                triggerQuizHaptic("selection", hapticFeedback);
+              }}
+              role="switch"
+              aria-checked={compactMode}
+              aria-label="Basculer le mode compact sur toute l'application"
+              style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                cursor: "pointer",
+                background: compactMode ? "var(--teal)" : "rgba(255, 255, 255, 0.15)",
+                border: "none",
+                position: "relative",
+                transition: "background .2s",
+                padding: 0,
+                flexShrink: 0,
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 2,
+                  left: compactMode ? 22 : 2,
                   width: 20,
                   height: 20,
                   borderRadius: "50%",

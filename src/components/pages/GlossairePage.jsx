@@ -25,6 +25,7 @@ export function GlossairePage() {
   const [searchParams] = useSearchParams();
 
   const isChild = useSelector(sel.isChildUx);
+  const compactMode = useSelector(sel.compactMode);
   const query = useSelector(sel.glossaryQuery);
   const category = useSelector(sel.glossaryCategory);
   const activeTermId = useSelector(sel.glossaryActiveTermId);
@@ -127,6 +128,7 @@ export function GlossairePage() {
     <main
       id="glossaire-page"
       className="main"
+      data-compact-mode={compactMode ? "true" : "false"}
       style={{
         background: "var(--bg)",
         display: "flex",
@@ -150,12 +152,12 @@ export function GlossairePage() {
       {/* En-tête éditorial sobre */}
       <header
         style={{
-          padding: isDesktop ? "18px 28px 14px" : "14px 16px 12px",
+          padding: compactMode ? (isDesktop ? "10px 18px 8px" : "8px 12px 6px") : (isDesktop ? "18px 28px 14px" : "14px 16px 12px"),
           borderBottom: "1px solid var(--border)",
           background: "linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%)",
           display: "flex",
           flexDirection: "column",
-          gap: 10,
+          gap: compactMode ? 6 : 10,
         }}
       >
         <div
@@ -164,27 +166,29 @@ export function GlossairePage() {
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: 10,
+            gap: compactMode ? 6 : 10,
           }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div
-              style={{
-                fontFamily: "'Amiri Quran', serif",
-                fontSize: 22,
-                color: "var(--gold)",
-                direction: "rtl",
-                textAlign: "left",
-                lineHeight: 1.2,
-              }}
-            >
-              مُعْجَمُ مُصْطَلَحَاتِ التَّجْوِيدِ وَالمَخَارِج
-            </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: compactMode ? 2 : 4 }}>
+            {!compactMode && (
+              <div
+                style={{
+                  fontFamily: "'Amiri Quran', serif",
+                  fontSize: 22,
+                  color: "var(--gold)",
+                  direction: "rtl",
+                  textAlign: "left",
+                  lineHeight: 1.2,
+                }}
+              >
+                مُعْجَمُ مُصْطَلَحَاتِ التَّجْوِيدِ وَالمَخَارِج
+              </div>
+            )}
             <h1
               style={{
                 margin: 0,
                 fontFamily: "'Cinzel', serif",
-                fontSize: isDesktop ? 22 : 17,
+                fontSize: compactMode ? (isDesktop ? 18 : 15) : (isDesktop ? 22 : 17),
                 fontWeight: 800,
                 color: "var(--text)",
                 letterSpacing: 0.4,

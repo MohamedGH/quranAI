@@ -22,7 +22,7 @@ import { UxLevelWizardModal } from "./components/common/UxLevelWizardModal.jsx";
 import { ChildUnlockQuranCelebrationModal } from "./components/common/ChildUnlockQuranCelebrationModal.jsx";
 import { PlayerAudioOptionsModal } from "./components/common/PlayerAudioOptionsModal.jsx";
 import { BeginnerGuideBanner } from "./components/common/BeginnerGuideBanner.jsx";
-import { getUxProfile, getUxModeClassName, isSimplifiedUxMode, getNavigationTabs, getPlayerConfig, getSidebarConfig } from "./utils/uxProfileManager.js";
+import { getUxProfile, getUxModeClassName, getAppRootClassNames, isSimplifiedUxMode, getNavigationTabs, getPlayerConfig, getSidebarConfig } from "./utils/uxProfileManager.js";
 import { NotificationToast } from "./components/common/NotificationToast.jsx";
 import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
@@ -148,6 +148,7 @@ function AppInner({ currentUser, onSignOut }) {
   const collections     = useSelector(sel.collections, shallowEqual);
   const collModal       = useSelector(sel.collModal);
   const uxMode          = useSelector(sel.uxMode || ((s) => s?.ui?.uxMode || "standard"));
+  const compactMode     = useSelector(sel.compactMode || ((s) => Boolean(s?.ui?.compactMode)));
   const isBeginner      = useSelector(sel.isBeginnerUx || ((s) => (s?.ui?.uxMode || "standard") === "beginner"));
   const isChild         = useSelector(sel.isChildUx || ((s) => (s?.ui?.uxMode || "standard") === "child"));
   const isQuranUnlocked = useSelector(sel.isQuranUnlockedForChild);
@@ -218,12 +219,15 @@ function AppInner({ currentUser, onSignOut }) {
   const urlSurahNum     = parsedRoute.surahNum ?? parseInt(urlSegs[1]);
   const urlAyatNum      = parsedRoute.ayatNum ?? parseInt(urlSegs[2]);
 
-  // ── Sync URL ux param → Redux ──
+  // ── Sync URL ux & compact params → Redux ──
   useEffect(() => {
     if (parsedRoute.uxMode) {
       dispatch(uiActions.setUxMode(parsedRoute.uxMode));
     }
-  }, [parsedRoute.uxMode, dispatch]);
+    if (typeof parsedRoute.compactMode === "boolean") {
+      dispatch(uiActions.setCompactMode(parsedRoute.compactMode));
+    }
+  }, [parsedRoute.uxMode, parsedRoute.compactMode, dispatch]);
 
   // ── Child Mode First Connection: Launch Wizard & direct to letters (/prononciation) ──
   useEffect(() => {
@@ -2423,7 +2427,12 @@ function AppInner({ currentUser, onSignOut }) {
     <ArabicKeyboardContext.Provider value={{ show: showArabicKeyboard, setShow: setShowArabicKeyboard, activeInput: activeArabicInput }}>
     <>
       <StyleTag />
-      <div className={`app ${getUxModeClassName(uxMode)}`} onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
+      <div
+        className={`app ${getAppRootClassNames(uxMode, compactMode)}`}
+        data-compact-mode={compactMode ? "true" : "false"}
+        onDrop={handleDrop}
+        onDragOver={e => e.preventDefault()}
+      >
         <header className="header">
           {/* Left Branding / Hamburger group */}
           <div className="header-left">
@@ -2498,6 +2507,20 @@ function AppInner({ currentUser, onSignOut }) {
                 🎤
               </button>
             )}
+
+            {/* Global Compact Mode Quick Toggle: accessible for ALL user types */}
+            <button
+              id="header-compact-btn"
+              type="button"
+              className={`header-compact-btn${compactMode ? ' active' : ''}`}
+              aria-pressed={compactMode}
+              onClick={() => dispatch(uiActions.toggleCompactMode())}
+              title={compactMode ? "Mode Compact actif (Cliquer pour affichage normal)" : "Activer le Mode Compact sur toute l'application"}
+              aria-label={compactMode ? "Désactiver le mode compact" : "Activer le mode compact"}
+            >
+              <span className="compact-icon">{compactMode ? '⊞' : '⊟'}</span>
+              <span className="compact-label desktop-only">COMPACT</span>
+            </button>
 
             {/* Interactive UX Mode Badge: ALWAYS visible, never squished */}
             <button
@@ -2736,7 +2759,7 @@ function AppInner({ currentUser, onSignOut }) {
                     <div className="surah-info">
                       <div className="surah-name-en">{s.englishName}</div>
                       <div className="surah-meta">{sidebarConfig.revelationLabel(s.revelationType)} · {sidebarConfig.versesLabel(s.numberOfAyahs)}{!isSimplifiedUxMode(uxMode) && surahStats[s.number]?.learned > 0 ? ` · ${surahStats[s.number].learned}✓` : ''}</div>
-                      {!isSimplifiedUxMode(uxMode) && (() => { const st = surahStats[s.number]; const total = s.numberOfAyahs || 0; const pct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0; return (
+                      {!compactMode && !isSimplifiedUxMode(uxMode) && (() => { const st = surahStats[s.number]; const total = s.numberOfAyahs || 0; const pct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0; return (
                         <div style={{marginTop:3,display:'flex',alignItems:'center',gap:6}}>
                           <div style={{flex:1,height:2,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
                             <div style={{height:'100%',width:pct+'%',background:masteryColor(pct),borderRadius:2}} />

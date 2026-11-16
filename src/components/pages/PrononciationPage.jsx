@@ -18,23 +18,30 @@ import { getCompleteLetterProfile } from "../../utils/arabicLetterEncyclopedia.j
 import { MakharijAnatomyDiagram } from "../common/MakharijAnatomyDiagram.jsx";
 import { MakharijSimilarLettersDiagrams } from "../common/MakharijSimilarLettersDiagrams.jsx";
 import { GlossaryTermTooltip, GlossaryAutoText } from "../common/GlossaryTermTooltip.jsx";
-import { buildGlossaryRoute } from "../../utils/routeManager.js";
+import { buildGlossaryRoute, buildQuranRoute } from "../../utils/routeManager.js";
+import { getSimplifiedLayoutConfig } from "../../utils/uxProfileManager.js";
 import { HeavyLettersGuide } from "../common/HeavyLettersGuide.jsx";
 import { ChildUnlockQuranCelebrationModal } from "../common/ChildUnlockQuranCelebrationModal.jsx";
 
 export function PrononciationPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const isChild = useSelector((state) => (state?.ui?.uxMode || "standard") === "child");
+  const uxMode = useSelector(sel.uxMode);
+  const layoutCfg = getSimplifiedLayoutConfig(uxMode);
+  const isChild = layoutCfg.isChild;
+  const isSimplified = layoutCfg.isSimplified;
   const validatedLetters = useSelector(sel.validatedLetters);
   const validatedCount = useSelector(sel.validatedLettersCount);
   const allLettersValidated = useSelector(sel.allLettersValidated);
+  const questBannerState = useSelector(sel.childQuestBannerState);
   const [tab, setTab] = useState("lettres"); // lettres | graves | harakat | tajwid
   const [selected, setSelected] = useState(0); // Default to letter 0 (Ba)
   const [organFilter, setOrganFilter] = useState("all"); // all | lisan | halq | shafatayn | jawf | heavy
   const [detailSection, setDetailSection] = useState("all"); // all | anatomie | proches | tajweed | sons | ecriture
+  const [showAdvancedInSimplified, setShowAdvancedInSimplified] = useState(false);
   const [playingId, setPlayingId] = useState(null);
   const synthRef = useRef(null);
+  const showAdvanced = !isSimplified || showAdvancedInSimplified;
 
   const speak = (text, id, lang = "ar-SA") => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
@@ -89,52 +96,85 @@ export function PrononciationPage() {
       {/* ── TOP HEADER TITLE ── */}
       <div
         style={{
-          padding: "14px 28px 0",
+          padding: "10px 18px",
           borderBottom: "1px solid var(--border)",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
-          gap: 12,
+          flexWrap: "wrap",
+          gap: 10,
           background: "linear-gradient(180deg, var(--surface), var(--bg))",
         }}
       >
-        <div style={{ fontFamily: "'Amiri Quran', serif", fontSize: 22, color: "var(--gold)", direction: "rtl", opacity: 0.9 }}>
+        <div style={{ fontFamily: "'Amiri Quran', serif", fontSize: 21, color: "var(--gold)", direction: "rtl", opacity: 0.9 }}>
           {isChild ? "🌟 مَخَارِجُ الحُرُوفِ لِلأَطْفَالِ" : "مَخَارِجُ الحُرُوفِ وَالتَّجْوِيد"}
         </div>
         <div style={{ flex: 1 }} />
-        <button
-          type="button"
-          id="btn-pronon-open-glossary"
-          onClick={() => navigate(buildGlossaryRoute())}
-          style={{
-            minHeight: 34,
-            padding: "5px 11px",
-            borderRadius: 7,
-            border: "1px solid rgba(255, 209, 102, 0.45)",
-            background: "rgba(255, 209, 102, 0.12)",
-            color: "#ffd166",
-            fontSize: 10,
-            fontWeight: 700,
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-            flexShrink: 0,
-          }}
-        >
-          📚 Glossaire
-        </button>
-        <div style={{ fontSize: 9, letterSpacing: 2, color: "var(--text3)", fontFamily: "'Cinzel', serif" }}>
-          {isChild ? "LE CHÂTEAU MAGIQUE DES LETTRES · SECRETS DU PETIT CHAMPION" : "POINTS D'ARTICULATION · ANATOMIE · LETTRES GRAVES"}
-        </div>
+        {isChild && questBannerState === "closed" && (
+          <button
+            type="button"
+            id="btn-quest-reopen"
+            onClick={() => dispatch(uiActions.reopenChildQuestBanner())}
+            title="Afficher le défi des 28 lettres"
+            aria-label="Afficher le défi des 28 lettres"
+            style={{
+              minHeight: 36,
+              padding: "5px 11px",
+              borderRadius: 7,
+              border: "1px solid rgba(255, 209, 102, 0.5)",
+              background: "rgba(255, 209, 102, 0.14)",
+              color: "#ffd166",
+              fontSize: 10.5,
+              fontWeight: 700,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+            }}
+          >
+            <span>🏰</span>
+            <span>Défi {validatedCount}/28 ⭐</span>
+          </button>
+        )}
+        {!isSimplified && (
+          <>
+            <button
+              type="button"
+              id="btn-pronon-open-glossary"
+              onClick={() => navigate(buildGlossaryRoute())}
+              style={{
+                minHeight: 36,
+                padding: "5px 11px",
+                borderRadius: 7,
+                border: "1px solid rgba(255, 209, 102, 0.45)",
+                background: "rgba(255, 209, 102, 0.12)",
+                color: "#ffd166",
+                fontSize: 10,
+                fontWeight: 700,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              📚 Glossaire
+            </button>
+            <div style={{ fontSize: 9, letterSpacing: 2, color: "var(--text3)", fontFamily: "'Cinzel', serif" }}>
+              POINTS D'ARTICULATION · ANATOMIE · LETTRES GRAVES
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── NAVIGATION TABS ── */}
-      <div style={{ padding: "0 28px", borderBottom: "1px solid var(--border)", flexShrink: 0, background: "var(--surface)" }}>
+      <div style={{ padding: "0 18px", borderBottom: "1px solid var(--border)", flexShrink: 0, background: "var(--surface)" }}>
         <div className="pronon-nav-tabs">
           {[
-            ["lettres", isChild ? "🌟 MON CHÂTEAU DES LETTRES" : "🔤 LETTRES & ANATOMIE"],
-            ["graves", isChild ? "🦁 LES LETTRES CHAMPIONNES (GRAVES)" : "⚖️ LETTRES GRAVES (TAFKHÎM)"],
-            ["harakat", isChild ? "🎨 VOYELLES & SONS MAGIQUES" : "◌ VOYELLES & SIGNES"],
-            ["tajwid", isChild ? "✨ SECRETS DE RÉCITATION" : "📚 RÈGLES DE TAJWID"],
+            ["lettres", isChild ? "🌟 Lettres" : isSimplified ? "🔤 Lettres" : "🔤 LETTRES & ANATOMIE"],
+            ["graves", isChild ? "🦁 Graves" : isSimplified ? "⚖️ Lettres graves" : "⚖️ LETTRES GRAVES (TAFKHÎM)"],
+            ["harakat", isChild ? "🎨 Voyelles" : isSimplified ? "◌ Voyelles" : "◌ VOYELLES & SIGNES"],
+            ["tajwid", isChild ? "✨ Secrets" : isSimplified ? "📚 Règles simples" : "📚 RÈGLES DE TAJWID"],
           ].map(([k, label]) => (
             <button
               key={k}
@@ -150,142 +190,304 @@ export function PrononciationPage() {
         </div>
       </div>
 
-      {/* ── CHILD LETTERS QUEST BANNER ── */}
-      {isChild && (
-        <div
-          id="child-letters-quest-banner"
-          style={{
-            margin: "14px 28px 0",
-            padding: "12px 18px",
-            borderRadius: 14,
-            background: "linear-gradient(135deg, rgba(255, 209, 102, 0.15) 0%, rgba(224, 159, 62, 0.08) 100%)",
-            border: "1.5px solid rgba(255, 209, 102, 0.45)",
-            boxShadow: "0 4px 18px rgba(0,0,0,0.25)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 26 }}>🏰</span>
-              <div>
-                <div style={{ fontFamily: "'Cinzel', serif", fontWeight: 800, fontSize: 13, color: "#ffd166", letterSpacing: 1 }}>
-                  DÉFI DU PETIT CHAMPION : LES 28 LETTRES DU SAINT CORAN
-                </div>
-                <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>
-                  {allLettersValidated
-                    ? "🎉 BRAVO ! Toutes les lettres sont validées ! Le menu CORAN est maintenant débloqué !"
-                    : `Valide toutes les lettres pour faire apparaître le menu LECTURE DU CORAN ! (encore ${Math.max(0, 28 - validatedCount)} à faire)`}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              {allLettersValidated ? (
-                <button
-                  id="btn-quest-go-quran"
-                  onClick={() => {
-                    dispatch(uiActions.setActivePage("quran"));
-                    navigate("/quran");
-                  }}
-                  style={{
-                    padding: "7px 16px",
-                    borderRadius: 8,
-                    border: "1px solid #ffd166",
-                    background: "linear-gradient(135deg, #ffd166 0%, #e09f3e 100%)",
-                    color: "#121624",
-                    fontWeight: 800,
-                    fontSize: 11,
-                    fontFamily: "'Cinzel', serif",
-                    cursor: "pointer",
-                    boxShadow: "0 2px 10px rgba(255, 209, 102, 0.35)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <span>📖</span>
-                  <span>OUVRIR LE CORAN DÉBLOQUÉ</span>
-                  <span>🚀</span>
-                </button>
-              ) : (
-                <div
-                  style={{
-                    padding: "5px 12px",
-                    borderRadius: 8,
-                    background: "rgba(0,0,0,0.3)",
-                    border: "1px solid rgba(255, 209, 102, 0.3)",
-                    color: "#ffd166",
-                    fontWeight: 700,
-                    fontSize: 11,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <span>🔒 Coran verrouillé</span>
-                  <span>·</span>
-                  <span>{validatedCount} / 28 ⭐</span>
-                </div>
-              )}
-
-              <button
-                id="btn-quest-validate-all"
-                onClick={() => dispatch(uiActions.validateAllLetters())}
-                title="Valider toutes les lettres d'un coup (Aide parent / testeur)"
+      <div className="pronon-page">
+        {/* ── CHILD LETTERS QUEST BANNER (collapsible & closable inside scrollable workspace) ── */}
+        {isChild && questBannerState !== "closed" && (
+          <div
+            id="child-letters-quest-banner"
+            data-banner-state={questBannerState}
+            style={{
+              padding: questBannerState === "compact" ? "8px 12px" : "10px 14px",
+              borderRadius: 12,
+              background: "linear-gradient(135deg, rgba(255, 209, 102, 0.14) 0%, rgba(224, 159, 62, 0.07) 100%)",
+              border: "1.5px solid rgba(255, 209, 102, 0.42)",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.2)",
+              display: "flex",
+              flexDirection: "column",
+              gap: questBannerState === "compact" ? 0 : 8,
+            }}
+          >
+            {questBannerState === "compact" ? (
+              <div
                 style={{
-                  padding: "5px 10px",
-                  borderRadius: 6,
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "var(--text3)",
-                  fontSize: 9.5,
-                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 8,
                 }}
               >
-                ⚡ Valider tout
-              </button>
-              {validatedCount > 0 && (
-                <button
-                  id="btn-quest-reset-all"
-                  onClick={() => dispatch(uiActions.resetValidatedLetters())}
-                  title="Réinitialiser les lettres pour recommencer le défi"
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <span style={{ fontSize: 16 }}>🏰</span>
+                  <span style={{ fontFamily: "'Cinzel', serif", fontWeight: 700, fontSize: 11, color: "#ffd166" }}>
+                    DÉFI DU PETIT CHAMPION · {validatedCount}/28 ⭐
+                  </span>
+                </div>
+
+                <div
                   style={{
-                    padding: "5px 10px",
-                    borderRadius: 6,
-                    border: "1px solid rgba(255,255,255,0.15)",
-                    background: "rgba(255,255,255,0.06)",
-                    color: "var(--text3)",
-                    fontSize: 9.5,
-                    cursor: "pointer",
+                    flex: "1 1 80px",
+                    minWidth: 60,
+                    maxWidth: 180,
+                    height: 6,
+                    background: "rgba(0,0,0,0.35)",
+                    borderRadius: 4,
+                    overflow: "hidden",
                   }}
                 >
-                  🔄 Réinitialiser
-                </button>
-              )}
-            </div>
-          </div>
+                  <div
+                    style={{
+                      width: `${Math.min(100, (validatedCount / 28) * 100)}%`,
+                      height: "100%",
+                      background: allLettersValidated
+                        ? "linear-gradient(90deg, #56d4bc, #ffd166)"
+                        : "linear-gradient(90deg, #ffd166, #ffb703)",
+                      borderRadius: 4,
+                      transition: "width .3s ease",
+                    }}
+                  />
+                </div>
 
-          {/* Progress Bar */}
-          <div style={{ width: "100%", height: 8, background: "rgba(0,0,0,0.35)", borderRadius: 4, overflow: "hidden", position: "relative" }}>
-            <div
-              style={{
-                width: `${Math.min(100, (validatedCount / 28) * 100)}%`,
-                height: "100%",
-                background: allLettersValidated
-                  ? "linear-gradient(90deg, #56d4bc, #ffd166)"
-                  : "linear-gradient(90deg, #ffd166, #ffb703)",
-                borderRadius: 4,
-                transition: "width .3s ease",
-                boxShadow: "0 0 10px rgba(255, 209, 102, 0.5)",
-              }}
-            />
-          </div>
-        </div>
-      )}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                  {allLettersValidated && (
+                    <button
+                      type="button"
+                      id="btn-quest-go-quran"
+                      onClick={() => {
+                        dispatch(uiActions.setActivePage("quran"));
+                        navigate(buildQuranRoute({ activePage: "quran" }));
+                      }}
+                      style={{
+                        minHeight: 34,
+                        padding: "4px 10px",
+                        borderRadius: 7,
+                        border: "1px solid #ffd166",
+                        background: "linear-gradient(135deg, #ffd166 0%, #e09f3e 100%)",
+                        color: "#121624",
+                        fontWeight: 800,
+                        fontSize: 10,
+                        cursor: "pointer",
+                      }}
+                    >
+                      📖 Ouvrir Coran →
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    id="btn-quest-toggle-compact"
+                    aria-expanded="false"
+                    aria-label="Agrandir le bandeau du défi"
+                    onClick={() => dispatch(uiActions.toggleChildQuestBannerCompact())}
+                    style={{
+                      minHeight: 34,
+                      padding: "4px 10px",
+                      borderRadius: 7,
+                      border: "1px solid rgba(255, 209, 102, 0.35)",
+                      background: "rgba(255, 255, 255, 0.06)",
+                      color: "#ffd166",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ▾ Agrandir
+                  </button>
+                  <button
+                    type="button"
+                    id="btn-quest-close"
+                    aria-label="Fermer le bandeau du défi"
+                    title="Fermer ce bandeau"
+                    onClick={() => dispatch(uiActions.closeChildQuestBanner())}
+                    style={{
+                      minWidth: 34,
+                      minHeight: 34,
+                      padding: "4px 8px",
+                      borderRadius: 7,
+                      border: "1px solid rgba(255, 255, 255, 0.16)",
+                      background: "rgba(255, 255, 255, 0.06)",
+                      color: "var(--text2)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "1 1 240px", minWidth: 0 }}>
+                    <span style={{ fontSize: 22, flexShrink: 0 }}>🏰</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: "'Cinzel', serif", fontWeight: 800, fontSize: 12, color: "#ffd166", letterSpacing: 0.7 }}>
+                        DÉFI DU PETIT CHAMPION : LES 28 LETTRES DU SAINT CORAN
+                      </div>
+                      <div style={{ fontSize: 10.5, color: "var(--text2)", marginTop: 2 }}>
+                        {allLettersValidated
+                          ? "🎉 BRAVO ! Toutes les lettres sont validées ! Le menu CORAN est maintenant débloqué !"
+                          : `Valide toutes les lettres pour débloquer le menu CORAN (encore ${Math.max(0, 28 - validatedCount)} à faire)`}
+                      </div>
+                    </div>
+                  </div>
 
-      <div className="pronon-page">
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", flexShrink: 0 }}>
+                    {allLettersValidated ? (
+                      <button
+                        type="button"
+                        id="btn-quest-go-quran"
+                        onClick={() => {
+                          dispatch(uiActions.setActivePage("quran"));
+                          navigate(buildQuranRoute({ activePage: "quran" }));
+                        }}
+                        style={{
+                          minHeight: 36,
+                          padding: "6px 12px",
+                          borderRadius: 8,
+                          border: "1px solid #ffd166",
+                          background: "linear-gradient(135deg, #ffd166 0%, #e09f3e 100%)",
+                          color: "#121624",
+                          fontWeight: 800,
+                          fontSize: 10.5,
+                          fontFamily: "'Cinzel', serif",
+                          cursor: "pointer",
+                          boxShadow: "0 2px 10px rgba(255, 209, 102, 0.35)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                        }}
+                      >
+                        <span>📖</span>
+                        <span>OUVRIR LE CORAN DÉBLOQUÉ</span>
+                        <span>🚀</span>
+                      </button>
+                    ) : (
+                      <div
+                        style={{
+                          padding: "5px 10px",
+                          borderRadius: 7,
+                          background: "rgba(0,0,0,0.3)",
+                          border: "1px solid rgba(255, 209, 102, 0.3)",
+                          color: "#ffd166",
+                          fontWeight: 700,
+                          fontSize: 10.5,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                        }}
+                      >
+                        <span>🔒 Coran verrouillé</span>
+                        <span>·</span>
+                        <span>{validatedCount} / 28 ⭐</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      id="btn-quest-validate-all"
+                      onClick={() => dispatch(uiActions.validateAllLetters())}
+                      title="Valider toutes les lettres d'un coup (Aide parent / testeur)"
+                      style={{
+                        minHeight: 34,
+                        padding: "5px 9px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        background: "rgba(255,255,255,0.06)",
+                        color: "var(--text3)",
+                        fontSize: 9.5,
+                        cursor: "pointer",
+                      }}
+                    >
+                      ⚡ Valider tout
+                    </button>
+                    {validatedCount > 0 && (
+                      <button
+                        type="button"
+                        id="btn-quest-reset-all"
+                        onClick={() => dispatch(uiActions.resetValidatedLetters())}
+                        title="Réinitialiser les lettres pour recommencer le défi"
+                        style={{
+                          minHeight: 34,
+                          padding: "5px 9px",
+                          borderRadius: 6,
+                          border: "1px solid rgba(255,255,255,0.15)",
+                          background: "rgba(255,255,255,0.06)",
+                          color: "var(--text3)",
+                          fontSize: 9.5,
+                          cursor: "pointer",
+                        }}
+                      >
+                        🔄 Réinitialiser
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      id="btn-quest-toggle-compact"
+                      aria-expanded="true"
+                      aria-label="Réduire le bandeau du défi"
+                      title="Réduire / rapetisser ce bandeau"
+                      onClick={() => dispatch(uiActions.toggleChildQuestBannerCompact())}
+                      style={{
+                        minHeight: 34,
+                        padding: "5px 9px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(255, 209, 102, 0.35)",
+                        background: "rgba(255,255,255,0.06)",
+                        color: "#ffd166",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      ▴ Réduire
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-quest-close"
+                      aria-label="Fermer le bandeau du défi"
+                      title="Fermer ce bandeau"
+                      onClick={() => dispatch(uiActions.closeChildQuestBanner())}
+                      style={{
+                        minWidth: 34,
+                        minHeight: 34,
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                        border: "1px solid rgba(255,255,255,0.18)",
+                        background: "rgba(255,255,255,0.06)",
+                        color: "var(--text2)",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div style={{ width: "100%", height: 7, background: "rgba(0,0,0,0.35)", borderRadius: 4, overflow: "hidden", position: "relative" }}>
+                  <div
+                    style={{
+                      width: `${Math.min(100, (validatedCount / 28) * 100)}%`,
+                      height: "100%",
+                      background: allLettersValidated
+                        ? "linear-gradient(90deg, #56d4bc, #ffd166)"
+                        : "linear-gradient(90deg, #ffd166, #ffb703)",
+                      borderRadius: 4,
+                      transition: "width .3s ease",
+                      boxShadow: "0 0 10px rgba(255, 209, 102, 0.5)",
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {/* ══════════════════════════════════════════════════════════════════════ */}
         {/* ── TAB 1 : LETTRES & ANATOMIE DE LA BOUCHE ──                        */}
         {/* ══════════════════════════════════════════════════════════════════════ */}
@@ -297,24 +499,33 @@ export function PrononciationPage() {
                 {isChild ? "🌟 LES 29 LETTRES ET LEURS MAISONS SECRÈTES" : "POINTS DE SORTIE DES 29 LETTRES (مَخَارِجُ الحُرُوف)"}
               </div>
 
-              {/* Filtre par organe anatomique */}
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                {[
-                  { id: "all", label: isChild ? `Toutes (${ARABIC_LETTERS.length})` : `Toutes (${ARABIC_LETTERS.length})` },
-                  { id: "lisan", label: isChild ? "👅 Langue Magicienne (18)" : "👅 Langue (18)" },
-                  { id: "halq", label: isChild ? "🔴 Grotte de la Gorge (6)" : "🔴 Gorge (6)" },
-                  { id: "shafatayn", label: isChild ? "👄 Deux Lèvres (4)" : "👄 Lèvres (4)" },
-                  { id: "jawf", label: isChild ? "🟢 Grand Toboggan (1)" : "🟢 Cavité (1)" },
-                  { id: "heavy", label: isChild ? "🦁 Lettres Championnes (7)" : "⚖️ Graves (7)" },
-                ].map((f) => (
+              {/* Filtre par organe anatomique (4 filtres épurés en Enfant/Novice, 6 complets en Standard/Expert) */}
+              <div id="pronon-organ-filters" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                {(isSimplified
+                  ? [
+                      { id: "all", label: `Toutes (${ARABIC_LETTERS.length})` },
+                      { id: "lisan", label: "👅 Langue (18)" },
+                      { id: "halq", label: "🔴 Gorge (6)" },
+                      { id: "shafatayn", label: "👄 Lèvres (4)" },
+                    ]
+                  : [
+                      { id: "all", label: `Toutes (${ARABIC_LETTERS.length})` },
+                      { id: "lisan", label: "👅 Langue (18)" },
+                      { id: "halq", label: "🔴 Gorge (6)" },
+                      { id: "shafatayn", label: "👄 Lèvres (4)" },
+                      { id: "jawf", label: "🟢 Cavité (1)" },
+                      { id: "heavy", label: "⚖️ Graves (7)" },
+                    ]
+                ).map((f) => (
                   <button
                     key={f.id}
                     type="button"
                     onClick={() => setOrganFilter(f.id)}
                     style={{
-                      padding: "4px 10px",
+                      minHeight: 36,
+                      padding: "6px 12px",
                       borderRadius: 16,
-                      fontSize: 9.5,
+                      fontSize: 10,
                       fontFamily: "'Cinzel', serif",
                       fontWeight: 700,
                       cursor: "pointer",
@@ -357,7 +568,7 @@ export function PrononciationPage() {
                       }}
                     >
                       {/* Validation Star Badge */}
-                      {isValidated ? (
+                      {isValidated && (
                         <div
                           title="Lettre validée ! ⭐"
                           style={{
@@ -377,22 +588,6 @@ export function PrononciationPage() {
                         >
                           ⭐
                         </div>
-                      ) : (
-                        isChild && (
-                          <div
-                            title="Lettre à valider"
-                            style={{
-                              position: "absolute",
-                              top: 5,
-                              left: 5,
-                              fontSize: 8,
-                              color: "var(--text3)",
-                              opacity: 0.5,
-                            }}
-                          >
-                            ⚪
-                          </div>
-                        )
                       )}
 
                       <div className="pronon-letter" style={isLtrHeavy ? { color: "#ffd166" } : {}}>
@@ -401,8 +596,8 @@ export function PrononciationPage() {
                       <div className="pronon-letter-name">{l.name.toUpperCase()}</div>
                       <div className="pronon-letter-trans">/{l.trans}/</div>
 
-                      {/* Indicateur lettre grave */}
-                      {isLtrHeavy && (
+                      {/* Indicateur lettre grave (masqué sur les tuiles en mode Enfant/Novice) */}
+                      {isLtrHeavy && layoutCfg.showHeavyCardPills && (
                         <div
                           style={{
                             fontSize: 7,
@@ -582,7 +777,7 @@ export function PrononciationPage() {
                           <span>N° {letterProfile.alphabetOrder}/29</span>
                           <span aria-hidden="true"> · </span>
                           <span>{letterProfile.dots}</span>
-                          {!isChild && (
+                          {layoutCfg.showLetterTechnicalMeta && (
                             <>
                               <span aria-hidden="true"> · </span>
                               <span style={{ fontVariantNumeric: "tabular-nums" }}>Abjad : {letterProfile.abjadValue}</span>
@@ -598,53 +793,55 @@ export function PrononciationPage() {
                       </div>
                     </div>
 
-                    {/* Barre de filtre rapide des sections encyclopédiques */}
-                    <div
-                      id="letter-detail-section-tabs"
-                      style={{
-                        display: "flex",
-                        gap: 4,
-                        flexWrap: "wrap",
-                        justifyContent: "center",
-                        background: "var(--surface3)",
-                        padding: 4,
-                        borderRadius: 8,
-                        border: "1px solid var(--border)",
-                        width: "100%",
-                        marginTop: 4,
-                      }}
-                    >
-                      {[
-                        ["all", "📋 Tout voir"],
-                        ["anatomie", "🔬 Anatomie & Formes"],
-                        ["proches", "🔀 Similaires"],
-                        ["tajweed", "⚖️ Tajweed & Sifât"],
-                        ["sons", "🎙️ Sons & Exemples"],
-                        ["ecriture", "✍️ Tracé & Pièges"],
-                      ].map(([secId, secLabel]) => (
-                        <button
-                          key={secId}
-                          type="button"
-                          onClick={() => setDetailSection(secId)}
-                          style={{
-                            flex: "1 1 auto",
-                            padding: "6px 10px",
-                            borderRadius: 6,
-                            border: "none",
-                            cursor: "pointer",
-                            whiteSpace: "nowrap",
-                            fontSize: 9.5,
-                            fontFamily: "'Cinzel', serif",
-                            fontWeight: 700,
-                            background: detailSection === secId ? "rgba(255, 183, 3, 0.22)" : "transparent",
-                            color: detailSection === secId ? "#ffd166" : "var(--text3)",
-                            transition: "all .15s",
-                          }}
-                        >
-                          {secLabel}
-                        </button>
-                      ))}
-                    </div>
+                    {/* Barre de filtre rapide des sections encyclopédiques (progressive disclosure) */}
+                    {showAdvanced && (
+                      <div
+                        id="letter-detail-section-tabs"
+                        style={{
+                          display: "flex",
+                          gap: 4,
+                          flexWrap: "wrap",
+                          justifyContent: "center",
+                          background: "var(--surface3)",
+                          padding: 4,
+                          borderRadius: 8,
+                          border: "1px solid var(--border)",
+                          width: "100%",
+                          marginTop: 4,
+                        }}
+                      >
+                        {[
+                          ["all", "📋 Tout voir"],
+                          ["anatomie", "🔬 Anatomie & Formes"],
+                          ["proches", "🔀 Similaires"],
+                          ["tajweed", "⚖️ Tajweed & Sifât"],
+                          ["sons", "🎙️ Sons & Exemples"],
+                          ["ecriture", "✍️ Tracé & Pièges"],
+                        ].map(([secId, secLabel]) => (
+                          <button
+                            key={secId}
+                            type="button"
+                            onClick={() => setDetailSection(secId)}
+                            style={{
+                              flex: "1 1 auto",
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "none",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                              fontSize: 9.5,
+                              fontFamily: "'Cinzel', serif",
+                              fontWeight: 700,
+                              background: detailSection === secId ? "rgba(255, 183, 3, 0.22)" : "transparent",
+                              color: detailSection === secId ? "#ffd166" : "var(--text3)",
+                              transition: "all .15s",
+                            }}
+                          >
+                            {secLabel}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* ── SECTION 1 : ANATOMIE, POSTURE TAFKHÎM & FORMES CONTEXTUELLES ── */}
@@ -695,12 +892,12 @@ export function PrononciationPage() {
                           }}
                         >
                           <div style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--gold2)", fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
-                            POSITION ANATOMIQUE DES ORGANES (LANGUE, GORGE, LÈVRES) :
+                            {isSimplified && !showAdvanced ? "💡 COMMENT PRONONCER CETTE LETTRE :" : "POSITION ANATOMIQUE DES ORGANES (LANGUE, GORGE, LÈVRES) :"}
                           </div>
                           <div style={{ fontSize: 11, color: "var(--text)", lineHeight: 1.6 }}>
                             {selDetail?.howToPronounce || selectedLetter.tip}
                           </div>
-                          {selDetail?.anatomicalTip && (
+                          {showAdvanced && selDetail?.anatomicalTip && (
                             <div style={{ fontSize: 10, color: "var(--teal2)", borderTop: "1px solid var(--border2)", paddingTop: 4, marginTop: 2 }}>
                               🔬 <em>Détail anatomique :</em> {selDetail.anatomicalTip}
                             </div>
@@ -736,8 +933,8 @@ export function PrononciationPage() {
                     </div>
                   )}
 
-                  {/* ── SECTION 1B : MULTI-SCHÉMAS LETTRES AU MÊME MAKHRAJ OU PROCHES (1 SCHÉMA / LETTRE) ── */}
-                  {(detailSection === "all" || detailSection === "anatomie" || detailSection === "proches") && (
+                  {/* ── SECTION 1B : MULTI-SCHÉMAS LETTRES AU MÊME MAKHRAJ OU PROCHES (masqué par défaut en Enfant/Novice) ── */}
+                  {showAdvanced && (detailSection === "all" || detailSection === "anatomie" || detailSection === "proches") && (
                     <MakharijSimilarLettersDiagrams
                       activeLetter={selectedLetter.letter}
                       isChild={isChild}
@@ -753,44 +950,50 @@ export function PrononciationPage() {
                     />
                   )}
 
-                  {/* ── SECTION 2 : TAJWEED COMPLET (SIFÂT & RÈGLES CORANIQUES) ── */}
+                  {/* ── SECTION 2 : TAJWEED (essentiel en Enfant/Novice, complet en Standard/Expert) ── */}
                   {(detailSection === "all" || detailSection === "tajweed") && (
                     <div id="letter-tajweed-encyclopedia" style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: detailSection === "all" ? 10 : 0, borderTop: detailSection === "all" ? "1px solid var(--border)" : "none" }}>
                       <div className="pronon-section-title">
-                        {isChild ? "✨ SUPER-POUVOIRS & RÈGLES MAGIQUES (TAJWEED)" : "PROPRIÉTÉS PHONÉTIQUES (صِفَاتُ الْحُرُوف) & RÈGLES CORANIQUES"}
+                        {isChild
+                          ? "✨ SUPER-POUVOIRS & RÈGLES MAGIQUES (TAJWEED)"
+                          : !showAdvanced
+                            ? "RÈGLES ESSENTIELLES DE RÉCITATION"
+                            : "PROPRIÉTÉS PHONÉTIQUES (صِفَاتُ الْحُرُوف) & RÈGLES CORANIQUES"}
                       </div>
 
-                      {/* Les 5 Sifât à contraires */}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(175px, 1fr))", gap: 8 }}>
-                        {[
-                          { label: "Souffle", title: letterProfile.sifat.airflow.name, desc: isChild ? letterProfile.sifat.airflow.childMeaning : letterProfile.sifat.airflow.meaning },
-                          { label: "Écoulement du son", title: letterProfile.sifat.duration.name, desc: isChild ? letterProfile.sifat.duration.childMeaning : letterProfile.sifat.duration.meaning },
-                          { label: "Posture de langue", title: letterProfile.sifat.elevation.name, desc: isChild ? letterProfile.sifat.elevation.childMeaning : letterProfile.sifat.elevation.meaning },
-                          { label: "Voûte palatine", title: letterProfile.sifat.adhesion.name, desc: isChild ? letterProfile.sifat.adhesion.childMeaning : letterProfile.sifat.adhesion.meaning },
-                          { label: "Fluidité", title: letterProfile.sifat.fluency.name, desc: isChild ? letterProfile.sifat.fluency.childMeaning : letterProfile.sifat.fluency.meaning },
-                        ].map((item) => (
-                          <div
-                            key={item.label}
-                            style={{
-                              padding: "8px 10px",
-                              borderRadius: 8,
-                              background: "var(--surface2)",
-                              border: "1px solid var(--border)",
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 2,
-                            }}
-                          >
-                            <div style={{ fontSize: 8.5, color: "var(--text3)", letterSpacing: 0.6 }}>{item.label.toUpperCase()}</div>
-                            <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)" }}>
-                              <GlossaryAutoText text={item.title} isChild={isChild} />
+                      {/* Les 5 Sifât à contraires (détails techniques uniquement en mode avancé/complet) */}
+                      {showAdvanced && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(175px, 1fr))", gap: 8 }}>
+                          {[
+                            { label: "Souffle", title: letterProfile.sifat.airflow.name, desc: isChild ? letterProfile.sifat.airflow.childMeaning : letterProfile.sifat.airflow.meaning },
+                            { label: "Écoulement du son", title: letterProfile.sifat.duration.name, desc: isChild ? letterProfile.sifat.duration.childMeaning : letterProfile.sifat.duration.meaning },
+                            { label: "Posture de langue", title: letterProfile.sifat.elevation.name, desc: isChild ? letterProfile.sifat.elevation.childMeaning : letterProfile.sifat.elevation.meaning },
+                            { label: "Voûte palatine", title: letterProfile.sifat.adhesion.name, desc: isChild ? letterProfile.sifat.adhesion.childMeaning : letterProfile.sifat.adhesion.meaning },
+                            { label: "Fluidité", title: letterProfile.sifat.fluency.name, desc: isChild ? letterProfile.sifat.fluency.childMeaning : letterProfile.sifat.fluency.meaning },
+                          ].map((item) => (
+                            <div
+                              key={item.label}
+                              style={{
+                                padding: "8px 10px",
+                                borderRadius: 8,
+                                background: "var(--surface2)",
+                                border: "1px solid var(--border)",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 2,
+                              }}
+                            >
+                              <div style={{ fontSize: 8.5, color: "var(--text3)", letterSpacing: 0.6 }}>{item.label.toUpperCase()}</div>
+                              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)" }}>
+                                <GlossaryAutoText text={item.title} isChild={isChild} />
+                              </div>
+                              <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.35 }}>
+                                <GlossaryAutoText text={item.desc} isChild={isChild} />
+                              </div>
                             </div>
-                            <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.35 }}>
-                              <GlossaryAutoText text={item.desc} isChild={isChild} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
 
                       {/* Sifât uniques (Qalqalah, Safîr, Ghunnah, Istiṭâlah, Tafash-shî, etc.) */}
                       {letterProfile.sifat.unique.length > 0 && (
@@ -816,7 +1019,7 @@ export function PrononciationPage() {
                         </div>
                       )}
 
-                      {/* Solaire / Lunaire, Nûn Sâkin, Mîm Sâkin, Muqaṭṭa'ât */}
+                      {/* Solaire / Lunaire (+ Nûn Sâkin, Mîm Sâkin, Muqaṭṭa'ât en mode complet) */}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 8 }}>
                         {/* Solaire / Lunaire avec écoute audio */}
                         <div
@@ -848,35 +1051,39 @@ export function PrononciationPage() {
                           </div>
                         </div>
 
-                        {/* Nûn Sâkin & Tanwîn */}
-                        <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--surface3)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 3 }}>
-                          <div style={{ fontSize: 8.5, color: "var(--text3)" }}>APRÈS NÛN SÂKIN (نْ) OU TANWÎN</div>
-                          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--teal2)" }}>{letterProfile.quranRules.nunSakinRule.rule}</div>
-                          <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
-                            {isChild ? letterProfile.quranRules.nunSakinRule.childDesc : letterProfile.quranRules.nunSakinRule.desc}
-                          </div>
-                        </div>
-
-                        {/* Mîm Sâkin */}
-                        <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--surface3)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 3 }}>
-                          <div style={{ fontSize: 8.5, color: "var(--text3)" }}>APRÈS MÎM SÂKIN (مْ)</div>
-                          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)" }}>{letterProfile.quranRules.mimSakinRule.rule}</div>
-                          <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
-                            {isChild ? letterProfile.quranRules.mimSakinRule.childDesc : letterProfile.quranRules.mimSakinRule.desc}
-                          </div>
-                        </div>
-
-                        {/* Muqaṭṭa'ât si applicable */}
-                        {letterProfile.quranRules.muqattaat && (
-                          <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.3)", display: "flex", flexDirection: "column", gap: 3 }}>
-                            <div style={{ fontSize: 8.5, color: "#38bdf8", fontWeight: 700 }}>✨ LETTRE LUMINEUSE (الْحُرُوفُ الْمُقَطَّعَة)</div>
-                            <div style={{ fontSize: 10, color: "var(--text)", fontFamily: "'Amiri Quran', serif", direction: "rtl", textAlign: "right" }}>
-                              {letterProfile.quranRules.muqattaat.combinations.join(" · ")}
+                        {showAdvanced && (
+                          <>
+                            {/* Nûn Sâkin & Tanwîn */}
+                            <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--surface3)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 3 }}>
+                              <div style={{ fontSize: 8.5, color: "var(--text3)" }}>APRÈS NÛN SÂKIN (نْ) OU TANWÎN</div>
+                              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--teal2)" }}>{letterProfile.quranRules.nunSakinRule.rule}</div>
+                              <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
+                                {isChild ? letterProfile.quranRules.nunSakinRule.childDesc : letterProfile.quranRules.nunSakinRule.desc}
+                              </div>
                             </div>
-                            <div style={{ fontSize: 9, color: "var(--text2)" }}>
-                              Ouvre {letterProfile.quranRules.muqattaat.surahsCount} sourate(s) du Coran (lue par son nom complet).
+
+                            {/* Mîm Sâkin */}
+                            <div style={{ padding: "9px 12px", borderRadius: 8, background: "var(--surface3)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 3 }}>
+                              <div style={{ fontSize: 8.5, color: "var(--text3)" }}>APRÈS MÎM SÂKIN (مْ)</div>
+                              <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)" }}>{letterProfile.quranRules.mimSakinRule.rule}</div>
+                              <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
+                                {isChild ? letterProfile.quranRules.mimSakinRule.childDesc : letterProfile.quranRules.mimSakinRule.desc}
+                              </div>
                             </div>
-                          </div>
+
+                            {/* Muqaṭṭa'ât si applicable */}
+                            {letterProfile.quranRules.muqattaat && (
+                              <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.3)", display: "flex", flexDirection: "column", gap: 3 }}>
+                                <div style={{ fontSize: 8.5, color: "#38bdf8", fontWeight: 700 }}>✨ LETTRE LUMINEUSE (الْحُرُوفُ الْمُقَطَّعَة)</div>
+                                <div style={{ fontSize: 10, color: "var(--text)", fontFamily: "'Amiri Quran', serif", direction: "rtl", textAlign: "right" }}>
+                                  {letterProfile.quranRules.muqattaat.combinations.join(" · ")}
+                                </div>
+                                <div style={{ fontSize: 9, color: "var(--text2)" }}>
+                                  Ouvre {letterProfile.quranRules.muqattaat.surahsCount} sourate(s) du Coran (lue par son nom complet).
+                                </div>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -908,78 +1115,80 @@ export function PrononciationPage() {
                         </div>
                       </div>
 
-                      {/* Voyelles longues (Madd) & Chadda/Tanwîn */}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-                        <div>
-                          <div className="pronon-section-title" style={{ marginBottom: 6 }}>
-                            VOYELLES LONGUES (مَدّ · 2 TEMPS)
+                      {/* Voyelles longues (Madd) & Chadda/Tanwîn (progressive disclosure en Enfant/Novice) */}
+                      {showAdvanced && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                          <div>
+                            <div className="pronon-section-title" style={{ marginBottom: 6 }}>
+                              VOYELLES LONGUES (مَدّ · 2 TEMPS)
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                              {letterProfile.maddaForms.map((m, mi) => {
+                                const pid = `madd-${selected}-${mi}`;
+                                return (
+                                  <button
+                                    key={m.label}
+                                    type="button"
+                                    onClick={() => speak(m.synth, pid)}
+                                    style={{
+                                      padding: "8px 6px",
+                                      borderRadius: 8,
+                                      border: `1px solid ${playingId === pid ? "var(--teal)" : "var(--border)"}`,
+                                      background: playingId === pid ? "rgba(86, 212, 188, 0.14)" : "var(--surface3)",
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      alignItems: "center",
+                                      gap: 2,
+                                    }}
+                                    title={m.desc}
+                                  >
+                                    <span style={{ fontFamily: "'Amiri Quran', serif", fontSize: 22, color: "var(--gold2)", direction: "rtl" }}>
+                                      {m.arabic}
+                                    </span>
+                                    <span style={{ fontSize: 8.5, color: "var(--text3)" }}>{m.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                            {letterProfile.maddaForms.map((m, mi) => {
-                              const pid = `madd-${selected}-${mi}`;
-                              return (
-                                <button
-                                  key={m.label}
-                                  type="button"
-                                  onClick={() => speak(m.synth, pid)}
-                                  style={{
-                                    padding: "8px 6px",
-                                    borderRadius: 8,
-                                    border: `1px solid ${playingId === pid ? "var(--teal)" : "var(--border)"}`,
-                                    background: playingId === pid ? "rgba(86, 212, 188, 0.14)" : "var(--surface3)",
-                                    cursor: "pointer",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    alignItems: "center",
-                                    gap: 2,
-                                  }}
-                                  title={m.desc}
-                                >
-                                  <span style={{ fontFamily: "'Amiri Quran', serif", fontSize: 22, color: "var(--gold2)", direction: "rtl" }}>
-                                    {m.arabic}
-                                  </span>
-                                  <span style={{ fontSize: 8.5, color: "var(--text3)" }}>{m.label}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
 
-                        <div>
-                          <div className="pronon-section-title" style={{ marginBottom: 6 }}>
-                            CHADDA & TANWÎN (شَدَّة وَتَنْوِين)
-                          </div>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-                            {letterProfile.advancedHarakatForms.map((ah, ahi) => {
-                              const pid = `adv-h-${selected}-${ahi}`;
-                              return (
-                                <button
-                                  key={ah.label}
-                                  type="button"
-                                  onClick={() => speak(ah.synth, pid)}
-                                  style={{
-                                    padding: "8px 4px",
-                                    borderRadius: 8,
-                                    border: `1px solid ${playingId === pid ? "var(--teal)" : "var(--border)"}`,
-                                    background: playingId === pid ? "rgba(86, 212, 188, 0.14)" : "var(--surface3)",
-                                    cursor: "pointer",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    alignItems: "center",
-                                    gap: 2,
-                                  }}
-                                  title={ah.desc}
-                                >
-                                  <span style={{ fontFamily: "'Amiri Quran', serif", fontSize: 20, color: "var(--teal2)", direction: "rtl" }}>
-                                    {ah.arabic}
-                                  </span>
-                                  <span style={{ fontSize: 8, color: "var(--text3)" }}>{ah.label.split(" ")[0]}</span>
-                                </button>
-                              );
-                            })}
+                          <div>
+                            <div className="pronon-section-title" style={{ marginBottom: 6 }}>
+                              CHADDA & TANWÎN (شَدَّة وَتَنْوِين)
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+                              {letterProfile.advancedHarakatForms.map((ah, ahi) => {
+                                const pid = `adv-h-${selected}-${ahi}`;
+                                return (
+                                  <button
+                                    key={ah.label}
+                                    type="button"
+                                    onClick={() => speak(ah.synth, pid)}
+                                    style={{
+                                      padding: "8px 4px",
+                                      borderRadius: 8,
+                                      border: `1px solid ${playingId === pid ? "var(--teal)" : "var(--border)"}`,
+                                      background: playingId === pid ? "rgba(86, 212, 188, 0.14)" : "var(--surface3)",
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      alignItems: "center",
+                                      gap: 2,
+                                    }}
+                                    title={ah.desc}
+                                  >
+                                    <span style={{ fontFamily: "'Amiri Quran', serif", fontSize: 20, color: "var(--teal2)", direction: "rtl" }}>
+                                      {ah.arabic}
+                                    </span>
+                                    <span style={{ fontSize: 8, color: "var(--text3)" }}>{ah.label.split(" ")[0]}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Exemples coraniques avec écoute audio */}
                       {selDetail?.exampleWords && (
@@ -1039,8 +1248,8 @@ export function PrononciationPage() {
                         </div>
                       </div>
 
-                      {/* Lettres proches / confondues avec comparaison audio directe */}
-                      {letterProfile.confusionPairs.length > 0 && (
+                      {/* Lettres proches / confondues avec comparaison audio directe (masqué par défaut en Enfant/Novice) */}
+                      {showAdvanced && letterProfile.confusionPairs.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                           <div style={{ fontSize: 9.5, fontWeight: 700, color: "#ffd166" }}>
                             🔍 NE PAS CONFONDRE AVEC (CLIQUER POUR COMPARER LE SON) :
@@ -1080,16 +1289,18 @@ export function PrononciationPage() {
                         </div>
                       )}
 
-                      {/* Piège courant + Fait coranique */}
+                      {/* Piège courant (avancé) + Fait coranique */}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-                        <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(244, 63, 94, 0.08)", border: "1px solid rgba(244, 63, 94, 0.3)", display: "flex", flexDirection: "column", gap: 3 }}>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: "#fda4af" }}>
-                            ⚠️ {isChild ? "PETIT PIÈGE À ÉVITER" : "ERREUR FRÉQUENTE À CORRIGER"}
+                        {showAdvanced && (
+                          <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(244, 63, 94, 0.08)", border: "1px solid rgba(244, 63, 94, 0.3)", display: "flex", flexDirection: "column", gap: 3 }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: "#fda4af" }}>
+                              ⚠️ {isChild ? "PETIT PIÈGE À ÉVITER" : "ERREUR FRÉQUENTE À CORRIGER"}
+                            </div>
+                            <div style={{ fontSize: 10, color: "var(--text2)", lineHeight: 1.45 }}>
+                              {isChild ? letterProfile.childMistakeTip : letterProfile.commonMistake}
+                            </div>
                           </div>
-                          <div style={{ fontSize: 10, color: "var(--text2)", lineHeight: 1.45 }}>
-                            {isChild ? letterProfile.childMistakeTip : letterProfile.commonMistake}
-                          </div>
-                        </div>
+                        )}
 
                         <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(255, 183, 3, 0.08)", border: "1px solid rgba(255, 183, 3, 0.3)", display: "flex", flexDirection: "column", gap: 3 }}>
                           <div style={{ fontSize: 9, fontWeight: 700, color: "#ffd166" }}>
@@ -1101,6 +1312,37 @@ export function PrononciationPage() {
                         </div>
                       </div>
                     </div>
+                  )}
+
+                  {/* Bouton de divulgation progressive pour Enfant & Novice */}
+                  {isSimplified && (
+                    <button
+                      type="button"
+                      id="btn-pronon-toggle-advanced"
+                      aria-expanded={showAdvancedInSimplified}
+                      onClick={() => setShowAdvancedInSimplified((prev) => !prev)}
+                      style={{
+                        width: "100%",
+                        minHeight: 40,
+                        padding: "9px 14px",
+                        borderRadius: 10,
+                        border: "1px solid var(--border)",
+                        background: "var(--surface3)",
+                        color: "var(--gold2)",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        marginTop: 4,
+                      }}
+                    >
+                      {showAdvancedInSimplified
+                        ? "➖ Masquer les détails avancés"
+                        : "➕ Afficher les détails avancés (Tajweed, Similaires, Écriture)"}
+                    </button>
                   )}
                 </div>
               ) : (
@@ -1120,7 +1362,7 @@ export function PrononciationPage() {
         {/* ── TAB 2 : LETTRES GRAVES (TAFKHÎM - خُصَّ ضَغْطٍ قِظْ) ──             */}
         {/* ══════════════════════════════════════════════════════════════════════ */}
         {tab === "graves" && (
-          <HeavyLettersGuide speak={speak} playingId={playingId} isChild={isChild} />
+          <HeavyLettersGuide speak={speak} playingId={playingId} isChild={isChild} isSimplified={isSimplified} />
         )}
 
         {/* ══════════════════════════════════════════════════════════════════════ */}

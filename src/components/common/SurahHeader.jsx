@@ -4,7 +4,7 @@ import { sel, uiActions, playerActions } from "../../store.js";
 import { masteryColor, computeMastery, computeDisplayedPartMastery } from "./Mastery.jsx";
 import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
-import { getUxProfile, isSimplifiedUxMode } from "../../utils/uxProfileManager.js";
+import { getUxProfile, isSimplifiedUxMode, getSimplifiedLayoutConfig } from "../../utils/uxProfileManager.js";
 import { SurahAllOptionsModal } from "./SurahAllOptionsModal.jsx";
 
 export function SurahHeader({
@@ -99,6 +99,7 @@ export function SurahHeader({
   const cachedSurahsMap = useSelector(sel.cachedSurahsMap);
   const uxMode = useSelector(sel.uxMode);
   const currentUx = getUxProfile(uxMode);
+  const layoutCfg = getSimplifiedLayoutConfig(uxMode);
 
   // Redux Tajweed selectors with fallback for robust activation
   const storeShowQalqala     = useSelector(sel.showQalqala);
@@ -296,35 +297,43 @@ export function SurahHeader({
             <span className="m-compact-ar">{selectedSurah.name}</span>
             <span className="m-compact-en">{selectedSurah.englishName}</span>
             <span className="m-compact-meta">
-              {selectedSurah.numberOfAyahs}v · {isMeccan ? 'Mecq' : 'Méd'}
-              {displayPage ? ` · P.${displayPage}${pageMode || displayPageMastery.masteryPct > 0 ? ` (${displayPageMastery.masteryPct}%)` : ''}` : ''}
-              {displayHizb ? ` · H.${displayHizb}${hizbMode || displayHizbMastery.masteryPct > 0 ? ` (${displayHizbMastery.masteryPct}%)` : ''}` : ''}
-              {displayJuz ? ` · J.${displayJuz}${juzMode || displayJuzMastery.masteryPct > 0 ? ` (${displayJuzMastery.masteryPct}%)` : ''}` : ''}
-              {cachedSurahsMap?.[selectedSurah.number]?.isComplete ? ' · 💾 ✓' : cachedSurahsMap?.[selectedSurah.number]?.audioCount > 0 ? ` · 💾 ${cachedSurahsMap[selectedSurah.number].audioCount}/${cachedSurahsMap[selectedSurah.number].totalCount}` : ''}
+              {layoutCfg.showHeaderMetrics ? (
+                <>
+                  {selectedSurah.numberOfAyahs}v · {isMeccan ? 'Mecq' : 'Méd'}
+                  {displayPage ? ` · P.${displayPage}${pageMode || displayPageMastery.masteryPct > 0 ? ` (${displayPageMastery.masteryPct}%)` : ''}` : ''}
+                  {displayHizb ? ` · H.${displayHizb}${hizbMode || displayHizbMastery.masteryPct > 0 ? ` (${displayHizbMastery.masteryPct}%)` : ''}` : ''}
+                  {displayJuz ? ` · J.${displayJuz}${juzMode || displayJuzMastery.masteryPct > 0 ? ` (${displayJuzMastery.masteryPct}%)` : ''}` : ''}
+                  {cachedSurahsMap?.[selectedSurah.number]?.isComplete ? ' · 💾 ✓' : cachedSurahsMap?.[selectedSurah.number]?.audioCount > 0 ? ` · 💾 ${cachedSurahsMap[selectedSurah.number].audioCount}/${cachedSurahsMap[selectedSurah.number].totalCount}` : ''}
+                </>
+              ) : (
+                `${selectedSurah.numberOfAyahs} versets`
+              )}
             </span>
             <span className="m-compact-chevron">▾</span>
           </div>
 
           {/* Quick status & Next Surah */}
           <div className="m-surah-compact-actions">
-            {/* Mastery Pill — shows current displayed part mastery (Page/Hizb/Juz) when active, or Surah mastery */}
-            <button
-              type="button"
-              onClick={() => setShowSurahInfo(v => !v)}
-              className={`m-compact-mastery ${showSurahInfo ? 'active' : ''}`}
-              style={{
-                borderColor: masteryColor(headerMasteryPct),
-                color: masteryColor(headerMasteryPct),
-                cursor: 'pointer',
-              }}
-              title={
-                activePartModeLabel
-                  ? `Maîtrise ${activePartModeLabel} : ${displayedPartMastery.masteryPct}% (${displayedPartMastery.learnedCount}/${displayedPartMastery.totalCount} v.) · Sourate : ${totalMasteryPct}%`
-                  : "Voir les statistiques et options de la sourate"
-              }
-            >
-              {activePartModeLabel ? `${activePartModeLabel} · ${headerMasteryPct}%` : `${headerMasteryPct}%`} {isDisplayedPartFullyLearned ? '✓' : '▾'}
-            </button>
+            {/* Mastery Pill — hidden in simplified child & beginner modes */}
+            {layoutCfg.showHeaderMetrics && (
+              <button
+                type="button"
+                onClick={() => setShowSurahInfo(v => !v)}
+                className={`m-compact-mastery ${showSurahInfo ? 'active' : ''}`}
+                style={{
+                  borderColor: masteryColor(headerMasteryPct),
+                  color: masteryColor(headerMasteryPct),
+                  cursor: 'pointer',
+                }}
+                title={
+                  activePartModeLabel
+                    ? `Maîtrise ${activePartModeLabel} : ${displayedPartMastery.masteryPct}% (${displayedPartMastery.learnedCount}/${displayedPartMastery.totalCount} v.) · Sourate : ${totalMasteryPct}%`
+                    : "Voir les statistiques et options de la sourate"
+                }
+              >
+                {activePartModeLabel ? `${activePartModeLabel} · ${headerMasteryPct}%` : `${headerMasteryPct}%`} {isDisplayedPartFullyLearned ? '✓' : '▾'}
+              </button>
+            )}
 
             {/* Next Surah */}
             <button
@@ -448,6 +457,7 @@ export function SurahHeader({
           <>
             {/* Quick Translation Toggle for Beginner / Child */}
             <button
+              type="button"
               onClick={() => {
                 setShowLangDrawer(v => !v);
                 setShowTajweedDrawer(false);
@@ -456,26 +466,22 @@ export function SurahHeader({
               className={`m-action-btn lang ${translationLang ? 'active' : ''}`}
             >
               <span className="m-act-icon">🌐</span>
-              <span className="m-act-label">{translationLang ? langLabel : "TRAD."}</span>
+              <span className="m-act-label">{translationLang ? langLabel : "TRADUCTION"}</span>
             </button>
 
-            {/* UX Mode Interactive Badge */}
-            <button
-              id="surah-header-ux-badge"
-              onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
-              className={`m-action-btn ux-mode-btn ${uxMode}`}
-              title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
-              style={{
-                borderColor: uxMode === 'beginner' ? 'rgba(245, 158, 11, 0.55)' : uxMode === 'child' ? '#ffb703' : 'rgba(201,168,76,.4)',
-                background: uxMode === 'beginner' ? 'rgba(245, 158, 11, 0.18)' : uxMode === 'child' ? 'rgba(255,183,3,0.18)' : 'rgba(201,168,76,0.12)',
-                color: uxMode === 'beginner' ? '#f59e0b' : uxMode === 'child' ? '#ffb703' : 'var(--gold2)',
-                fontWeight: 700,
-              }}
-            >
-              <span className="m-act-icon">{currentUx.icon}</span>
-              <span className="m-act-label">{currentUx.shortLabel.toUpperCase()}</span>
-              <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
-            </button>
+            {/* UX Mode Interactive Badge shown only if configured (top navbar already has it) */}
+            {layoutCfg.showDuplicateUxBadge && (
+              <button
+                type="button"
+                id="surah-header-ux-badge"
+                onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
+                className={`m-action-btn ux-mode-btn ${uxMode}`}
+                title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
+              >
+                <span className="m-act-icon">{currentUx.icon}</span>
+                <span className="m-act-label">{currentUx.shortLabel.toUpperCase()}</span>
+              </button>
+            )}
 
             {/* All Options Modal Trigger for Child & Beginner Mode */}
             <button

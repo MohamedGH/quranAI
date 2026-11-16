@@ -59,6 +59,9 @@ const uiSlice = createSlice({
     voiceCompressionPreset: load("quran_voiceCompressionPreset", "balanced"),
     storagePersisted:    false,
     similarLettersFilter: load("quran_similarLettersFilter", "all"),
+    childQuestBannerState: ["expanded", "compact", "closed"].includes(load("quran_childQuestBannerState", "expanded"))
+      ? load("quran_childQuestBannerState", "expanded")
+      : "expanded",
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -386,6 +389,24 @@ const uiSlice = createSlice({
       const val = ["all", "same", "nearby"].includes(a.payload) ? a.payload : "all";
       s.similarLettersFilter = val;
       save("quran_similarLettersFilter", val);
+    },
+    setChildQuestBannerState: (s, a) => {
+      const val = ["expanded", "compact", "closed"].includes(a.payload) ? a.payload : "expanded";
+      s.childQuestBannerState = val;
+      save("quran_childQuestBannerState", val);
+    },
+    toggleChildQuestBannerCompact: (s) => {
+      const next = s.childQuestBannerState === "compact" ? "expanded" : "compact";
+      s.childQuestBannerState = next;
+      save("quran_childQuestBannerState", next);
+    },
+    closeChildQuestBanner: (s) => {
+      s.childQuestBannerState = "closed";
+      save("quran_childQuestBannerState", "closed");
+    },
+    reopenChildQuestBanner: (s) => {
+      s.childQuestBannerState = "expanded";
+      save("quran_childQuestBannerState", "expanded");
     },
   },
   extraReducers: (builder) => {
@@ -1129,6 +1150,7 @@ const rawSel = {
   voiceCompressionPreset:(s) => s.ui.voiceCompressionPreset || "balanced",
   storagePersisted:    (s) => Boolean(s.ui.storagePersisted),
   similarLettersFilter:(s) => s.ui.similarLettersFilter || "all",
+  childQuestBannerState:(s) => s.ui.childQuestBannerState || "expanded",
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

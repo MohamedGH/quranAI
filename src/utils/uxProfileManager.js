@@ -252,6 +252,31 @@ export const isSimplifiedUxMode = (mode) =>
   mode === UX_MODES.BEGINNER || mode === UX_MODES.CHILD;
 
 /**
+ * Pure functional layout configuration simplifying UI density in Child & Beginner modes.
+ */
+export const getSimplifiedLayoutConfig = (uxMode = UX_MODES.STANDARD) => {
+  const mode = sanitizeUxMode(uxMode);
+  const isChild = mode === UX_MODES.CHILD;
+  const isBeginner = mode === UX_MODES.BEGINNER;
+  const isSimplified = isChild || isBeginner;
+
+  return Object.freeze({
+    mode,
+    isChild,
+    isBeginner,
+    isSimplified,
+    showHeaderMetrics: !isSimplified,
+    showDuplicateUxBadge: !isSimplified,
+    showSidebarMasteryBars: !isSimplified,
+    showLetterEncyclopediaTabs: !isSimplified,
+    showLetterTechnicalMeta: !isSimplified,
+    showUnvalidatedDots: false,
+    showHeavyCardPills: !isSimplified,
+    compactGuideBanner: isSimplified,
+  });
+};
+
+/**
  * Pure helper providing contextual guidance tips for beginner and child modes.
  * Accurately references real UI elements (the ▶ button, the top badge, etc.).
  */

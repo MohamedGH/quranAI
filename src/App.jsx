@@ -2735,8 +2735,8 @@ function AppInner({ currentUser, onSignOut }) {
                     <div className="surah-num">{sidebarConfig.showStars ? "⭐ " : ""}{s.number}</div>
                     <div className="surah-info">
                       <div className="surah-name-en">{s.englishName}</div>
-                      <div className="surah-meta">{sidebarConfig.revelationLabel(s.revelationType)} · {sidebarConfig.versesLabel(s.numberOfAyahs)}{surahStats[s.number]?.learned > 0 ? ` · ${surahStats[s.number].learned}✓` : ''}</div>
-                      {(() => { const st = surahStats[s.number]; const total = s.numberOfAyahs || 0; const pct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0; return (
+                      <div className="surah-meta">{sidebarConfig.revelationLabel(s.revelationType)} · {sidebarConfig.versesLabel(s.numberOfAyahs)}{!isSimplifiedUxMode(uxMode) && surahStats[s.number]?.learned > 0 ? ` · ${surahStats[s.number].learned}✓` : ''}</div>
+                      {!isSimplifiedUxMode(uxMode) && (() => { const st = surahStats[s.number]; const total = s.numberOfAyahs || 0; const pct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0; return (
                         <div style={{marginTop:3,display:'flex',alignItems:'center',gap:6}}>
                           <div style={{flex:1,height:2,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
                             <div style={{height:'100%',width:pct+'%',background:masteryColor(pct),borderRadius:2}} />

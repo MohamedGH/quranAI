@@ -14,6 +14,7 @@ describe("Child Mode Wizard & Letter Validation to Unlock Quran Menu", () => {
     store.dispatch(uiActions.resetValidatedLetters());
     store.dispatch(uiActions.setChildWizardSeen(false));
     store.dispatch(uiActions.setShowChildCelebrationModal(false));
+    store.dispatch(uiActions.reopenChildQuestBanner());
   });
 
   describe("getUxWizardConfig for Child Mode", () => {
@@ -214,6 +215,61 @@ describe("Child Mode Wizard & Letter Validation to Unlock Quran Menu", () => {
       expect(sel.allLettersValidated(store.getState())).toBe(true);
       expect(sel.isQuranUnlockedForChild(store.getState())).toBe(true);
       expect(document.getElementById("btn-quest-go-quran")).toBeTruthy();
+    });
+
+    it("allows collapsing (rapetisser), closing (fermer), and reopening the child quest banner with Redux persistence", () => {
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            { initialEntries: ["/prononciation"] },
+            React.createElement(PrononciationPage)
+          )
+        )
+      );
+
+      // Initially expanded inside .pronon-page
+      const banner = document.getElementById("child-letters-quest-banner");
+      expect(banner).toBeTruthy();
+      expect(banner.getAttribute("data-banner-state")).toBe("expanded");
+      expect(banner.closest(".pronon-page")).toBeTruthy();
+
+      // Compact (rapetisser)
+      fireEvent.click(document.getElementById("btn-quest-toggle-compact"));
+      expect(sel.childQuestBannerState(store.getState())).toBe("compact");
+      expect(document.getElementById("child-letters-quest-banner").getAttribute("data-banner-state")).toBe("compact");
+      expect(document.getElementById("btn-quest-toggle-compact").getAttribute("aria-expanded")).toBe("false");
+
+      // Expand again
+      fireEvent.click(document.getElementById("btn-quest-toggle-compact"));
+      expect(sel.childQuestBannerState(store.getState())).toBe("expanded");
+      expect(document.getElementById("child-letters-quest-banner").getAttribute("data-banner-state")).toBe("expanded");
+
+      // Close completely
+      fireEvent.click(document.getElementById("btn-quest-close"));
+      expect(sel.childQuestBannerState(store.getState())).toBe("closed");
+      expect(document.getElementById("child-letters-quest-banner")).toBeNull();
+
+      // Discreet reopen button appears in header
+      const reopenBtn = document.getElementById("btn-quest-reopen");
+      expect(reopenBtn).toBeTruthy();
+      expect(reopenBtn.textContent).toContain("0/28");
+
+      // Reopen restores banner
+      fireEvent.click(reopenBtn);
+      expect(sel.childQuestBannerState(store.getState())).toBe("expanded");
+      expect(document.getElementById("child-letters-quest-banner")).toBeTruthy();
+      expect(document.getElementById("btn-quest-reopen")).toBeNull();
+    });
+
+    it("sanitizes invalid childQuestBannerState values in Redux", () => {
+      store.dispatch(uiActions.setChildQuestBannerState("invalid_mode"));
+      expect(sel.childQuestBannerState(store.getState())).toBe("expanded");
+
+      store.dispatch(uiActions.setChildQuestBannerState("compact"));
+      expect(sel.childQuestBannerState(store.getState())).toBe("compact");
     });
   });
 });

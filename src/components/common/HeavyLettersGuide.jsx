@@ -12,9 +12,11 @@ import { GlossaryTermTooltip } from "./GlossaryTermTooltip.jsx";
  * - Les 5 degrés de Tafkhîm
  * - Visualisations anatomiques de la bouche et de la langue
  */
-export function HeavyLettersGuide({ speak = () => {}, playingId = null, isChild = false }) {
+export function HeavyLettersGuide({ speak = () => {}, playingId = null, isChild = false, isSimplified = false }) {
   const [selectedHeavyLetter, setSelectedHeavyLetter] = useState("ط");
   const [activeContrastPair, setActiveContrastPair] = useState("ta_ta");
+  const [showDegreesInSimplified, setShowDegreesInSimplified] = useState(false);
+  const showDegrees = !(isChild || isSimplified) || showDegreesInSimplified;
 
   const letterInfo = HEAVY_LETTERS_DATA.letters.find((l) => l.letter === selectedHeavyLetter) || HEAVY_LETTERS_DATA.letters[0];
 
@@ -117,8 +119,8 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null, isChild 
           {isChild ? "🌟 LES 7 LETTRES CHAMPIONNES DE LA FORMULE (خُصَّ ضَغْطٍ قِظْ)" : "LES 7 LETTRES GRAVES DE LA FORMULE (خُصَّ ضَغْطٍ قِظْ)"}
         </div>
 
-        {/* Grille de sélection des 7 lettres */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 8, marginBottom: 16 }}>
+        {/* Grille responsive des 7 lettres */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(76px, 1fr))", gap: 8, marginBottom: 16 }}>
           {HEAVY_LETTERS_DATA.letters.map((l) => {
             const isSelected = selectedHeavyLetter === l.letter;
             return (
@@ -130,12 +132,13 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null, isChild 
                   speak(l.letter, `heavy-btn-${l.letter}`);
                 }}
                 style={{
+                  minHeight: 72,
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 4,
-                  padding: "12px 6px",
+                  padding: "10px 6px",
                   borderRadius: 12,
                   border: isSelected ? "2px solid #ffb703" : "1px solid rgba(255,255,255,0.12)",
                   background: isSelected
@@ -152,7 +155,7 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null, isChild 
                 <div style={{ fontSize: 10, fontFamily: "'Cinzel', serif", fontWeight: 700, color: isSelected ? "#ffb703" : "var(--text3)" }}>
                   {l.name}
                 </div>
-                {l.itbaq ? (
+                {!(isChild || isSimplified) && l.itbaq && (
                   <span
                     style={{
                       fontSize: 7.5,
@@ -164,24 +167,8 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null, isChild 
                       fontWeight: 700,
                     }}
                   >
-                    {isChild ? "👑 MAXI" : "ITBÂQ"}
+                    ITBÂQ
                   </span>
-                ) : (
-                  isChild && (
-                    <span
-                      style={{
-                        fontSize: 7.5,
-                        padding: "1px 4px",
-                        borderRadius: 4,
-                        background: "rgba(255, 183, 3, 0.2)",
-                        color: "#ffe082",
-                        border: "1px solid rgba(255, 183, 3, 0.35)",
-                        fontWeight: 700,
-                      }}
-                    >
-                      ⭐ FORT
-                    </span>
-                  )
                 )}
               </button>
             );
@@ -526,56 +513,81 @@ export function HeavyLettersGuide({ speak = () => {}, playingId = null, isChild 
 
       {/* ── LES 5 DEGRÉS DE GRAVITÉ (MARÂTIB AT-TAFKHÎM) ── */}
       <div>
-        <div className="pronon-section-title" style={{ marginBottom: 12 }}>
-          {isChild ? "🏆 LES 5 NIVEAUX DE FORCE DES LETTRES" : "LES 5 DEGRÉS DE GRAVITÉ (مَرَاتِبُ التَّفْخِيمِ) SELON IBN AL-JAZARI"}
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
-          {HEAVY_LETTERS_DATA.degrees.map((d) => (
-            <div
-              key={d.level}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          <div className="pronon-section-title" style={{ marginBottom: 0 }}>
+            {isChild ? "🏆 LES 5 NIVEAUX DE FORCE DES LETTRES" : "LES 5 DEGRÉS DE GRAVITÉ (مَرَاتِبُ التَّفْخِيمِ) SELON IBN AL-JAZARI"}
+          </div>
+          {(isChild || isSimplified) && (
+            <button
+              type="button"
+              id="btn-heavy-toggle-degrees"
+              aria-expanded={showDegreesInSimplified}
+              onClick={() => setShowDegreesInSimplified((v) => !v)}
               style={{
-                background: "var(--surface2)",
+                minHeight: 36,
+                padding: "6px 12px",
+                borderRadius: 8,
                 border: "1px solid var(--border)",
-                borderRadius: 10,
-                padding: "12px 14px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                borderTop: `3px solid ${d.level === 1 ? "#ffb703" : d.level === 2 ? "#fbbf24" : d.level === 3 ? "#f59e0b" : d.level === 4 ? "#d97706" : "#b45309"}`,
+                background: "var(--surface3)",
+                color: "#ffe082",
+                fontSize: 10.5,
+                fontWeight: 700,
+                cursor: "pointer",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: "#ffe082", fontFamily: "'Cinzel', serif" }}>
-                  {isChild ? (d.childTitle || d.title) : d.title}
-                </span>
-                <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 10, background: "rgba(255,255,255,0.06)", color: "var(--text3)" }}>
-                  {isChild ? `Étape ${d.level}` : `Niveau ${d.level}`}
-                </span>
-              </div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#fff" }}>{d.condition}</div>
-              <div
-                style={{
-                  fontFamily: "'Amiri Quran', serif",
-                  fontSize: 18,
-                  color: "#ffd166",
-                  direction: "rtl",
-                  padding: "6px 8px",
-                  background: "var(--surface3)",
-                  borderRadius: 6,
-                  cursor: "pointer",
-                }}
-                onClick={() => speak(d.arabicExample, `deg-${d.level}`)}
-                title="Cliquer pour écouter les exemples"
-              >
-                {d.arabicExample}
-              </div>
-              <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
-                {isChild ? (d.childDesc || d.ruleDesc) : d.ruleDesc}
-              </div>
-            </div>
-          ))}
+              {showDegreesInSimplified ? "➖ Masquer les 5 niveaux" : "➕ Voir les 5 niveaux avancés"}
+            </button>
+          )}
         </div>
+
+        {showDegrees && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
+            {HEAVY_LETTERS_DATA.degrees.map((d) => (
+              <div
+                key={d.level}
+                style={{
+                  background: "var(--surface2)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  borderTop: `3px solid ${d.level === 1 ? "#ffb703" : d.level === 2 ? "#fbbf24" : d.level === 3 ? "#f59e0b" : d.level === 4 ? "#d97706" : "#b45309"}`,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "#ffe082", fontFamily: "'Cinzel', serif" }}>
+                    {isChild ? (d.childTitle || d.title) : d.title}
+                  </span>
+                  <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 10, background: "rgba(255,255,255,0.06)", color: "var(--text3)" }}>
+                    {isChild ? `Étape ${d.level}` : `Niveau ${d.level}`}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#fff" }}>{d.condition}</div>
+                <div
+                  style={{
+                    fontFamily: "'Amiri Quran', serif",
+                    fontSize: 18,
+                    color: "#ffd166",
+                    direction: "rtl",
+                    padding: "6px 8px",
+                    background: "var(--surface3)",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => speak(d.arabicExample, `deg-${d.level}`)}
+                  title="Cliquer pour écouter les exemples"
+                >
+                  {d.arabicExample}
+                </div>
+                <div style={{ fontSize: 9.5, color: "var(--text2)", lineHeight: 1.4 }}>
+                  {isChild ? (d.childDesc || d.ruleDesc) : d.ruleDesc}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

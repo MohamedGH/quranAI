@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { useSelector, useDispatch } from "react-redux";
-import { sel, uiActions } from "../../store.js";
+import { useInRouterContext, UNSAFE_NavigationContext } from "react-router-dom";
+import { sel, uiActions, errorActions } from "../../store.js";
 import { OfflineLoader } from "./OfflineLoader.jsx";
 import { PWAInstallButton } from "./PWAInstallButton.jsx";
 import { useOnlineStatus } from "../../hooks/useOnlineStatus.js";
-import { getAvailableUxProfiles, getUxProfile, isValidUxMode } from "../../utils/uxProfileManager.js";
+import { getAvailableUxProfiles, getUxProfile } from "../../utils/uxProfileManager.js";
+import { buildGlossaryRoute, buildQuranRoute } from "../../utils/routeManager.js";
+import { ERROR_CODES, createAppError, trySync } from "../../utils/errorManager.js";
 
 export const HEADER_TOOLS_TABS = [
   { id: 'tools', icon: '🎛️', label: 'OUTILS' },
@@ -13,6 +16,33 @@ export const HEADER_TOOLS_TABS = [
   { id: 'offline', icon: '📥', label: 'HORS-LIGNE' },
   { id: 'account', icon: '👤', label: 'COMPTE' }
 ];
+
+export const TOOLS_PAGE_LINKS = Object.freeze([
+  Object.freeze({
+    id: "glossaire",
+    btnId: "btn-tools-nav-glossaire",
+    icon: "📚",
+    label: "Glossaire Tajweed",
+    subtitle: "Définitions, Makhârij & Ṣifât",
+    buildPath: () => buildGlossaryRoute(),
+  }),
+  Object.freeze({
+    id: "recordings",
+    btnId: "btn-tools-nav-recordings",
+    icon: "🎙️",
+    label: "Enregistrements",
+    subtitle: "Vos récitations & stockage",
+    buildPath: () => buildQuranRoute({ activePage: "recordings" }),
+  }),
+  Object.freeze({
+    id: "offline",
+    btnId: "btn-tools-nav-offline",
+    icon: "💾",
+    label: "Page Hors-Ligne",
+    subtitle: "Cache audio & téléchargements",
+    buildPath: () => buildQuranRoute({ activePage: "offline" }),
+  }),
+]);
 
 export function HeaderToolsModal({
   isOpen,
@@ -34,10 +64,39 @@ export function HeaderToolsModal({
   const [activeTab, setActiveTab] = useState(initialTab);
   const isOnline = useOnlineStatus();
   const dispatch = useDispatch();
+  const inRouter = useInRouterContext();
+  const navContext = useContext(UNSAFE_NavigationContext);
   const fullScreenSelectedAyat = useSelector(sel.fullScreenSelectedAyat);
   const ayatFontSize = useSelector(sel.ayatFontSize) || 26;
   const uxMode = useSelector(sel.uxMode);
+  const activePage = useSelector(sel.activePage);
   const showBeginnerGuides = useSelector(sel.showBeginnerGuides);
+
+  const handleOpenToolPage = (shortcut) => {
+    if (!shortcut) return;
+    const res = trySync(() => {
+      const targetPath = shortcut.buildPath();
+      dispatch(uiActions.setActivePage(shortcut.id));
+      if (inRouter && navContext?.navigator?.push) {
+        navContext.navigator.push(targetPath);
+      } else if (typeof window !== "undefined") {
+        window.location.hash = targetPath.startsWith("#") ? targetPath : `#${targetPath}`;
+      }
+      onClose?.();
+    }, null, { pageId: shortcut.id });
+
+    if (!res.ok) {
+      dispatch(
+        errorActions.reportError(
+          createAppError(
+            ERROR_CODES.ROUTE_PARSE_ERROR,
+            "Impossible d'ouvrir cette page depuis le menu Outils.",
+            { pageId: shortcut.id }
+          )
+        )
+      );
+    }
+  };
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -280,6 +339,82 @@ export function HeaderToolsModal({
                   >
                     CHANGER
                   </button>
+                </div>
+              </div>
+
+              {/* Pages & Ressources (déplacées de la barre de navigation vers Outils) */}
+              <div
+                id="tools-pages-shortcuts"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'var(--surface2)',
+                  border: '1px solid rgba(86, 212, 188, 0.3)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--teal2)', fontFamily: "'Cinzel', serif", letterSpacing: 0.6 }}>
+                    PAGES & RESSOURCES
+                  </div>
+                  <span style={{ fontSize: 9.5, color: 'var(--text3)' }}>
+                    Accès rapide
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))',
+                    gap: 8,
+                  }}
+                >
+                  {TOOLS_PAGE_LINKS.map((item) => {
+                    const isCurrent = activePage === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        id={item.btnId}
+                        data-target-page={item.id}
+                        onClick={() => handleOpenToolPage(item)}
+                        style={{
+                          minHeight: 48,
+                          padding: '9px 11px',
+                          borderRadius: 8,
+                          border: isCurrent
+                            ? '1.5px solid var(--gold)'
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                          background: isCurrent
+                            ? 'rgba(201, 168, 76, 0.16)'
+                            : 'rgba(255, 255, 255, 0.03)',
+                          color: isCurrent ? 'var(--gold2)' : 'var(--text)',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 3,
+                          transition: 'all .15s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                          <span style={{ fontSize: 11.5, fontWeight: 700 }}>
+                            {item.icon} {item.label}
+                          </span>
+                          {isCurrent && (
+                            <span style={{ fontSize: 8.5, fontWeight: 800, color: '#ffd166', letterSpacing: 0.4 }}>
+                              ACTIF
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 9.5, color: 'var(--text3)', lineHeight: 1.3 }}>
+                          {item.subtitle}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -856,6 +991,31 @@ export function HeaderToolsModal({
 
                 <PWAInstallButton />
               </div>
+
+              {/* Lien direct vers la page dédiée Hors-Ligne */}
+              <button
+                type="button"
+                id="btn-tools-offline-open-page"
+                onClick={() => handleOpenToolPage(TOOLS_PAGE_LINKS.find((p) => p.id === "offline"))}
+                style={{
+                  minHeight: 44,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(86, 212, 188, 0.45)',
+                  background: 'rgba(86, 212, 188, 0.12)',
+                  color: 'var(--teal2)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                }}
+              >
+                <span>💾 Ouvrir la page Hors-Ligne complète</span>
+                <span aria-hidden="true">→</span>
+              </button>
 
               {/* Offline Resource Downloader */}
               <OfflineLoader

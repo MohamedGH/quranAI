@@ -9,7 +9,8 @@ export function usePWAInstall() {
     // Detect standalone mode (already installed)
     const isStandalone =
       typeof window !== "undefined" &&
-      (window.matchMedia("(display-mode: standalone)").matches ||
+      ((typeof window.matchMedia === "function" &&
+        window.matchMedia("(display-mode: standalone)")?.matches) ||
         window.navigator?.standalone === true);
     setIsInstalled(!!isStandalone);
 

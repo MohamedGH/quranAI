@@ -129,11 +129,24 @@ export function GlossairePage() {
       className="main"
       style={{
         background: "var(--bg)",
-        minHeight: "100%",
         display: "flex",
         flexDirection: "column",
+        minHeight: 0,
+        overflow: "hidden",
       }}
     >
+      <div
+        id="glossaire-scroll-container"
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehaviorY: "contain",
+          paddingBottom: "calc(var(--player-h, 76px) + 32px)",
+        }}
+      >
       {/* En-tête éditorial sobre */}
       <header
         style={{
@@ -761,6 +774,7 @@ export function GlossairePage() {
             )}
           </aside>
         )}
+      </div>
       </div>
     </main>
   );

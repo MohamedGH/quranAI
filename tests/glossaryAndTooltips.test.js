@@ -159,9 +159,15 @@ describe("Redux Glossary Slice, Route Manager & UX Profile Navigation", () => {
     expect(buildQuranRoute({ activePage: "glossaire", glossaryTermId: "tarqiq" })).toBe("/glossaire/tarqiq");
   });
 
-  it("includes glossaire tab in standard and expert UX profiles while keeping simplified modes streamlined", () => {
-    expect(getNavigationTabs("standard").some((t) => t.id === "glossaire")).toBe(true);
-    expect(getNavigationTabs("expert").some((t) => t.id === "glossaire")).toBe(true);
+  it("excludes glossaire, recordings, and offline from top nav bar (moved to Outils) across all profiles", () => {
+    ["standard", "expert", "beginner", "child"].forEach((mode) => {
+      const ids = getNavigationTabs(mode).map((t) => t.id);
+      expect(ids).not.toContain("glossaire");
+      expect(ids).not.toContain("recordings");
+      expect(ids).not.toContain("offline");
+    });
+    expect(getNavigationTabs("standard")).toHaveLength(5);
+    expect(getNavigationTabs("expert")).toHaveLength(5);
     expect(getNavigationTabs("child")).toHaveLength(3);
     expect(getNavigationTabs("beginner")).toHaveLength(4);
   });
@@ -340,5 +346,36 @@ describe("GlossairePage Dedicated View", () => {
       value: originalSpeech,
     });
     globalThis.SpeechSynthesisUtterance = originalUtterance;
+  });
+
+  it("provides a dedicated scrollable flex container (#glossaire-scroll-container) inside #glossaire-page", () => {
+    render(
+      React.createElement(
+        Provider,
+        { store },
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: ["/glossaire"] },
+          React.createElement(
+            Routes,
+            null,
+            React.createElement(Route, {
+              path: "/glossaire/:termId?",
+              element: React.createElement(GlossairePage),
+            })
+          )
+        )
+      )
+    );
+
+    const mainEl = document.getElementById("glossaire-page");
+    const scrollEl = document.getElementById("glossaire-scroll-container");
+    expect(mainEl).toBeTruthy();
+    expect(scrollEl).toBeTruthy();
+    expect(mainEl.style.overflow).toBe("hidden");
+    expect(scrollEl.style.overflowY).toBe("auto");
+    expect(scrollEl.style.overflowX).toBe("hidden");
+    expect(scrollEl.style.flex).toContain("1");
+    expect(scrollEl.style.minHeight).toMatch(/^0(px)?$/);
   });
 });

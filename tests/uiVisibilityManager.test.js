@@ -25,8 +25,10 @@ import {
   buildQuranRoute,
 } from "../src/utils/routeManager.js";
 import { UiElementsVisibilityModal } from "../src/components/common/UiElementsVisibilityModal.jsx";
+import { HeaderToolsModal } from "../src/components/common/HeaderToolsModal.jsx";
 import { OptionsModal } from "../src/components/sync/OptionsModal.jsx";
 import { SurahHeader } from "../src/components/common/SurahHeader.jsx";
+import { SurahAllOptionsModal } from "../src/components/common/SurahAllOptionsModal.jsx";
 import { BeginnerGuideBanner } from "../src/components/common/BeginnerGuideBanner.jsx";
 
 describe("UI Visibility Manager — Granular Element Activation/Deactivation", () => {
@@ -102,7 +104,7 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
       const initial = getDefaultUiVisibility();
       const updated = toggleElement(initial, "headerVoice");
       expect(updated.headerVoice).toBe(false);
-      expect(initial.headerVoice).toBe(true); // immutability
+      expect(initial.headerVoice).toBe(true);
 
       const reUpdated = toggleElement(updated, "headerVoice");
       expect(reUpdated.headerVoice).toBe(true);
@@ -116,7 +118,6 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
       const initial = getDefaultUiVisibility();
       const updated = setCategoryVisibility(initial, "header", false);
 
-      // Header items must be false
       expect(updated.headerLogo).toBe(false);
       expect(updated.headerNav).toBe(false);
       expect(updated.headerVoice).toBe(false);
@@ -125,19 +126,17 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
       expect(updated.headerToolsBtn).toBe(false);
       expect(updated.headerAccount).toBe(false);
 
-      // SurahHeader and Ayat items must remain true
       expect(updated.surahTitle).toBe(true);
       expect(updated.ayatNumber).toBe(true);
     });
 
     it("setAllElementsVisibility enables or disables every single element", () => {
-      const initial = getDefaultUiVisibility();
-      const allFalse = setAllElementsVisibility(initial, false);
+      const allFalse = setAllElementsVisibility(false);
       UI_ELEMENTS.forEach((el) => {
         expect(allFalse[el.id]).toBe(false);
       });
 
-      const allTrue = setAllElementsVisibility(allFalse, true);
+      const allTrue = setAllElementsVisibility(true);
       UI_ELEMENTS.forEach((el) => {
         expect(allTrue[el.id]).toBe(true);
       });
@@ -146,13 +145,16 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
     it("applyPreset sets predefined states accurately", () => {
       const zenMap = applyPreset("zen");
       expect(zenMap.surahActionsBar).toBe(false);
-      expect(zenMap.ayatTranslation).toBe(false);
       expect(zenMap.ayatMastery).toBe(false);
-      expect(zenMap.headerNav).toBe(false);
       expect(zenMap.headerVoice).toBe(false);
-      // Essential Quran reading text remains
+      expect(zenMap.surahMeta).toBe(false);
       expect(zenMap.surahTitle).toBe(true);
       expect(zenMap.ayatNumber).toBe(true);
+
+      const minimalMap = applyPreset("minimal");
+      expect(minimalMap.headerLogo).toBe(false);
+      expect(minimalMap.playerSurahTitle).toBe(false);
+      expect(minimalMap.surahTitle).toBe(true);
 
       const audioMap = applyPreset("audioFocus");
       expect(audioMap.playerControls).toBe(true);
@@ -160,7 +162,7 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
       expect(audioMap.playerLoop).toBe(true);
       expect(audioMap.ayatPlayBtn).toBe(true);
       expect(audioMap.ayatMastery).toBe(false);
-      expect(audioMap.ayatTranslation).toBe(false);
+      expect(audioMap.surahMastery).toBe(false);
     });
 
     it("getVisibilityStats computes totals, visible count, and percentage accurately", () => {
@@ -169,21 +171,27 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
       expect(initialStats.total).toBe(32);
       expect(initialStats.visible).toBe(32);
       expect(initialStats.hidden).toBe(0);
-      expect(initialStats.pct).toBe(100);
+      expect(initialStats.percent).toBe(100);
 
       const modified = setElement(def, "headerLogo", false);
       const modStats = getVisibilityStats(modified);
       expect(modStats.visible).toBe(31);
       expect(modStats.hidden).toBe(1);
-      expect(modStats.pct).toBe(97);
+      expect(modStats.percent).toBe(97);
     });
 
-    it("searchUiElements filters elements by label or description case-insensitively", () => {
-      const tajweedResults = searchUiElements(UI_ELEMENTS, "tajwid");
+    it("getElementsByCategory returns only elements belonging to that category", () => {
+      const headerEls = getElementsByCategory("header");
+      expect(headerEls.length).toBe(7);
+      expect(headerEls.every((e) => e.category === "header")).toBe(true);
+    });
+
+    it("searchUiElements filters elements by label, description, or ID case-insensitively", () => {
+      const tajweedResults = searchUiElements("tajwid");
       expect(tajweedResults.length).toBeGreaterThan(0);
       expect(tajweedResults.some((el) => el.id === "playerTajweedModal")).toBe(true);
 
-      const bismillahResults = searchUiElements(UI_ELEMENTS, "Basmala");
+      const bismillahResults = searchUiElements(UI_ELEMENTS, "Bismillah");
       expect(bismillahResults.some((el) => el.id === "surahBismillah")).toBe(true);
     });
   });
@@ -211,27 +219,37 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
     });
 
     it("dispatches setCategoryUiVisibility for bulk updates", () => {
-      store.dispatch(uiActions.setCategoryUiVisibility({ category: "surahHeader", visible: false }));
+      store.dispatch(uiActions.setCategoryUiVisibility({ categoryId: "surahHeader", visible: false }));
       const state = store.getState();
       expect(sel.isUiElementVisible(state, "surahNavigation")).toBe(false);
       expect(sel.isUiElementVisible(state, "surahTitle")).toBe(false);
       expect(sel.isUiElementVisible(state, "surahMeta")).toBe(false);
       expect(sel.isUiElementVisible(state, "surahBismillah")).toBe(false);
 
-      // Other categories remain visible
       expect(sel.isUiElementVisible(state, "headerLogo")).toBe(true);
+    });
+
+    it("dispatches setAllUiElementsVisibility to disable or enable everything", () => {
+      store.dispatch(uiActions.setAllUiElementsVisibility(false));
+      expect(sel.isUiElementVisible(store.getState(), "headerLogo")).toBe(false);
+      expect(sel.isUiElementVisible(store.getState(), "ayatNumber")).toBe(false);
+
+      store.dispatch(uiActions.setAllUiElementsVisibility(true));
+      expect(sel.isUiElementVisible(store.getState(), "headerLogo")).toBe(true);
+      expect(sel.isUiElementVisible(store.getState(), "ayatNumber")).toBe(true);
     });
 
     it("dispatches applyUiVisibilityPreset and resetUiElementsVisibility", () => {
       store.dispatch(uiActions.applyUiVisibilityPreset("zen"));
       let state = store.getState();
-      expect(sel.isUiElementVisible(state, "ayatTranslation")).toBe(false);
-      expect(sel.isUiElementVisible(state, "headerNav")).toBe(false);
+      expect(sel.isUiElementVisible(state, "surahActionsBar")).toBe(false);
+      expect(sel.isUiElementVisible(state, "ayatMastery")).toBe(false);
+      expect(sel.isUiElementVisible(state, "headerVoice")).toBe(false);
 
       store.dispatch(uiActions.resetUiElementsVisibility());
       state = store.getState();
-      expect(sel.isUiElementVisible(state, "ayatTranslation")).toBe(true);
-      expect(sel.isUiElementVisible(state, "headerNav")).toBe(true);
+      expect(sel.isUiElementVisible(state, "surahActionsBar")).toBe(true);
+      expect(sel.isUiElementVisible(state, "ayatMastery")).toBe(true);
     });
 
     it("controls showUiVisibilityModal visibility flag cleanly", () => {
@@ -278,23 +296,23 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
       );
 
       expect(screen.getByRole("dialog")).toBeDefined();
-      expect(screen.getByText("VISIBILITÉ DES ÉLÉMENTS")).toBeDefined();
+      expect(screen.getByText("PERSONNALISATION DE L'AFFICHAGE")).toBeDefined();
       expect(screen.getByPlaceholderText(/Rechercher un élément/i)).toBeDefined();
 
-      // Check category tab buttons
-      expect(screen.getByText("Tous")).toBeDefined();
-      expect(screen.getByText("En-tête")).toBeDefined();
-      expect(screen.getByText("Sourate")).toBeDefined();
-      expect(screen.getByText("Versets")).toBeDefined();
-      expect(screen.getByText("Lecteur")).toBeDefined();
-      expect(screen.getByText("Barre Latérale")).toBeDefined();
-      expect(screen.getByText("Bannières")).toBeDefined();
+      // Category tab buttons
+      expect(document.getElementById("filter-category-all")).not.toBeNull();
+      expect(document.getElementById("filter-category-header")).not.toBeNull();
+      expect(document.getElementById("filter-category-surahHeader")).not.toBeNull();
+      expect(document.getElementById("filter-category-ayat")).not.toBeNull();
+      expect(document.getElementById("filter-category-player")).not.toBeNull();
+      expect(document.getElementById("filter-category-sidebar")).not.toBeNull();
+      expect(document.getElementById("filter-category-guides")).not.toBeNull();
 
-      // Check preset action buttons
-      expect(screen.getByText("Zen")).toBeDefined();
-      expect(screen.getByText("Minimal")).toBeDefined();
-      expect(screen.getByText("Audio")).toBeDefined();
-      expect(screen.getByText("Tout")).toBeDefined();
+      // Preset action buttons
+      expect(document.getElementById("btn-ui-preset-all")).not.toBeNull();
+      expect(document.getElementById("btn-ui-preset-zen")).not.toBeNull();
+      expect(document.getElementById("btn-ui-preset-minimal")).not.toBeNull();
+      expect(document.getElementById("btn-ui-preset-audioFocus")).not.toBeNull();
     });
 
     it("allows toggling individual elements with switch buttons", () => {
@@ -332,15 +350,16 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
       const zenBtn = screen.getByTestId("btn-preset-zen");
       fireEvent.click(zenBtn);
 
-      expect(sel.isUiElementVisible(store.getState(), "ayatTranslation")).toBe(false);
-      expect(sel.isUiElementVisible(store.getState(), "headerNav")).toBe(false);
+      expect(sel.isUiElementVisible(store.getState(), "surahActionsBar")).toBe(false);
+      expect(sel.isUiElementVisible(store.getState(), "ayatMastery")).toBe(false);
 
       const allBtn = screen.getByTestId("btn-preset-all");
       fireEvent.click(allBtn);
-      expect(sel.isUiElementVisible(store.getState(), "ayatTranslation")).toBe(true);
+      expect(sel.isUiElementVisible(store.getState(), "surahActionsBar")).toBe(true);
+      expect(sel.isUiElementVisible(store.getState(), "ayatMastery")).toBe(true);
     });
 
-    it("filters elements by real-time search term", () => {
+    it("filters elements by real-time search term and category", () => {
       render(
         React.createElement(
           Provider,
@@ -357,11 +376,17 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
 
       expect(screen.getByText("Ligne Calligraphique de la Basmala")).toBeDefined();
       expect(screen.queryByText("Bouton Mode Compact")).toBeNull();
+
+      // Clear and filter by sidebar category
+      fireEvent.change(searchInput, { target: { value: "" } });
+      fireEvent.click(document.getElementById("filter-category-sidebar"));
+      expect(screen.getByText("Recherche de Sourates")).toBeDefined();
+      expect(screen.queryByText("Ligne Calligraphique de la Basmala")).toBeNull();
     });
   });
 
-  describe("5. OptionsModal UI Customization Section", () => {
-    it("renders quick preset buttons and launcher in OptionsModal", () => {
+  describe("5. Launchers in OptionsModal, HeaderToolsModal & SurahAllOptionsModal", () => {
+    it("renders quick preset buttons and launcher in OptionsModal settings tab", () => {
       render(
         React.createElement(
           Provider,
@@ -370,23 +395,74 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
             MemoryRouter,
             {},
             React.createElement(OptionsModal, {
-              isOpen: true,
               onClose: () => {},
-              currentUser: null,
             })
           )
         )
       );
 
+      // Switch to Réglages d'affichage tab
+      const settingsTab = document.getElementById("options-tab-settings");
+      expect(settingsTab).not.toBeNull();
+      fireEvent.click(settingsTab);
+
       const presetZenBtn = document.getElementById("btn-options-preset-zen");
       expect(presetZenBtn).not.toBeNull();
 
       fireEvent.click(presetZenBtn);
-      expect(sel.isUiElementVisible(store.getState(), "ayatTranslation")).toBe(false);
+      expect(sel.isUiElementVisible(store.getState(), "surahActionsBar")).toBe(false);
 
       const openCustomizerBtn = document.getElementById("btn-options-open-ui-customizer");
       expect(openCustomizerBtn).not.toBeNull();
       fireEvent.click(openCustomizerBtn);
+      expect(sel.showUiVisibilityModal(store.getState())).toBe(true);
+    });
+
+    it("renders UI visibility launcher inside HeaderToolsModal tools tab", () => {
+      const onClose = vi.fn();
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            {},
+            React.createElement(HeaderToolsModal, {
+              isOpen: true,
+              onClose,
+              initialTab: "tools",
+            })
+          )
+        )
+      );
+
+      const launcher = document.getElementById("btn-open-ui-visibility-modal");
+      expect(launcher).not.toBeNull();
+      fireEvent.click(launcher);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(sel.showUiVisibilityModal(store.getState())).toBe(true);
+    });
+
+    it("renders UI visibility launcher inside SurahAllOptionsModal display tab for simplified users", () => {
+      const onClose = vi.fn();
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(SurahAllOptionsModal, {
+            isOpen: true,
+            onClose,
+            initialTab: "display",
+            selectedSurah: { number: 1, englishName: "Al-Fatihah", numberOfAyahs: 7 },
+            ayats: [],
+          })
+        )
+      );
+
+      const launcher = document.getElementById("btn-surah-options-ui-visibility");
+      expect(launcher).not.toBeNull();
+      fireEvent.click(launcher);
+      expect(onClose).toHaveBeenCalledTimes(1);
       expect(sel.showUiVisibilityModal(store.getState())).toBe(true);
     });
   });
@@ -400,7 +476,7 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
       revelationType: "Meccan",
     };
 
-    it("hides surahNavigation, surahTitle, and surahBismillah when disabled", () => {
+    it("hides surahNavigation, surahTitle, surahActionsBar, and surahBismillah when disabled", () => {
       const { rerender } = render(
         React.createElement(
           Provider,
@@ -426,13 +502,14 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
         )
       );
 
-      // Initially title and bismillah are visible
       expect(screen.getByText("Al-Fatihah")).toBeDefined();
       expect(screen.getByText("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ")).toBeDefined();
+      expect(document.querySelector(".m-surah-actions-bar")).not.toBeNull();
 
-      // Disable surahTitle and surahBismillah
+      // Disable surahTitle, surahBismillah, surahActionsBar
       store.dispatch(uiActions.setUiElementVisibility({ id: "surahTitle", visible: false }));
       store.dispatch(uiActions.setUiElementVisibility({ id: "surahBismillah", visible: false }));
+      store.dispatch(uiActions.setUiElementVisibility({ id: "surahActionsBar", visible: false }));
 
       rerender(
         React.createElement(
@@ -461,11 +538,12 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
 
       expect(screen.queryByText("Al-Fatihah")).toBeNull();
       expect(screen.queryByText("بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ")).toBeNull();
+      expect(document.querySelector(".m-surah-actions-bar")).toBeNull();
     });
 
     it("respects beginnerBanner visibility in BeginnerGuideBanner", () => {
       store.dispatch(uiActions.setUxMode("beginner"));
-      store.dispatch(uiActions.setBeginnerGuides(true));
+      store.dispatch(uiActions.setShowBeginnerGuides(true));
 
       const { rerender } = render(
         React.createElement(

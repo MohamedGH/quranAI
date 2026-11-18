@@ -444,9 +444,10 @@ const uiSlice = createSlice({
       save("quran_uiElementsVisibility", s.uiElementsVisibility);
     },
     setCategoryUiVisibility: (s, a) => {
-      const { categoryId, visible } = a.payload || {};
-      if (!categoryId) return;
-      s.uiElementsVisibility = setCategoryVisibility(s.uiElementsVisibility, categoryId, visible);
+      const { categoryId, category, visible } = a.payload || {};
+      const targetCat = categoryId || category;
+      if (!targetCat) return;
+      s.uiElementsVisibility = setCategoryVisibility(s.uiElementsVisibility, targetCat, visible);
       save("quran_uiElementsVisibility", s.uiElementsVisibility);
     },
     setAllUiElementsVisibility: (s, a) => {

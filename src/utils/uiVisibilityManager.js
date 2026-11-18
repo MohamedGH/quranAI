@@ -474,7 +474,7 @@ export const toggleElement = (visibilityMap = {}, elementId) =>
       });
     },
     visibilityMap,
-    { code: ERROR_CODES.UNKNOWN_ERROR, elementId }
+    { code: ERROR_CODES.UI_VISIBILITY_ERROR, elementId }
   ).value;
 
 /**
@@ -488,7 +488,7 @@ export const setElement = (visibilityMap = {}, elementId, visible = true) =>
         [elementId]: Boolean(visible),
       }),
     visibilityMap,
-    { code: ERROR_CODES.UNKNOWN_ERROR, elementId, visible }
+    { code: ERROR_CODES.UI_VISIBILITY_ERROR, elementId, visible }
   ).value;
 
 /**
@@ -504,16 +504,19 @@ export const setCategoryVisibility = (visibilityMap = {}, categoryId, visible = 
       return Object.freeze(next);
     },
     visibilityMap,
-    { code: ERROR_CODES.UNKNOWN_ERROR, categoryId, visible }
+    { code: ERROR_CODES.UI_VISIBILITY_ERROR, categoryId, visible }
   ).value;
 
 /**
  * Pure function setting all elements to visible or hidden.
+ * Accepts either (visible) or (visibilityMap, visible).
  */
-export const setAllElementsVisibility = (visible = true) => {
+export const setAllElementsVisibility = (visibleOrMap = true, maybeVisible) => {
+  const targetVisible =
+    maybeVisible !== undefined ? Boolean(maybeVisible) : Boolean(visibleOrMap);
   const next = {};
   UI_ELEMENTS.forEach((el) => {
-    next[el.id] = Boolean(visible);
+    next[el.id] = targetVisible;
   });
   return Object.freeze(next);
 };
@@ -542,6 +545,7 @@ export const getVisibilityStats = (visibilityMap = {}) => {
     visible,
     hidden,
     percent,
+    pct: percent,
   });
 };
 
@@ -552,17 +556,21 @@ export const getElementsByCategory = (categoryId) =>
   Object.freeze(UI_ELEMENTS.filter((el) => el.category === categoryId));
 
 /**
- * Pure search over UI elements by query string.
+ * Pure search over UI elements by query string (matches label, desc, category, or id).
+ * Accepts either (query) or (elementsList, query).
  */
-export const searchUiElements = (query = "") => {
-  const q = String(query || "").trim().toLowerCase();
-  if (!q) return UI_ELEMENTS;
+export const searchUiElements = (queryOrList = "", maybeQuery) => {
+  const list = Array.isArray(queryOrList) ? queryOrList : UI_ELEMENTS;
+  const rawQuery = Array.isArray(queryOrList) ? maybeQuery : queryOrList;
+  const q = String(rawQuery || "").trim().toLowerCase();
+  if (!q) return Object.freeze([...list]);
   return Object.freeze(
-    UI_ELEMENTS.filter(
+    list.filter(
       (el) =>
         el.label.toLowerCase().includes(q) ||
         el.desc.toLowerCase().includes(q) ||
-        el.category.toLowerCase().includes(q)
+        el.category.toLowerCase().includes(q) ||
+        el.id.toLowerCase().includes(q)
     )
   );
 };

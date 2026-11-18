@@ -566,6 +566,54 @@ export function SurahAllOptionsModal({
                   </div>
                 ))}
               </div>
+
+              {/* Granular UI Elements Visibility Launcher */}
+              <div
+                style={{
+                  marginTop: 4,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "rgba(201, 168, 76, 0.08)",
+                  border: "1px solid rgba(201, 168, 76, 0.32)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 8,
+                }}
+              >
+                <div style={{ minWidth: 0, flex: "1 1 180px" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)" }}>
+                    🎛️ Éléments visibles de l'interface
+                  </div>
+                  <div style={{ fontSize: 9, color: "var(--text3)", marginTop: 2 }}>
+                    Activer ou masquer chaque bouton, badge, bannière ou barre
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  id="btn-surah-options-ui-visibility"
+                  onClick={() => {
+                    onClose();
+                    dispatch(uiActions.setShowUiVisibilityModal(true));
+                  }}
+                  style={{
+                    padding: "7px 12px",
+                    minHeight: 34,
+                    borderRadius: 7,
+                    border: "1px solid var(--gold)",
+                    background: "rgba(201, 168, 76, 0.18)",
+                    color: "var(--gold2)",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    fontFamily: "'Cinzel', serif",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  PERSONNALISER →
+                </button>
+              </div>
             </div>
           )}
 

@@ -28,20 +28,11 @@ export function UiElementsVisibilityModal({ isOpen, onClose }) {
   const stats = useMemo(() => getVisibilityStats(visibilityMap), [visibilityMap]);
 
   const filteredElements = useMemo(() => {
-    let list = UI_ELEMENTS;
-    if (activeCategory !== "all") {
-      list = list.filter((el) => el.category === activeCategory);
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      list = list.filter(
-        (el) =>
-          el.label.toLowerCase().includes(q) ||
-          el.desc.toLowerCase().includes(q) ||
-          el.category.toLowerCase().includes(q)
-      );
-    }
-    return list;
+    const byCategory =
+      activeCategory === "all"
+        ? UI_ELEMENTS
+        : UI_ELEMENTS.filter((el) => el.category === activeCategory);
+    return searchUiElements(byCategory, searchQuery);
   }, [activeCategory, searchQuery]);
 
   if (!isOpen) return null;
@@ -216,9 +207,11 @@ export function UiElementsVisibilityModal({ isOpen, onClose }) {
                 key={p.id}
                 type="button"
                 id={`btn-ui-preset-${p.id}`}
+                data-testid={`btn-preset-${p.id}`}
                 onClick={() => dispatch(uiActions.applyUiVisibilityPreset(p.id))}
                 style={{
-                  padding: "4px 10px",
+                  padding: "6px 11px",
+                  minHeight: 30,
                   borderRadius: 20,
                   border: "1px solid rgba(255, 255, 255, 0.12)",
                   background: "rgba(255, 255, 255, 0.04)",
@@ -420,14 +413,15 @@ export function UiElementsVisibilityModal({ isOpen, onClose }) {
                   <button
                     type="button"
                     id={`toggle-ui-element-${el.id}`}
+                    data-testid={`switch-ui-${el.id}`}
                     role="switch"
                     aria-checked={isVisible}
                     aria-label={`Activer ou masquer ${el.label}`}
                     onClick={() => dispatch(uiActions.toggleUiElementVisibility(el.id))}
                     style={{
-                      width: 42,
-                      height: 24,
-                      borderRadius: 12,
+                      width: 44,
+                      height: 26,
+                      borderRadius: 13,
                       border: "none",
                       padding: 0,
                       background: isVisible ? "var(--gold)" : "rgba(255, 255, 255, 0.14)",

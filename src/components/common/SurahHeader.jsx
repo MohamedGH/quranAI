@@ -318,7 +318,7 @@ export function SurahHeader({
                       {cachedSurahsMap?.[selectedSurah.number]?.isComplete ? ' · 💾 ✓' : cachedSurahsMap?.[selectedSurah.number]?.audioCount > 0 ? ` · 💾 ${cachedSurahsMap[selectedSurah.number].audioCount}/${cachedSurahsMap[selectedSurah.number].totalCount}` : ''}
                     </>
                   ) : (
-                    `${selectedSurah.numberOfAyahs}v`
+                    compactMode ? `${selectedSurah.numberOfAyahs}v` : `${selectedSurah.numberOfAyahs} versets`
                   )}
                 </span>
               )}

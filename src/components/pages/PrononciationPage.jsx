@@ -22,12 +22,14 @@ import { buildGlossaryRoute, buildQuranRoute } from "../../utils/routeManager.js
 import { getSimplifiedLayoutConfig } from "../../utils/uxProfileManager.js";
 import { HeavyLettersGuide } from "../common/HeavyLettersGuide.jsx";
 import { ChildUnlockQuranCelebrationModal } from "../common/ChildUnlockQuranCelebrationModal.jsx";
+import { isElementVisible } from "../../utils/uiVisibilityManager.js";
 
 export function PrononciationPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const uxMode = useSelector(sel.uxMode);
   const compactMode = useSelector(sel.compactMode);
+  const uiElementsVisibility = useSelector(sel.uiElementsVisibility);
   const layoutCfg = getSimplifiedLayoutConfig(uxMode);
   const isChild = layoutCfg.isChild;
   const isSimplified = layoutCfg.isSimplified;
@@ -193,7 +195,7 @@ export function PrononciationPage() {
 
       <div className="pronon-page">
         {/* ── CHILD LETTERS QUEST BANNER (collapsible & closable inside scrollable workspace) ── */}
-        {isChild && questBannerState !== "closed" && (
+        {isChild && questBannerState !== "closed" && isElementVisible(uiElementsVisibility, "childLettersQuest") && (
           <div
             id="child-letters-quest-banner"
             data-banner-state={questBannerState}

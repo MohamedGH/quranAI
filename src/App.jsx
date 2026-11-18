@@ -32,6 +32,8 @@ import { getPlayableAudioUrl, getStorageUsage, getAllSurahsOfflineStatus } from 
 import { AyatFullScreenModal } from "./components/common/AyatFullScreenModal.jsx";
 const ArchitecturePdfModal = lazy(() => import("./components/common/ArchitecturePdfModal.jsx").then(m => ({ default: m.ArchitecturePdfModal })));
 import { SurahHeader } from "./components/common/SurahHeader.jsx";
+import { UiElementsVisibilityModal } from "./components/common/UiElementsVisibilityModal.jsx";
+import { isElementVisible } from "./utils/uiVisibilityManager.js";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "./utils/safeStorage.js";
 import { getSavedSessionUser, saveSessionUser, clearSessionUser, shouldRestoreSavedSession, isCloudSyncEligible } from "./utils/authManager.js";
@@ -156,6 +158,8 @@ function AppInner({ currentUser, onSignOut }) {
   const allLettersValidated = useSelector(sel.allLettersValidated);
   const childWizardSeen = useSelector(sel.childWizardSeen);
   const showUxModeModal = useSelector(sel.showUxModeModal);
+  const uiElementsVisibility = useSelector(sel.uiElementsVisibility);
+  const showUiVisibilityModal = useSelector(sel.showUiVisibilityModal);
   const currentUxProfile = useMemo(() => getUxProfile(uxMode), [uxMode]);
   const navTabs          = useMemo(() => getNavigationTabs(uxMode, isQuranUnlocked), [uxMode, isQuranUnlocked]);
   const playerConfig     = useMemo(() => getPlayerConfig(uxMode), [uxMode]);
@@ -219,7 +223,7 @@ function AppInner({ currentUser, onSignOut }) {
   const urlSurahNum     = parsedRoute.surahNum ?? parseInt(urlSegs[1]);
   const urlAyatNum      = parsedRoute.ayatNum ?? parseInt(urlSegs[2]);
 
-  // ── Sync URL ux & compact params → Redux ──
+  // ── Sync URL ux, compact & uiPreset params → Redux ──
   useEffect(() => {
     if (parsedRoute.uxMode) {
       dispatch(uiActions.setUxMode(parsedRoute.uxMode));
@@ -227,7 +231,10 @@ function AppInner({ currentUser, onSignOut }) {
     if (typeof parsedRoute.compactMode === "boolean") {
       dispatch(uiActions.setCompactMode(parsedRoute.compactMode));
     }
-  }, [parsedRoute.uxMode, parsedRoute.compactMode, dispatch]);
+    if (parsedRoute.uiPreset) {
+      dispatch(uiActions.applyUiVisibilityPreset(parsedRoute.uiPreset));
+    }
+  }, [parsedRoute.uxMode, parsedRoute.compactMode, parsedRoute.uiPreset, dispatch]);
 
   // ── Child Mode First Connection: Launch Wizard & direct to letters (/prononciation) ──
   useEffect(() => {
@@ -2449,46 +2456,50 @@ function AppInner({ currentUser, onSignOut }) {
               ☰
             </button>
 
-            <div className="header-logo" onClick={() => setActivePage('quran')} title="Accueil Coran">
-              <span>QUR<span className="logo-highlight">ÂN</span></span>
-              <span className="header-subtitle">STUDY</span>
-            </div>
+            {isElementVisible(uiElementsVisibility, "headerLogo") && (
+              <div className="header-logo" onClick={() => setActivePage('quran')} title="Accueil Coran">
+                <span>QUR<span className="logo-highlight">ÂN</span></span>
+                <span className="header-subtitle">STUDY</span>
+              </div>
+            )}
           </div>
 
           {/* Page nav tabs — Profile-adapted Segmented pill control */}
-          <nav className="header-nav" aria-label="Navigation principale">
-            {navTabs.map(({ id, icon, label, title }) => (
-              <button
-                key={id}
-                className={`header-nav-btn${activePage === id ? ` active-${id}` : ""}`}
-                onClick={() => setActivePage(id)}
-                title={title || label}
-              >
-                <span className="nav-icon">{icon}</span>
-                <span className="nav-label">{label}</span>
-              </button>
-            ))}
-            {isChild && !isQuranUnlocked && (
-              <button
-                id="btn-child-nav-locked-quran"
-                className="header-nav-btn child-locked-nav-chip"
-                onClick={() => {
-                  showToast(`🔒 Valide les 28 lettres dans LETTRES pour débloquer le Coran ! (${validatedLettersCount}/28 ⭐)`, "info");
-                  setActivePage("prononciation");
-                }}
-                title="Valide les 28 lettres dans LETTRES pour débloquer le Coran !"
-                style={{
-                  opacity: 0.85,
-                  border: "1px dashed rgba(255, 209, 102, 0.5)",
-                  color: "#ffd166",
-                  background: "rgba(0, 0, 0, 0.25)",
-                }}
-              >
-                <span className="nav-icon">🔒</span>
-                <span className="nav-label">CORAN ({validatedLettersCount}/28 ⭐)</span>
-              </button>
-            )}
-          </nav>
+          {isElementVisible(uiElementsVisibility, "headerNav") && (
+            <nav className="header-nav" aria-label="Navigation principale">
+              {navTabs.map(({ id, icon, label, title }) => (
+                <button
+                  key={id}
+                  className={`header-nav-btn${activePage === id ? ` active-${id}` : ""}`}
+                  onClick={() => setActivePage(id)}
+                  title={title || label}
+                >
+                  <span className="nav-icon">{icon}</span>
+                  <span className="nav-label">{label}</span>
+                </button>
+              ))}
+              {isChild && !isQuranUnlocked && (
+                <button
+                  id="btn-child-nav-locked-quran"
+                  className="header-nav-btn child-locked-nav-chip"
+                  onClick={() => {
+                    showToast(`🔒 Valide les 28 lettres dans LETTRES pour débloquer le Coran ! (${validatedLettersCount}/28 ⭐)`, "info");
+                    setActivePage("prononciation");
+                  }}
+                  title="Valide les 28 lettres dans LETTRES pour débloquer le Coran !"
+                  style={{
+                    opacity: 0.85,
+                    border: "1px dashed rgba(255, 209, 102, 0.5)",
+                    color: "#ffd166",
+                    background: "rgba(0, 0, 0, 0.25)",
+                  }}
+                >
+                  <span className="nav-icon">🔒</span>
+                  <span className="nav-label">CORAN ({validatedLettersCount}/28 ⭐)</span>
+                </button>
+              )}
+            </nav>
+          )}
 
           {/* Right Action buttons & Compact Modal Hub */}
           <div className="header-actions">
@@ -2496,7 +2507,7 @@ function AppInner({ currentUser, onSignOut }) {
             <PWAInstallButton />
 
             {/* Voice Command Mic (hidden in simplified child/beginner modes to prevent clutter) */}
-            {!isSimplifiedUxMode(uxMode) && (
+            {!isSimplifiedUxMode(uxMode) && isElementVisible(uiElementsVisibility, "headerVoice") && (
               <button
                 id="header-voice-btn"
                 className={`voice-btn${listening ? ' listening' : ''}`}
@@ -2509,37 +2520,41 @@ function AppInner({ currentUser, onSignOut }) {
             )}
 
             {/* Global Compact Mode Quick Toggle: accessible for ALL user types */}
-            <button
-              id="header-compact-btn"
-              type="button"
-              className={`header-compact-btn${compactMode ? ' active' : ''}`}
-              aria-pressed={compactMode}
-              onClick={() => dispatch(uiActions.toggleCompactMode())}
-              title={compactMode ? "Mode Compact actif (Cliquer pour affichage normal)" : "Activer le Mode Compact sur toute l'application"}
-              aria-label={compactMode ? "Désactiver le mode compact" : "Activer le mode compact"}
-            >
-              <span className="compact-icon">{compactMode ? '⊞' : '⊟'}</span>
-              <span className="compact-label desktop-only">COMPACT</span>
-            </button>
+            {isElementVisible(uiElementsVisibility, "headerCompact") && (
+              <button
+                id="header-compact-btn"
+                type="button"
+                className={`header-compact-btn${compactMode ? ' active' : ''}`}
+                aria-pressed={compactMode}
+                onClick={() => dispatch(uiActions.toggleCompactMode())}
+                title={compactMode ? "Mode Compact actif (Cliquer pour affichage normal)" : "Activer le Mode Compact sur toute l'application"}
+                aria-label={compactMode ? "Désactiver le mode compact" : "Activer le mode compact"}
+              >
+                <span className="compact-icon">{compactMode ? '⊞' : '⊟'}</span>
+                <span className="compact-label desktop-only">COMPACT</span>
+              </button>
+            )}
 
             {/* Interactive UX Mode Badge: ALWAYS visible, never squished */}
-            <button
-              id="header-ux-mode-badge"
-              className={`header-ux-badge ux-${uxMode}`}
-              onClick={() => {
-                setHeaderToolsInitialTab('ux');
-                setShowHeaderToolsModal(true);
-              }}
-              title={`Mode actif : ${currentUxProfile.name} (Cliquez pour changer)`}
-              aria-label={`Mode d'interface : ${currentUxProfile.name}`}
-            >
-              <span className="ux-badge-icon">{currentUxProfile.icon}</span>
-              <span className="ux-badge-label">{currentUxProfile.shortLabel.toUpperCase()}</span>
-              <span className="ux-badge-chevron">▾</span>
-            </button>
+            {isElementVisible(uiElementsVisibility, "headerUxBadge") && (
+              <button
+                id="header-ux-mode-badge"
+                className={`header-ux-badge ux-${uxMode}`}
+                onClick={() => {
+                  setHeaderToolsInitialTab('ux');
+                  setShowHeaderToolsModal(true);
+                }}
+                title={`Mode actif : ${currentUxProfile.name} (Cliquez pour changer)`}
+                aria-label={`Mode d'interface : ${currentUxProfile.name}`}
+              >
+                <span className="ux-badge-icon">{currentUxProfile.icon}</span>
+                <span className="ux-badge-label">{currentUxProfile.shortLabel.toUpperCase()}</span>
+                <span className="ux-badge-chevron">▾</span>
+              </button>
+            )}
 
             {/* Outils & Aides d'étude Modal Button (Hidden in Child mode to keep the interface simple) */}
-            {uxMode !== 'child' && (
+            {uxMode !== 'child' && isElementVisible(uiElementsVisibility, "headerToolsBtn") && (
               <button
                 id="header-tools-btn"
                 className={`header-tool-btn${showArabicKeyboard || showRappel ? ' active' : ''}`}
@@ -2559,7 +2574,7 @@ function AppInner({ currentUser, onSignOut }) {
             )}
 
             {/* User Avatar / Account Profile Modal Trigger */}
-            {currentUser && (
+            {currentUser && isElementVisible(uiElementsVisibility, "headerAccount") && (
               <button
                 id="header-user-btn"
                 className="header-user-btn"
@@ -2659,34 +2674,36 @@ function AppInner({ currentUser, onSignOut }) {
 
           {/* Sidebar — always rendered, accessible via ☰ from any page */}
           <aside className={`sidebar${sidebarOpen ? ' open' : ''}${activePage !== 'quran' ? ' sidebar-floating' : ''}`}>
-            <div className="sidebar-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input
-                placeholder={sidebarConfig.searchPlaceholder}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{ paddingRight: search ? 30 : 12 }}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  title="Effacer la recherche"
-                  style={{
-                    position: 'absolute',
-                    right: 20,
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text3)',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    padding: 4,
-                    lineHeight: 1
-                  }}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            {search.trim() && (
+            {isElementVisible(uiElementsVisibility, "sidebarSearch") && (
+              <div className="sidebar-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  placeholder={sidebarConfig.searchPlaceholder}
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{ paddingRight: search ? 30 : 12 }}
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    title="Effacer la recherche"
+                    style={{
+                      position: 'absolute',
+                      right: 20,
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text3)',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      padding: 4,
+                      lineHeight: 1
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+            {isElementVisible(uiElementsVisibility, "sidebarSearch") && search.trim() && (
               <div style={{
                 padding: '4px 14px',
                 fontSize: 8,
@@ -2755,11 +2772,15 @@ function AppInner({ currentUser, onSignOut }) {
                   <div key={s.number}
                     className={`surah-item${selectedSurah?.number === s.number ? " active surah-active" : ""}${(surahStats[s.number]?.learned >= s.numberOfAyahs && s.numberOfAyahs > 0) ? " fully-learned" : ""}`}
                     onClick={() => { setSelectedSurah(s); setSidebarOpen(false); if (activePage !== 'quran') setActivePage('quran'); }}>
-                    <div className="surah-num">{sidebarConfig.showStars ? "⭐ " : ""}{s.number}</div>
+                    {isElementVisible(uiElementsVisibility, "sidebarSurahNumbers") && (
+                      <div className="surah-num">{sidebarConfig.showStars ? "⭐ " : ""}{s.number}</div>
+                    )}
                     <div className="surah-info">
                       <div className="surah-name-en">{s.englishName}</div>
-                      <div className="surah-meta">{sidebarConfig.revelationLabel(s.revelationType)} · {sidebarConfig.versesLabel(s.numberOfAyahs)}{!isSimplifiedUxMode(uxMode) && surahStats[s.number]?.learned > 0 ? ` · ${surahStats[s.number].learned}✓` : ''}</div>
-                      {!compactMode && !isSimplifiedUxMode(uxMode) && (() => { const st = surahStats[s.number]; const total = s.numberOfAyahs || 0; const pct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0; return (
+                      {isElementVisible(uiElementsVisibility, "sidebarSurahMeta") && (
+                        <div className="surah-meta">{sidebarConfig.revelationLabel(s.revelationType)} · {sidebarConfig.versesLabel(s.numberOfAyahs)}{!isSimplifiedUxMode(uxMode) && surahStats[s.number]?.learned > 0 ? ` · ${surahStats[s.number].learned}✓` : ''}</div>
+                      )}
+                      {!compactMode && !isSimplifiedUxMode(uxMode) && isElementVisible(uiElementsVisibility, "sidebarMasteryBars") && (() => { const st = surahStats[s.number]; const total = s.numberOfAyahs || 0; const pct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0; return (
                         <div style={{marginTop:3,display:'flex',alignItems:'center',gap:6}}>
                           <div style={{flex:1,height:2,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
                             <div style={{height:'100%',width:pct+'%',background:masteryColor(pct),borderRadius:2}} />
@@ -2768,12 +2789,14 @@ function AppInner({ currentUser, onSignOut }) {
                         </div>
                       ); })()}
                     </div>
-                    <div className="surah-name-ar">{s.name}</div>
+                    {isElementVisible(uiElementsVisibility, "sidebarArabicNames") && (
+                      <div className="surah-name-ar">{s.name}</div>
+                    )}
                   </div>
                 ))}
             </div>
 
-            {sidebarConfig.showArchitectureDoc && (
+            {sidebarConfig.showArchitectureDoc && isElementVisible(uiElementsVisibility, "sidebarArchitectureDoc") && (
               <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)", background: "rgba(15, 23, 42, 0.5)" }}>
                 <button
                   type="button"
@@ -4275,7 +4298,7 @@ function AppInner({ currentUser, onSignOut }) {
                               if (!isOtherSurah) ayatRefs.current[ayat.numberInSurah] = el;
                             }}>
 
-                          {(isPageStart || isHizbStart || isJuzStart) && (() => {
+                          {(isPageStart || isHizbStart || isJuzStart) && isElementVisible(uiElementsVisibility, "ayatDividers") && (() => {
                             const pageSlice = isPageStart ? (hizbMode ? visible : ayats).filter(a => a.page === ayat.page) : [];
                             const hizbSlice = isHizbStart ? (hizbMode && currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === ayatHizb)) : [];
                             const juzSlice  = isJuzStart  ? (hizbMode ? visible : ayats).filter(a => getAyatJuz(a) === ayatJuz) : [];
@@ -4345,11 +4368,13 @@ function AppInner({ currentUser, onSignOut }) {
                                   S.{ayatSurahNum}
                                 </span>
                               )}
-                              <div className="ayat-number-badge"
-                                title={isOtherSurah ? `Sourate ${ayatSurahNum} · Verset ${ayat.numberInSurah}${ayat.page != null ? ` · Page ${ayat.page}` : ''}` : `Verset ${ayat.numberInSurah}${ayat.page != null ? ` · Page ${ayat.page}` : ''}`}
-                                style={{cursor:'pointer'}}
-                              >{ayat.numberInSurah}</div>
-                              {ayat.page != null && (
+                              {isElementVisible(uiElementsVisibility, "ayatNumber") && (
+                                <div className="ayat-number-badge"
+                                  title={isOtherSurah ? `Sourate ${ayatSurahNum} · Verset ${ayat.numberInSurah}${ayat.page != null ? ` · Page ${ayat.page}` : ''}` : `Verset ${ayat.numberInSurah}${ayat.page != null ? ` · Page ${ayat.page}` : ''}`}
+                                  style={{cursor:'pointer'}}
+                                >{ayat.numberInSurah}</div>
+                              )}
+                              {ayat.page != null && isElementVisible(uiElementsVisibility, "ayatPageBadge") && (
                                 <span
                                   className="ayat-page-badge"
                                   title={`Page Mushaf : ${ayat.page} (Verset ${ayat.numberInSurah})`}
@@ -4357,35 +4382,37 @@ function AppInner({ currentUser, onSignOut }) {
                                   P.{ayat.page}
                                 </span>
                               )}
-                              <button
-                                title="Lire depuis ce verset"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  if (isOtherSurah) {
-                                    setCrossPlayingAyat(ayat);
-                                    setPlayingAyatNum(ayat.numberInSurah);
-                                    setIsMainPlaying(true);
-                                    requestAnimationFrame(() => {
-                                      if (mainAudioRef.current) {
-                                        safeLoadAudio(mainAudioRef.current);
-                                        playWhenReady();
-                                      }
-                                    });
-                                    return;
-                                  }
-                                  setCrossPlayingAyat(null);
-                                  const idx = ayats.findIndex(a => a.numberInSurah === ayat.numberInSurah);
-                                  if (idx >= 0) { playMainAyat(idx); setIsMainPlaying(true); }
-                                }}
-                                style={{
-                                  width:22, height:22, borderRadius:"50%", border:"none",
-                                  background: isPlaying ? "var(--teal)" : "rgba(62,184,160,.15)",
-                                  color: isPlaying ? "#fff" : "var(--teal2)",
-                                  fontSize:9, cursor:"pointer", display:"flex", alignItems:"center",
-                                  justifyContent:"center", flexShrink:0, transition:"all .15s",
-                                  outline: isPlaying ? "2px solid var(--teal)" : "none",
-                                  outlineOffset:2,
-                                }}>{isPlaying ? "⏸" : "▶"}</button>
+                              {isElementVisible(uiElementsVisibility, "ayatPlayBtn") && (
+                                <button
+                                  title="Lire depuis ce verset"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    if (isOtherSurah) {
+                                      setCrossPlayingAyat(ayat);
+                                      setPlayingAyatNum(ayat.numberInSurah);
+                                      setIsMainPlaying(true);
+                                      requestAnimationFrame(() => {
+                                        if (mainAudioRef.current) {
+                                          safeLoadAudio(mainAudioRef.current);
+                                          playWhenReady();
+                                        }
+                                      });
+                                      return;
+                                    }
+                                    setCrossPlayingAyat(null);
+                                    const idx = ayats.findIndex(a => a.numberInSurah === ayat.numberInSurah);
+                                    if (idx >= 0) { playMainAyat(idx); setIsMainPlaying(true); }
+                                  }}
+                                  style={{
+                                    width:22, height:22, borderRadius:"50%", border:"none",
+                                    background: isPlaying ? "var(--teal)" : "rgba(62,184,160,.15)",
+                                    color: isPlaying ? "#fff" : "var(--teal2)",
+                                    fontSize:9, cursor:"pointer", display:"flex", alignItems:"center",
+                                    justifyContent:"center", flexShrink:0, transition:"all .15s",
+                                    outline: isPlaying ? "2px solid var(--teal)" : "none",
+                                    outlineOffset:2,
+                                  }}>{isPlaying ? "⏸" : "▶"}</button>
+                              )}
                               {isOpen && (
                                 <button
                                   title="Afficher en plein écran (Focus)"
@@ -4411,7 +4438,7 @@ function AppInner({ currentUser, onSignOut }) {
                               )}
                             </div>
                             {renderAyatText()}
-                            {(() => {
+                            {isElementVisible(uiElementsVisibility, "ayatMastery") && (() => {
                               const m = masteryMap[lkey(ayatSurahNum, ayat.numberInSurah)] ?? 0;
                               return (
                                 <div
@@ -4490,7 +4517,7 @@ function AppInner({ currentUser, onSignOut }) {
                           </div>
 
                           {/* Translation — full-width block below Arabic */}
-                          {translationLang && (() => {
+                          {translationLang && isElementVisible(uiElementsVisibility, "ayatTranslation") && (() => {
                             const key = `${translationLang}:${ayatSurahNum}`;
                             const tList = translations[key];
                             const tText = tList?.find(t => t.numberInSurah === ayat.numberInSurah)?.text;
@@ -4738,6 +4765,14 @@ function AppInner({ currentUser, onSignOut }) {
           <UxModeSelectorModal
             isOpen={showUxModeModal}
             onClose={() => dispatch(uiActions.setShowUxModeModal(false))}
+          />
+        )}
+
+        {/* UI ELEMENTS VISIBILITY MODAL */}
+        {showUiVisibilityModal && (
+          <UiElementsVisibilityModal
+            isOpen={showUiVisibilityModal}
+            onClose={() => dispatch(uiActions.setShowUiVisibilityModal(false))}
           />
         )}
 
@@ -5054,49 +5089,55 @@ function AppInner({ currentUser, onSignOut }) {
           >
 
             <div className="player-row">
-              <div className="player-info">
-                <div className="player-surah">{playerConfig.surahTitleFormat(selectedSurah)}</div>
-                <div className="player-ayah">
-                  {playerConfig.verseCounterFormat(currentMainAyat?.numberInSurah || 1, ayats.length, loopActive ? `${loopStartNum}–${loopEndNum}${loopMax > 0 ? ` · ${loopCount + 1}/${loopMax}` : ''}` : '')}
+              {isElementVisible(uiElementsVisibility, "playerSurahTitle") && (
+                <div className="player-info">
+                  <div className="player-surah">{playerConfig.surahTitleFormat(selectedSurah)}</div>
+                  <div className="player-ayah">
+                    {playerConfig.verseCounterFormat(currentMainAyat?.numberInSurah || 1, ayats.length, loopActive ? `${loopStartNum}–${loopEndNum}${loopMax > 0 ? ` · ${loopCount + 1}/${loopMax}` : ''}` : '')}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="player-controls">
-                <button
-                  className="ctrl-btn"
-                  title={playerConfig.prevBtnAriaLabel ? playerConfig.prevBtnAriaLabel() : "Verset précédent"}
-                  aria-label={playerConfig.prevBtnAriaLabel ? playerConfig.prevBtnAriaLabel() : "Verset précédent"}
-                  onClick={() => {
-                    const i = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
-                    playMainAyat(i); if (isMainPlaying) playWhenReady();
-                  }}
-                >{playerConfig.prevBtnText()}</button>
-                {playerConfig.showFastBackward && (
-                  <button
-                    className="ctrl-btn"
-                    title="Reculer de 5 secondes (Retour rapide / Fast backward)"
-                    aria-label="Reculer de 5 secondes"
-                    onClick={handleFastBackward}>⏪</button>
+                {isElementVisible(uiElementsVisibility, "playerControls") && (
+                  <>
+                    <button
+                      className="ctrl-btn"
+                      title={playerConfig.prevBtnAriaLabel ? playerConfig.prevBtnAriaLabel() : "Verset précédent"}
+                      aria-label={playerConfig.prevBtnAriaLabel ? playerConfig.prevBtnAriaLabel() : "Verset précédent"}
+                      onClick={() => {
+                        const i = Math.max(loopActive ? loopStart : 0, mainAyatIdx - 1);
+                        playMainAyat(i); if (isMainPlaying) playWhenReady();
+                      }}
+                    >{playerConfig.prevBtnText()}</button>
+                    {playerConfig.showFastBackward && (
+                      <button
+                        className="ctrl-btn"
+                        title="Reculer de 5 secondes (Retour rapide / Fast backward)"
+                        aria-label="Reculer de 5 secondes"
+                        onClick={handleFastBackward}>⏪</button>
+                    )}
+                    <button
+                      className={`ctrl-btn play-btn${isChild ? ' child-play-btn' : isBeginner ? ' beginner-play-btn' : ''}`}
+                      title={playerConfig.playBtnAriaLabel ? playerConfig.playBtnAriaLabel(isMainPlaying) : (isMainPlaying ? "Pause" : "Lecture")}
+                      aria-label={playerConfig.playBtnAriaLabel ? playerConfig.playBtnAriaLabel(isMainPlaying) : (isMainPlaying ? "Pause" : "Lecture")}
+                      onClick={() => {
+                        if (!isMainPlaying) { playMainAyat(loopActive ? loopStart : mainAyatIdx); setIsMainPlaying(true); playWhenReady(); }
+                        else { setIsMainPlaying(false); setPlayingAyatNum(null); safePauseAudio(mainAudioRef.current); }
+                      }}
+                    >{playerConfig.playBtnText(isMainPlaying)}</button>
+                    <button
+                      className="ctrl-btn"
+                      title={playerConfig.nextBtnAriaLabel ? playerConfig.nextBtnAriaLabel() : "Verset suivant"}
+                      aria-label={playerConfig.nextBtnAriaLabel ? playerConfig.nextBtnAriaLabel() : "Verset suivant"}
+                      onClick={() => {
+                        const i = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
+                        playMainAyat(i); if (isMainPlaying) playWhenReady();
+                      }}
+                    >{playerConfig.nextBtnText()}</button>
+                  </>
                 )}
-                <button
-                  className={`ctrl-btn play-btn${isChild ? ' child-play-btn' : isBeginner ? ' beginner-play-btn' : ''}`}
-                  title={playerConfig.playBtnAriaLabel ? playerConfig.playBtnAriaLabel(isMainPlaying) : (isMainPlaying ? "Pause" : "Lecture")}
-                  aria-label={playerConfig.playBtnAriaLabel ? playerConfig.playBtnAriaLabel(isMainPlaying) : (isMainPlaying ? "Pause" : "Lecture")}
-                  onClick={() => {
-                    if (!isMainPlaying) { playMainAyat(loopActive ? loopStart : mainAyatIdx); setIsMainPlaying(true); playWhenReady(); }
-                    else { setIsMainPlaying(false); setPlayingAyatNum(null); safePauseAudio(mainAudioRef.current); }
-                  }}
-                >{playerConfig.playBtnText(isMainPlaying)}</button>
-                <button
-                  className="ctrl-btn"
-                  title={playerConfig.nextBtnAriaLabel ? playerConfig.nextBtnAriaLabel() : "Verset suivant"}
-                  aria-label={playerConfig.nextBtnAriaLabel ? playerConfig.nextBtnAriaLabel() : "Verset suivant"}
-                  onClick={() => {
-                    const i = Math.min(loopActive ? loopEnd : ayats.length - 1, mainAyatIdx + 1);
-                    playMainAyat(i); if (isMainPlaying) playWhenReady();
-                  }}
-                >{playerConfig.nextBtnText()}</button>
-                {playerConfig.showLoopButton && (
+                {playerConfig.showLoopButton && isElementVisible(uiElementsVisibility, "playerLoop") && (
                   <button
                     className={`ctrl-btn${loopActive || showLoopBar ? " loop-on" : ""}`}
                     title={showLoopBar ? "Fermer les réglages de boucle" : (playerConfig.loopBtnAriaLabel ? playerConfig.loopBtnAriaLabel() : "Boucle de versets")}
@@ -5113,63 +5154,65 @@ function AppInner({ currentUser, onSignOut }) {
                     style={{ fontSize: 13 }}>{playerConfig.loopBtnText()}</button>
                 )}
                 {/* Options Tajwid & Audio : Mode simplifié (enfant, débutant) bouton icône circulaire 🎨 */}
-                {isSimplifiedUxMode(uxMode) ? (
-                  <button
-                    id="player-audio-options-modal-btn"
-                    className={`ctrl-btn player-tajweed-modal-trigger${(isCoachEnabled || silenceWordsToRevise) ? " loop-on" : ""}`}
-                    onClick={() => setShowPlayerAudioModal(true)}
-                    title="Options audio, Récitateur, Répétition & Tajwid"
-                    aria-label="Ouvrir les options audio et Tajwid"
-                  >
-                    <span style={{ fontSize: 14 }}>🎨</span>
-                    {(isCoachEnabled || silenceWordsToRevise) && (
-                      <span style={{
-                        position: "absolute",
-                        top: 2,
-                        right: 2,
-                        width: 6,
-                        height: 6,
-                        borderRadius: "50%",
-                        backgroundColor: "#10b981",
-                        display: "inline-block"
-                      }} />
-                    )}
-                  </button>
-                ) : (
-                  <>
-                    {/* Silence / Masquage sur mots à réviser */}
-                    <SilenceReviseControl
-                      compact={true}
-                      timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
-                      ld={currentMainAyat ? learnData[`${selectedSurah.number}:${currentMainAyat.numberInSurah}`] : null}
-                      ayatText={currentMainAyat?.text || ""}
-                      surahNum={selectedSurah.number}
-                      ayatNum={currentMainAyat?.numberInSurah}
-                      currentMs={mainCurrentMsRef.current}
-                      isPlaying={isMainPlaying}
-                      onLoadTimestamps={() => {
-                        loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
-                          if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
-                        });
-                      }}
-                    />
-                    {/* Coach Vocal Tajwid (pause prédictive & annonce vocale des règles) */}
-                    <TajweedAudioCoachControl
-                      compact={true}
-                      timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
-                      ayatText={currentMainAyat?.text || ""}
-                      surahNum={selectedSurah.number}
-                      ayatNum={currentMainAyat?.numberInSurah}
-                      onLoadTimestamps={() => {
-                        loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
-                          if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
-                        });
-                      }}
-                    />
-                  </>
+                {isElementVisible(uiElementsVisibility, "playerTajweedModal") && (
+                  isSimplifiedUxMode(uxMode) ? (
+                    <button
+                      id="player-audio-options-modal-btn"
+                      className={`ctrl-btn player-tajweed-modal-trigger${(isCoachEnabled || silenceWordsToRevise) ? " loop-on" : ""}`}
+                      onClick={() => setShowPlayerAudioModal(true)}
+                      title="Options audio, Récitateur, Répétition & Tajwid"
+                      aria-label="Ouvrir les options audio et Tajwid"
+                    >
+                      <span style={{ fontSize: 14 }}>🎨</span>
+                      {(isCoachEnabled || silenceWordsToRevise) && (
+                        <span style={{
+                          position: "absolute",
+                          top: 2,
+                          right: 2,
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          backgroundColor: "#10b981",
+                          display: "inline-block"
+                        }} />
+                      )}
+                    </button>
+                  ) : (
+                    <>
+                      {/* Silence / Masquage sur mots à réviser */}
+                      <SilenceReviseControl
+                        compact={true}
+                        timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
+                        ld={currentMainAyat ? learnData[`${selectedSurah.number}:${currentMainAyat.numberInSurah}`] : null}
+                        ayatText={currentMainAyat?.text || ""}
+                        surahNum={selectedSurah.number}
+                        ayatNum={currentMainAyat?.numberInSurah}
+                        currentMs={mainCurrentMsRef.current}
+                        isPlaying={isMainPlaying}
+                        onLoadTimestamps={() => {
+                          loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
+                            if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
+                          });
+                        }}
+                      />
+                      {/* Coach Vocal Tajwid (pause prédictive & annonce vocale des règles) */}
+                      <TajweedAudioCoachControl
+                        compact={true}
+                        timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
+                        ayatText={currentMainAyat?.text || ""}
+                        surahNum={selectedSurah.number}
+                        ayatNum={currentMainAyat?.numberInSurah}
+                        onLoadTimestamps={() => {
+                          loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
+                            if (parsed && Object.keys(parsed).length > 0) updateTimestamps(parsed);
+                          });
+                        }}
+                      />
+                    </>
+                  )
                 )}
                 {/* Reciter picker (available in standard & expert, or inside Options modal in simplified modes) */}
-                {playerConfig.showStandaloneReciter && (
+                {playerConfig.showStandaloneReciter && isElementVisible(uiElementsVisibility, "playerReciter") && (
                   <button
                     className={`ctrl-btn reciter-trigger${showRecitPanel ? " loop-on" : ""}`}
                     aria-haspopup="dialog"

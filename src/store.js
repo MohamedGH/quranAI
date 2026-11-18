@@ -1,5 +1,12 @@
 import { configureStore, createSlice } from "@reduxjs/toolkit";
 import { safeJsonParse, safeGetItem, safeSetItem } from "./utils/safeStorage.js";
+import {
+  getDefaultUiVisibility,
+  isElementVisible,
+  setCategoryVisibility,
+  setAllElementsVisibility,
+  applyPreset,
+} from "./utils/uiVisibilityManager.js";
 
 // ─── Helpers localStorage ────────────────────────────────────────────────────
 const load = (key, fallback) => safeGetItem(key, fallback);
@@ -63,6 +70,11 @@ const uiSlice = createSlice({
       ? load("quran_childQuestBannerState", "expanded")
       : "expanded",
     compactMode:         Boolean(load("quran_compactMode", false)),
+    uiElementsVisibility: {
+      ...getDefaultUiVisibility(),
+      ...(load("quran_uiElementsVisibility", {}) || {}),
+    },
+    showUiVisibilityModal: false,
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -416,6 +428,45 @@ const uiSlice = createSlice({
     toggleCompactMode: (s) => {
       s.compactMode = !s.compactMode;
       save("quran_compactMode", s.compactMode);
+    },
+    setUiElementVisibility: (s, a) => {
+      const { id, visible } = a.payload || {};
+      if (!id) return;
+      if (!s.uiElementsVisibility) s.uiElementsVisibility = { ...getDefaultUiVisibility() };
+      s.uiElementsVisibility[id] = Boolean(visible);
+      save("quran_uiElementsVisibility", s.uiElementsVisibility);
+    },
+    toggleUiElementVisibility: (s, a) => {
+      const id = a.payload;
+      if (!id) return;
+      if (!s.uiElementsVisibility) s.uiElementsVisibility = { ...getDefaultUiVisibility() };
+      s.uiElementsVisibility[id] = s.uiElementsVisibility[id] === false;
+      save("quran_uiElementsVisibility", s.uiElementsVisibility);
+    },
+    setCategoryUiVisibility: (s, a) => {
+      const { categoryId, visible } = a.payload || {};
+      if (!categoryId) return;
+      s.uiElementsVisibility = setCategoryVisibility(s.uiElementsVisibility, categoryId, visible);
+      save("quran_uiElementsVisibility", s.uiElementsVisibility);
+    },
+    setAllUiElementsVisibility: (s, a) => {
+      s.uiElementsVisibility = setAllElementsVisibility(Boolean(a.payload));
+      save("quran_uiElementsVisibility", s.uiElementsVisibility);
+    },
+    applyUiVisibilityPreset: (s, a) => {
+      const presetId = a.payload || "all";
+      s.uiElementsVisibility = applyPreset(presetId);
+      save("quran_uiElementsVisibility", s.uiElementsVisibility);
+    },
+    resetUiElementsVisibility: (s) => {
+      s.uiElementsVisibility = { ...getDefaultUiVisibility() };
+      save("quran_uiElementsVisibility", s.uiElementsVisibility);
+    },
+    setShowUiVisibilityModal: (s, a) => {
+      s.showUiVisibilityModal = Boolean(a.payload);
+    },
+    toggleShowUiVisibilityModal: (s) => {
+      s.showUiVisibilityModal = !s.showUiVisibilityModal;
     },
   },
   extraReducers: (builder) => {
@@ -1161,6 +1212,9 @@ const rawSel = {
   similarLettersFilter:(s) => s.ui.similarLettersFilter || "all",
   childQuestBannerState:(s) => s.ui.childQuestBannerState || "expanded",
   compactMode:         (s) => Boolean(s.ui.compactMode),
+  uiElementsVisibility:(s) => s.ui.uiElementsVisibility || getDefaultUiVisibility(),
+  isUiElementVisible:  (s, id) => (s?.ui?.uiElementsVisibility ? s.ui.uiElementsVisibility[id] !== false : true),
+  showUiVisibilityModal:(s) => Boolean(s.ui.showUiVisibilityModal),
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

@@ -418,6 +418,67 @@ export function HeaderToolsModal({
                 </button>
               </div>
 
+              {/* Personnalisation des éléments d'interface */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'var(--surface2)',
+                  border: '1px solid rgba(201, 168, 76, 0.35)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      background: 'rgba(201, 168, 76, 0.16)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                      color: 'var(--gold2)',
+                    }}
+                  >
+                    🎛️
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>
+                      Éléments Visibles de l'Interface
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+                      Activer ou masquer individuellement chaque composant (32 éléments)
+                    </div>
+                  </div>
+                </div>
+                <button
+                  id="btn-open-ui-visibility-modal"
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    dispatch(uiActions.setShowUiVisibilityModal(true));
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    border: '1px solid var(--gold)',
+                    background: 'rgba(201, 168, 76, 0.15)',
+                    color: 'var(--gold2)',
+                    fontSize: 9.5,
+                    fontFamily: "'Cinzel', serif",
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  RÉGLER →
+                </button>
+              </div>
+
               {/* Pages & Ressources (déplacées de la barre de navigation vers Outils) */}
               <div
                 id="tools-pages-shortcuts"

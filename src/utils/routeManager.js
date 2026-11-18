@@ -67,6 +67,9 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
           ? false
           : null;
 
+      const uiPresetParam = params.get("uiPreset") || params.get("preset");
+      const uiPreset = ["all", "zen", "minimal", "audioFocus"].includes(uiPresetParam) ? uiPresetParam : null;
+
       const glossaryTermId =
         activePage === "glossaire"
           ? (segs[1] ? decodeURIComponent(segs[1]) : params.get("term") || null)
@@ -87,6 +90,7 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
         silenceMode,
         uxMode,
         compactMode,
+        uiPreset,
         glossaryTermId,
         glossaryCategory,
       });
@@ -105,6 +109,7 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       silenceMode: null,
       uxMode: null,
       compactMode: null,
+      uiPreset: null,
       glossaryTermId: null,
       glossaryCategory: null,
     }),
@@ -145,6 +150,7 @@ export const buildQuranRoute = ({
   ux = null,
   compactMode = null,
   compact = null,
+  uiPreset = null,
   glossaryTermId = null,
   glossaryCategory = null,
 } = {}) => {
@@ -156,6 +162,9 @@ export const buildQuranRoute = ({
   }
   if (effectiveCompact === true) {
     query.set("compact", "1");
+  }
+  if (uiPreset && ["all", "zen", "minimal", "audioFocus"].includes(uiPreset)) {
+    query.set("uiPreset", uiPreset);
   }
 
   if (activePage === "glossaire") {

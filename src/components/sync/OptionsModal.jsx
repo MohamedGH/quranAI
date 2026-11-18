@@ -289,6 +289,64 @@ export function OptionsModal({ onClose, onOpenReminders }) {
           <Row label="ORTHOGRAPHE" desc="Vérification en révision écrite" on={spellCheck} onToggle={() => dispatch(uiActions.toggleSpellCheck())} color="var(--gold2)" />
           <Row label="NUMÉROS" desc="Annoncer les numéros d'ayat" on={announceNum} onToggle={() => dispatch(uiActions.toggleAnnounceNum())} color="var(--teal2)" />
 
+          <Section title="PERSONNALISATION DES ÉLÉMENTS D'INTERFACE" />
+          <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: 10, background: "var(--surface2)", border: "1px solid rgba(201, 168, 76, 0.3)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--gold2)", fontFamily: "'Cinzel',serif" }}>
+                  🎛️ TOUS LES ÉLÉMENTS SONT ACTIVABLES / DÉSACTIVABLES
+                </div>
+                <div style={{ fontSize: 8.5, color: "var(--text3)", marginTop: 2 }}>
+                  Masquez ou affichez chaque élément (logo, bannières, boutons, traduction, démarcations...)
+                </div>
+              </div>
+              <button
+                type="button"
+                id="btn-options-open-ui-customizer"
+                onClick={() => {
+                  onClose();
+                  dispatch(uiActions.setShowUiVisibilityModal(true));
+                }}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  border: "1px solid var(--gold)",
+                  background: "rgba(201, 168, 76, 0.16)",
+                  color: "var(--gold2)",
+                  fontSize: 9.5,
+                  fontWeight: 700,
+                  fontFamily: "'Cinzel',serif",
+                  cursor: "pointer",
+                }}
+              >
+                GÉRER L'AFFICHAGE →
+              </button>
+            </div>
+            {/* Quick presets */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+              <span style={{ fontSize: 8, color: "var(--text3)", letterSpacing: 0.8, alignSelf: "center" }}>PRÉSÉLECTIONS :</span>
+              {["all", "zen", "minimal", "audioFocus"].map((pid) => (
+                <button
+                  key={pid}
+                  type="button"
+                  id={`btn-options-preset-${pid}`}
+                  onClick={() => dispatch(uiActions.applyUiVisibilityPreset(pid))}
+                  style={{
+                    padding: "3px 8px",
+                    borderRadius: 14,
+                    border: "1px solid var(--border2)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "var(--text2)",
+                    fontSize: 8.5,
+                    cursor: "pointer",
+                  }}
+                >
+                  {pid === "all" ? "Tout actif" : pid === "zen" ? "Mode Zen" : pid === "minimal" ? "Minimaliste" : "Focus Audio"}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {onOpenReminders && (
             <>
               <Section title="NOTIFICATIONS & RAPPELS" />

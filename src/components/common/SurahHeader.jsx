@@ -6,6 +6,7 @@ import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
 import { getUxProfile, isSimplifiedUxMode, getSimplifiedLayoutConfig, getCompactLayoutConfig } from "../../utils/uxProfileManager.js";
 import { SurahAllOptionsModal } from "./SurahAllOptionsModal.jsx";
+import { isElementVisible } from "../../utils/uiVisibilityManager.js";
 
 export function SurahHeader({
   selectedSurah,
@@ -99,6 +100,7 @@ export function SurahHeader({
   const cachedSurahsMap = useSelector(sel.cachedSurahsMap);
   const uxMode = useSelector(sel.uxMode);
   const compactMode = useSelector(sel.compactMode);
+  const uiElementsVisibility = useSelector(sel.uiElementsVisibility);
   const currentUx = getUxProfile(uxMode);
   const layoutCfg = getSimplifiedLayoutConfig(uxMode);
   const compactCfg = getCompactLayoutConfig(compactMode, uxMode);
@@ -281,47 +283,53 @@ export function SurahHeader({
         {/* Row 1: Navigation + Surah Identity + Quick Status */}
         <div className="m-surah-compact-row">
           {/* Prev Surah */}
-          <button
-            className={`m-compact-nav-btn ${!prevSurah ? 'disabled' : ''}`}
-            disabled={!prevSurah}
-            onClick={() => {
-              if (onNavigateSurah) onNavigateSurah('prev');
-              else if (prevSurah) setSelectedSurah(prevSurah);
-            }}
-            title={prevSurah ? `Sourate précédente : ${prevSurah.englishName} (même verset)` : "Première sourate"}
-          >
-            ‹
-          </button>
+          {isElementVisible(uiElementsVisibility, "surahNavigation") && (
+            <button
+              className={`m-compact-nav-btn ${!prevSurah ? 'disabled' : ''}`}
+              disabled={!prevSurah}
+              onClick={() => {
+                if (onNavigateSurah) onNavigateSurah('prev');
+                else if (prevSurah) setSelectedSurah(prevSurah);
+              }}
+              title={prevSurah ? `Sourate précédente : ${prevSurah.englishName} (même verset)` : "Première sourate"}
+            >
+              ‹
+            </button>
+          )}
 
           {/* Center clickable surah title */}
-          <div
-            className="m-surah-compact-title"
-            onClick={() => setSidebarOpen(true)}
-            title="Changer de sourate (ouvrir la liste)"
-          >
-            <span className="m-compact-num">№ {selectedSurah.number}</span>
-            <span className="m-compact-ar">{selectedSurah.name}</span>
-            <span className="m-compact-en">{selectedSurah.englishName}</span>
-            <span className="m-compact-meta">
-              {compactCfg.showHeaderMetrics ? (
-                <>
-                  {selectedSurah.numberOfAyahs}v · {isMeccan ? 'Mecq' : 'Méd'}
-                  {displayPage ? ` · P.${displayPage}${pageMode || displayPageMastery.masteryPct > 0 ? ` (${displayPageMastery.masteryPct}%)` : ''}` : ''}
-                  {displayHizb ? ` · H.${displayHizb}${hizbMode || displayHizbMastery.masteryPct > 0 ? ` (${displayHizbMastery.masteryPct}%)` : ''}` : ''}
-                  {displayJuz ? ` · J.${displayJuz}${juzMode || displayJuzMastery.masteryPct > 0 ? ` (${displayJuzMastery.masteryPct}%)` : ''}` : ''}
-                  {cachedSurahsMap?.[selectedSurah.number]?.isComplete ? ' · 💾 ✓' : cachedSurahsMap?.[selectedSurah.number]?.audioCount > 0 ? ` · 💾 ${cachedSurahsMap[selectedSurah.number].audioCount}/${cachedSurahsMap[selectedSurah.number].totalCount}` : ''}
-                </>
-              ) : (
-                `${selectedSurah.numberOfAyahs}v`
+          {isElementVisible(uiElementsVisibility, "surahTitle") && (
+            <div
+              className="m-surah-compact-title"
+              onClick={() => setSidebarOpen(true)}
+              title="Changer de sourate (ouvrir la liste)"
+            >
+              <span className="m-compact-num">№ {selectedSurah.number}</span>
+              <span className="m-compact-ar">{selectedSurah.name}</span>
+              <span className="m-compact-en">{selectedSurah.englishName}</span>
+              {isElementVisible(uiElementsVisibility, "surahMeta") && (
+                <span className="m-compact-meta">
+                  {compactCfg.showHeaderMetrics ? (
+                    <>
+                      {selectedSurah.numberOfAyahs}v · {isMeccan ? 'Mecq' : 'Méd'}
+                      {displayPage ? ` · P.${displayPage}${pageMode || displayPageMastery.masteryPct > 0 ? ` (${displayPageMastery.masteryPct}%)` : ''}` : ''}
+                      {displayHizb ? ` · H.${displayHizb}${hizbMode || displayHizbMastery.masteryPct > 0 ? ` (${displayHizbMastery.masteryPct}%)` : ''}` : ''}
+                      {displayJuz ? ` · J.${displayJuz}${juzMode || displayJuzMastery.masteryPct > 0 ? ` (${displayJuzMastery.masteryPct}%)` : ''}` : ''}
+                      {cachedSurahsMap?.[selectedSurah.number]?.isComplete ? ' · 💾 ✓' : cachedSurahsMap?.[selectedSurah.number]?.audioCount > 0 ? ` · 💾 ${cachedSurahsMap[selectedSurah.number].audioCount}/${cachedSurahsMap[selectedSurah.number].totalCount}` : ''}
+                    </>
+                  ) : (
+                    `${selectedSurah.numberOfAyahs}v`
+                  )}
+                </span>
               )}
-            </span>
-            <span className="m-compact-chevron">▾</span>
-          </div>
+              <span className="m-compact-chevron">▾</span>
+            </div>
+          )}
 
           {/* Quick status & Next Surah */}
           <div className="m-surah-compact-actions">
             {/* Mastery Pill — hidden in simplified child & beginner modes */}
-            {layoutCfg.showHeaderMetrics && (
+            {layoutCfg.showHeaderMetrics && isElementVisible(uiElementsVisibility, "surahMastery") && (
               <button
                 type="button"
                 onClick={() => setShowSurahInfo(v => !v)}
@@ -342,22 +350,24 @@ export function SurahHeader({
             )}
 
             {/* Next Surah */}
-            <button
-              className={`m-compact-nav-btn ${!nextSurah ? 'disabled' : ''}`}
-              disabled={!nextSurah}
-              onClick={() => {
-                if (onNavigateSurah) onNavigateSurah('next');
-                else if (nextSurah) setSelectedSurah(nextSurah);
-              }}
-              title={nextSurah ? `Sourate suivante : ${nextSurah.englishName} (même verset)` : "Dernière sourate"}
-            >
-              ›
-            </button>
+            {isElementVisible(uiElementsVisibility, "surahNavigation") && (
+              <button
+                className={`m-compact-nav-btn ${!nextSurah ? 'disabled' : ''}`}
+                disabled={!nextSurah}
+                onClick={() => {
+                  if (onNavigateSurah) onNavigateSurah('next');
+                  else if (nextSurah) setSelectedSurah(nextSurah);
+                }}
+                title={nextSurah ? `Sourate suivante : ${nextSurah.englishName} (même verset)` : "Dernière sourate"}
+              >
+                ›
+              </button>
+            )}
           </div>
         </div>
 
         {/* Row 2: Slim Bismillah line (except Surah 9 At-Tawbah) */}
-        {selectedSurah.number !== 9 && (
+        {selectedSurah.number !== 9 && isElementVisible(uiElementsVisibility, "surahBismillah") && (
           <div className="m-compact-bismillah-bar">
             <span className="m-bism-ornament">❖</span>
             <span className="m-compact-bism-text">بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</span>
@@ -458,174 +468,176 @@ export function SurahHeader({
       </div>
 
       {/* ── Reading Actions Bar (Simplified for Child/Beginner, Full for Standard/Expert) ── */}
-      <div className="m-surah-actions-bar">
-        {isSimplifiedUxMode(uxMode) ? (
-          <>
-            {/* Quick Translation Toggle for Beginner / Child */}
-            <button
-              type="button"
-              onClick={() => {
-                setShowLangDrawer(v => !v);
-                setShowTajweedDrawer(false);
-                setShowOptionsDrawer(false);
-              }}
-              className={`m-action-btn lang ${translationLang ? 'active' : ''}`}
-            >
-              <span className="m-act-icon">🌐</span>
-              <span className="m-act-label">{translationLang ? langLabel : "TRADUCTION"}</span>
-            </button>
-
-            {/* UX Mode Interactive Badge shown only if configured (top navbar already has it) */}
-            {layoutCfg.showDuplicateUxBadge && (
+      {isElementVisible(uiElementsVisibility, "surahActionsBar") && (
+        <div className="m-surah-actions-bar">
+          {isSimplifiedUxMode(uxMode) ? (
+            <>
+              {/* Quick Translation Toggle for Beginner / Child */}
               <button
                 type="button"
+                onClick={() => {
+                  setShowLangDrawer(v => !v);
+                  setShowTajweedDrawer(false);
+                  setShowOptionsDrawer(false);
+                }}
+                className={`m-action-btn lang ${translationLang ? 'active' : ''}`}
+              >
+                <span className="m-act-icon">🌐</span>
+                <span className="m-act-label">{translationLang ? langLabel : "TRADUCTION"}</span>
+              </button>
+
+              {/* UX Mode Interactive Badge shown only if configured (top navbar already has it) */}
+              {layoutCfg.showDuplicateUxBadge && (
+                <button
+                  type="button"
+                  id="surah-header-ux-badge"
+                  onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
+                  className={`m-action-btn ux-mode-btn ${uxMode}`}
+                  title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
+                >
+                  <span className="m-act-icon">{currentUx.icon}</span>
+                  <span className="m-act-label">{currentUx.shortLabel.toUpperCase()}</span>
+                </button>
+              )}
+
+              {/* All Options Modal Trigger for Child & Beginner Mode */}
+              <button
+                id="surah-header-all-options-btn"
+                onClick={() => setShowAllOptionsModal(true)}
+                className={`m-action-btn all-options-btn ${(showAllOptionsModal || activeTjCount > 0 || anyOpt || isAnyFilterActive) ? 'active' : ''}`}
+                title="Toutes les options de lecture (Tajweed, affichage, versets, filtres)"
+                style={{
+                  borderColor: 'var(--gold)',
+                  background: 'rgba(201, 168, 76, 0.16)',
+                  color: 'var(--gold2)',
+                  fontWeight: 700,
+                }}
+              >
+                <span className="m-act-icon">⚙️</span>
+                <span className="m-act-label">{uxMode === 'child' ? 'OPTIONS & TAJWID' : 'TOUTES LES OPTIONS'}</span>
+                <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
+                {(activeTjCount > 0 || activeOptCount > 0 || isAnyFilterActive) && (
+                  <span className="m-act-badge" style={{ background: 'var(--gold)', color: '#000' }}>
+                    {(activeTjCount > 0 ? 1 : 0) + (activeOptCount > 0 ? 1 : 0) + (isAnyFilterActive ? 1 : 0)}
+                  </span>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              {/* 1. Jump to Verse */}
+              <button
+                onClick={() => setShowAyatJump(v => !v)}
+                className={`m-action-btn jump ${showAyatJump ? 'active' : ''}`}
+              >
+                <span className="m-act-icon">🔎</span>
+                <span className="m-act-label">VERSET</span>
+              </button>
+
+              {/* 2. Tajweed */}
+              <button
+                onClick={() => {
+                  setShowTajweedDrawer(v => !v);
+                  setShowOptionsDrawer(false);
+                  setShowLangDrawer(false);
+                }}
+                className={`m-action-btn tajweed ${activeTjCount > 0 ? 'active' : ''}`}
+              >
+                <span className="m-act-icon">🎨</span>
+                <span className="m-act-label">تجويد</span>
+                {activeTjCount > 0 && <span className="m-act-badge">{activeTjCount}</span>}
+              </button>
+
+              {/* 3. Translation */}
+              <button
+                onClick={() => {
+                  setShowLangDrawer(v => !v);
+                  setShowTajweedDrawer(false);
+                  setShowOptionsDrawer(false);
+                }}
+                className={`m-action-btn lang ${translationLang ? 'active' : ''}`}
+              >
+                <span className="m-act-icon">🌐</span>
+                <span className="m-act-label">{translationLang ? langLabel : "TRAD."}</span>
+              </button>
+
+              {/* 3b. UX Mode Interactive Badge */}
+              <button
                 id="surah-header-ux-badge"
                 onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
                 className={`m-action-btn ux-mode-btn ${uxMode}`}
                 title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
+                style={{
+                  borderColor: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'rgba(201,168,76,.4)',
+                  background: uxMode === 'beginner' ? 'rgba(46,196,182,0.18)' : uxMode === 'child' ? 'rgba(255,183,3,0.18)' : uxMode === 'expert' ? 'rgba(200,120,255,0.18)' : 'rgba(201,168,76,0.12)',
+                  color: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'var(--gold2)',
+                  fontWeight: 700,
+                }}
               >
                 <span className="m-act-icon">{currentUx.icon}</span>
                 <span className="m-act-label">{currentUx.shortLabel.toUpperCase()}</span>
+                <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
               </button>
-            )}
 
-            {/* All Options Modal Trigger for Child & Beginner Mode */}
-            <button
-              id="surah-header-all-options-btn"
-              onClick={() => setShowAllOptionsModal(true)}
-              className={`m-action-btn all-options-btn ${(showAllOptionsModal || activeTjCount > 0 || anyOpt || isAnyFilterActive) ? 'active' : ''}`}
-              title="Toutes les options de lecture (Tajweed, affichage, versets, filtres)"
-              style={{
-                borderColor: 'var(--gold)',
-                background: 'rgba(201, 168, 76, 0.16)',
-                color: 'var(--gold2)',
-                fontWeight: 700,
-              }}
-            >
-              <span className="m-act-icon">⚙️</span>
-              <span className="m-act-label">{uxMode === 'child' ? 'OPTIONS & TAJWID' : 'TOUTES LES OPTIONS'}</span>
-              <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
-              {(activeTjCount > 0 || activeOptCount > 0 || isAnyFilterActive) && (
-                <span className="m-act-badge" style={{ background: 'var(--gold)', color: '#000' }}>
-                  {(activeTjCount > 0 ? 1 : 0) + (activeOptCount > 0 ? 1 : 0) + (isAnyFilterActive ? 1 : 0)}
+              {/* 4. Reading Modes & Display Options */}
+              <button
+                onClick={() => {
+                  setShowOptionsDrawer(v => !v);
+                  setShowTajweedDrawer(false);
+                  setShowLangDrawer(false);
+                }}
+                className={`m-action-btn options ${anyOpt || showTsBar ? 'active' : ''}`}
+              >
+                <span className="m-act-icon">⚙</span>
+                <span className="m-act-label">
+                  {pageMode
+                    ? `PAGE · ${displayPageMastery.masteryPct}%`
+                    : hizbMode
+                    ? `HIZB · ${displayHizbMastery.masteryPct}%`
+                    : juzMode
+                    ? `JUZ · ${displayJuzMastery.masteryPct}%`
+                    : "AFFICHAGE"}
                 </span>
-              )}
-            </button>
-          </>
-        ) : (
-          <>
-            {/* 1. Jump to Verse */}
-            <button
-              onClick={() => setShowAyatJump(v => !v)}
-              className={`m-action-btn jump ${showAyatJump ? 'active' : ''}`}
-            >
-              <span className="m-act-icon">🔎</span>
-              <span className="m-act-label">VERSET</span>
-            </button>
+                {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
+              </button>
 
-            {/* 2. Tajweed */}
-            <button
-              onClick={() => {
-                setShowTajweedDrawer(v => !v);
-                setShowOptionsDrawer(false);
-                setShowLangDrawer(false);
-              }}
-              className={`m-action-btn tajweed ${activeTjCount > 0 ? 'active' : ''}`}
-            >
-              <span className="m-act-icon">🎨</span>
-              <span className="m-act-label">تجويد</span>
-              {activeTjCount > 0 && <span className="m-act-badge">{activeTjCount}</span>}
-            </button>
-
-            {/* 3. Translation */}
-            <button
-              onClick={() => {
-                setShowLangDrawer(v => !v);
-                setShowTajweedDrawer(false);
-                setShowOptionsDrawer(false);
-              }}
-              className={`m-action-btn lang ${translationLang ? 'active' : ''}`}
-            >
-              <span className="m-act-icon">🌐</span>
-              <span className="m-act-label">{translationLang ? langLabel : "TRAD."}</span>
-            </button>
-
-            {/* 3b. UX Mode Interactive Badge */}
-            <button
-              id="surah-header-ux-badge"
-              onClick={() => dispatch(uiActions.setShowUxModeModal(true))}
-              className={`m-action-btn ux-mode-btn ${uxMode}`}
-              title={`Mode d'interface : ${currentUx.name} (Cliquez pour changer)`}
-              style={{
-                borderColor: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'rgba(201,168,76,.4)',
-                background: uxMode === 'beginner' ? 'rgba(46,196,182,0.18)' : uxMode === 'child' ? 'rgba(255,183,3,0.18)' : uxMode === 'expert' ? 'rgba(200,120,255,0.18)' : 'rgba(201,168,76,0.12)',
-                color: uxMode === 'beginner' ? 'var(--teal2)' : uxMode === 'child' ? '#ffb703' : uxMode === 'expert' ? '#c878ff' : 'var(--gold2)',
-                fontWeight: 700,
-              }}
-            >
-              <span className="m-act-icon">{currentUx.icon}</span>
-              <span className="m-act-label">{currentUx.shortLabel.toUpperCase()}</span>
-              <span style={{ fontSize: 8, opacity: 0.7, marginLeft: 1 }}>▾</span>
-            </button>
-
-            {/* 4. Reading Modes & Display Options */}
-            <button
-              onClick={() => {
-                setShowOptionsDrawer(v => !v);
-                setShowTajweedDrawer(false);
-                setShowLangDrawer(false);
-              }}
-              className={`m-action-btn options ${anyOpt || showTsBar ? 'active' : ''}`}
-            >
-              <span className="m-act-icon">⚙</span>
-              <span className="m-act-label">
-                {pageMode
-                  ? `PAGE · ${displayPageMastery.masteryPct}%`
-                  : hizbMode
-                  ? `HIZB · ${displayHizbMastery.masteryPct}%`
-                  : juzMode
-                  ? `JUZ · ${displayJuzMastery.masteryPct}%`
-                  : "AFFICHAGE"}
-              </span>
-              {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
-            </button>
-
-            {/* 5. Filter Action Button (Custom Ayat Range & Mastery Level) */}
-            <button
-              onClick={() => {
-                setShowMasteryFilter(v => !v);
-                setShowTajweedDrawer(false);
-                setShowOptionsDrawer(false);
-                setShowLangDrawer(false);
-                setShowAyatJump(false);
-              }}
-              className={`m-action-btn mastery-filter ${isAnyFilterActive || showMasteryFilter ? 'active' : ''}`}
-              title={
-                isAnyFilterActive
-                  ? `Filtre actif : ${ayatFilterActive ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}` : ''}${ayatFilterActive && masteryFilterActive ? ' · ' : ''}${masteryFilterActive ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%` : ''} (${matchingAyatsCount} versets)`
-                  : "Filtrer les versets par plage de versets et/ou niveau de maîtrise"
-              }
-              style={isAnyFilterActive ? { borderColor: 'var(--teal)', color: 'var(--teal2)', background: 'rgba(62,184,160,0.18)' } : undefined}
-            >
-              <span className="m-act-icon">🎯</span>
-              <span className="m-act-label">
-                {ayatFilterActive && masteryFilterActive
-                  ? `v.${currentAyatRange[0]}–${currentAyatRange[1]} · ${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
-                  : ayatFilterActive
-                  ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}`
-                  : masteryFilterActive
-                  ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
-                  : "FILTRER"}
-              </span>
-              {isAnyFilterActive && (
-                <span className="m-act-badge" style={{ background: 'var(--teal)', color: '#000', fontWeight: 'bold' }}>
-                  {matchingAyatsCount}
+              {/* 5. Filter Action Button (Custom Ayat Range & Mastery Level) */}
+              <button
+                onClick={() => {
+                  setShowMasteryFilter(v => !v);
+                  setShowTajweedDrawer(false);
+                  setShowOptionsDrawer(false);
+                  setShowLangDrawer(false);
+                  setShowAyatJump(false);
+                }}
+                className={`m-action-btn mastery-filter ${isAnyFilterActive || showMasteryFilter ? 'active' : ''}`}
+                title={
+                  isAnyFilterActive
+                    ? `Filtre actif : ${ayatFilterActive ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}` : ''}${ayatFilterActive && masteryFilterActive ? ' · ' : ''}${masteryFilterActive ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%` : ''} (${matchingAyatsCount} versets)`
+                    : "Filtrer les versets par plage de versets et/ou niveau de maîtrise"
+                }
+                style={isAnyFilterActive ? { borderColor: 'var(--teal)', color: 'var(--teal2)', background: 'rgba(62,184,160,0.18)' } : undefined}
+              >
+                <span className="m-act-icon">🎯</span>
+                <span className="m-act-label">
+                  {ayatFilterActive && masteryFilterActive
+                    ? `v.${currentAyatRange[0]}–${currentAyatRange[1]} · ${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
+                    : ayatFilterActive
+                    ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}`
+                    : masteryFilterActive
+                    ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
+                    : "FILTRER"}
                 </span>
-              )}
-            </button>
-          </>
-        )}
-      </div>
+                {isAnyFilterActive && (
+                  <span className="m-act-badge" style={{ background: 'var(--teal)', color: '#000', fontWeight: 'bold' }}>
+                    {matchingAyatsCount}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── Custom Ayat Range & Mastery Filter Inline Panel ── */}
       {showMasteryFilter && (

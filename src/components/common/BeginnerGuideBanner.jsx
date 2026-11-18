@@ -2,15 +2,17 @@ import React from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { sel, uiActions } from "../../store.js";
 import { getBeginnerTip, getUxProfile, getSimplifiedLayoutConfig } from "../../utils/uxProfileManager.js";
+import { isElementVisible } from "../../utils/uiVisibilityManager.js";
 
 export function BeginnerGuideBanner({ context = "general" }) {
   const dispatch = useDispatch();
   const uxMode = useSelector(sel.uxMode);
   const showBeginnerGuides = useSelector(sel.showBeginnerGuides);
   const compactMode = useSelector(sel.compactMode);
+  const uiElementsVisibility = useSelector(sel.uiElementsVisibility);
   const layoutCfg = getSimplifiedLayoutConfig(uxMode);
 
-  if (!layoutCfg.isSimplified || !showBeginnerGuides) {
+  if (!layoutCfg.isSimplified || !showBeginnerGuides || !isElementVisible(uiElementsVisibility, "beginnerBanner")) {
     return null;
   }
 

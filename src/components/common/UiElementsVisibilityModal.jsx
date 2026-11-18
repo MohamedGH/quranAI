@@ -161,7 +161,29 @@ export function UiElementsVisibilityModal({ isOpen, onClose }) {
               <strong style={{ color: "var(--teal2)" }}>{stats.visible} / {stats.total}</strong>
               <span style={{ color: "var(--text3)" }}>({stats.percent}%)</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                id="btn-ui-direct-edit"
+                onClick={() => {
+                  dispatch(uiActions.setUiEditMode(true));
+                  onClose();
+                }}
+                style={{
+                  padding: "4px 9px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(86, 212, 188, 0.55)",
+                  background: "rgba(62, 184, 160, 0.16)",
+                  color: "var(--teal2)",
+                  fontSize: 9.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+                title="Ajouter ou enlever les éléments directement sur l'interface avec + et −"
+              >
+                ✏️ Éditer directement dans l'UI
+              </button>
               <button
                 type="button"
                 id="btn-ui-set-all-on"

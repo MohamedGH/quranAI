@@ -6,7 +6,7 @@ import { getActiveTajweedColors } from "../../utils/tajweedRules.js";
 import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
 import { getUxProfile, isSimplifiedUxMode, getSimplifiedLayoutConfig, getCompactLayoutConfig } from "../../utils/uxProfileManager.js";
 import { SurahAllOptionsModal } from "./SurahAllOptionsModal.jsx";
-import { isElementVisible } from "../../utils/uiVisibilityManager.js";
+import { EditableUiSlot } from "./EditableUiSlot.jsx";
 
 export function SurahHeader({
   selectedSurah,
@@ -283,7 +283,7 @@ export function SurahHeader({
         {/* Row 1: Navigation + Surah Identity + Quick Status */}
         <div className="m-surah-compact-row">
           {/* Prev Surah */}
-          {isElementVisible(uiElementsVisibility, "surahNavigation") && (
+          <EditableUiSlot elementId="surahNavigation" inline={true} showPlaceholder={true}>
             <button
               className={`m-compact-nav-btn ${!prevSurah ? 'disabled' : ''}`}
               disabled={!prevSurah}
@@ -295,10 +295,10 @@ export function SurahHeader({
             >
               ‹
             </button>
-          )}
+          </EditableUiSlot>
 
           {/* Center clickable surah title */}
-          {isElementVisible(uiElementsVisibility, "surahTitle") && (
+          <EditableUiSlot elementId="surahTitle" inline={true} className="m-surah-title-edit-slot">
             <div
               className="m-surah-compact-title"
               onClick={() => setSidebarOpen(true)}
@@ -307,7 +307,7 @@ export function SurahHeader({
               <span className="m-compact-num">№ {selectedSurah.number}</span>
               <span className="m-compact-ar">{selectedSurah.name}</span>
               <span className="m-compact-en">{selectedSurah.englishName}</span>
-              {isElementVisible(uiElementsVisibility, "surahMeta") && (
+              <EditableUiSlot elementId="surahMeta" inline={true}>
                 <span className="m-compact-meta">
                   {compactCfg.showHeaderMetrics ? (
                     <>
@@ -321,15 +321,19 @@ export function SurahHeader({
                     compactMode ? `${selectedSurah.numberOfAyahs}v` : `${selectedSurah.numberOfAyahs} versets`
                   )}
                 </span>
-              )}
+              </EditableUiSlot>
               <span className="m-compact-chevron">▾</span>
             </div>
-          )}
+          </EditableUiSlot>
 
           {/* Quick status & Next Surah */}
           <div className="m-surah-compact-actions">
             {/* Mastery Pill — hidden in simplified child & beginner modes */}
-            {layoutCfg.showHeaderMetrics && isElementVisible(uiElementsVisibility, "surahMastery") && (
+            <EditableUiSlot
+              elementId="surahMastery"
+              condition={layoutCfg.showHeaderMetrics}
+              inline={true}
+            >
               <button
                 type="button"
                 onClick={() => setShowSurahInfo(v => !v)}
@@ -347,10 +351,10 @@ export function SurahHeader({
               >
                 {activePartModeLabel ? `${activePartModeLabel} · ${headerMasteryPct}%` : `${headerMasteryPct}%`} {isDisplayedPartFullyLearned ? '✓' : '▾'}
               </button>
-            )}
+            </EditableUiSlot>
 
             {/* Next Surah */}
-            {isElementVisible(uiElementsVisibility, "surahNavigation") && (
+            <EditableUiSlot elementId="surahNavigation" inline={true} showPlaceholder={false}>
               <button
                 className={`m-compact-nav-btn ${!nextSurah ? 'disabled' : ''}`}
                 disabled={!nextSurah}
@@ -362,18 +366,22 @@ export function SurahHeader({
               >
                 ›
               </button>
-            )}
+            </EditableUiSlot>
           </div>
         </div>
 
         {/* Row 2: Slim Bismillah line (except Surah 9 At-Tawbah) */}
-        {selectedSurah.number !== 9 && isElementVisible(uiElementsVisibility, "surahBismillah") && (
+        <EditableUiSlot
+          elementId="surahBismillah"
+          condition={selectedSurah.number !== 9}
+          inline={false}
+        >
           <div className="m-compact-bismillah-bar">
             <span className="m-bism-ornament">❖</span>
             <span className="m-compact-bism-text">بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</span>
             <span className="m-bism-ornament">❖</span>
           </div>
-        )}
+        </EditableUiSlot>
 
         {/* Expandable Detailed Stats Grid + Mark All Learned */}
         {showSurahInfo && (
@@ -468,7 +476,7 @@ export function SurahHeader({
       </div>
 
       {/* ── Reading Actions Bar (Simplified for Child/Beginner, Full for Standard/Expert) ── */}
-      {isElementVisible(uiElementsVisibility, "surahActionsBar") && (
+      <EditableUiSlot elementId="surahActionsBar" inline={false}>
         <div className="m-surah-actions-bar">
           {isSimplifiedUxMode(uxMode) ? (
             <>
@@ -637,7 +645,7 @@ export function SurahHeader({
             </>
           )}
         </div>
-      )}
+      </EditableUiSlot>
 
       {/* ── Custom Ayat Range & Mastery Filter Inline Panel ── */}
       {showMasteryFilter && (

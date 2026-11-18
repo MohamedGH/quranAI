@@ -574,3 +574,118 @@ export const searchUiElements = (queryOrList = "", maybeQuery) => {
     )
   );
 };
+
+/**
+ * Frozen O(1) lookup table mapping elementId -> metadata object.
+ */
+export const UI_ELEMENTS_BY_ID = Object.freeze(
+  UI_ELEMENTS.reduce((acc, el) => {
+    acc[el.id] = el;
+    return acc;
+  }, {})
+);
+
+const SHORT_ELEMENT_LABELS = Object.freeze({
+  headerLogo: "Logo",
+  headerNav: "Navigation",
+  headerVoice: "Micro",
+  headerCompact: "Compact",
+  headerUxBadge: "Profil UX",
+  headerToolsBtn: "Outils",
+  headerAccount: "Compte",
+  surahNavigation: "Nav. Sourate",
+  surahTitle: "Titre Sourate",
+  surahMeta: "Métadonnées",
+  surahMastery: "Maîtrise",
+  surahBismillah: "Basmala",
+  surahActionsBar: "Barre Actions",
+  ayatNumber: "№ Verset",
+  ayatPageBadge: "Page P.xx",
+  ayatPlayBtn: "Audio Verset",
+  ayatMastery: "Maîtrise Verset",
+  ayatTranslation: "Traduction",
+  ayatDividers: "Démarcations",
+  playerSurahTitle: "Infos Lecteur",
+  playerControls: "Commandes Audio",
+  playerLoop: "Répétition",
+  playerTajweedModal: "Options Tajwid",
+  playerReciter: "Récitateur",
+  sidebarSearch: "Recherche",
+  sidebarSurahNumbers: "№ Sourates",
+  sidebarArabicNames: "Noms Arabes",
+  sidebarSurahMeta: "Méta Sourate",
+  sidebarMasteryBars: "Barres Maîtrise",
+  sidebarArchitectureDoc: "Doc Technique",
+  beginnerBanner: "Guide Débutant",
+  childLettersQuest: "Défi 28 Lettres",
+});
+
+/**
+ * Pure getter for element metadata by ID. Returns null if unknown.
+ */
+export const getElementMeta = (elementId) => {
+  if (!elementId || typeof elementId !== "string") return null;
+  return UI_ELEMENTS_BY_ID[elementId] || null;
+};
+
+/**
+ * Pure getter returning a compact, mobile-friendly label for inline + / - controls.
+ */
+export const getShortElementLabel = (elementId) => {
+  if (!elementId || typeof elementId !== "string") return "";
+  if (SHORT_ELEMENT_LABELS[elementId]) return SHORT_ELEMENT_LABELS[elementId];
+  const meta = getElementMeta(elementId);
+  return meta ? meta.label : elementId;
+};
+
+/**
+ * Pure state resolver for inline UI editing slots.
+ * Guarantees deterministic rendering booleans for normal mode vs direct edit mode.
+ */
+export const getElementSlotState = (
+  visibilityMap,
+  elementId,
+  uiEditMode = false,
+  allowPlaceholder = true
+) => {
+  const fallback = Object.freeze({
+    elementId: String(elementId || ""),
+    meta: null,
+    shortLabel: String(elementId || ""),
+    isVisible: true,
+    isEditMode: Boolean(uiEditMode),
+    shouldRenderContent: true,
+    shouldRenderGhost: false,
+    showRemoveControl: Boolean(uiEditMode),
+  });
+
+  return trySync(
+    () => {
+      if (!elementId || typeof elementId !== "string") {
+        throw createAppError(
+          ERROR_CODES.UI_VISIBILITY_ERROR,
+          "Identifiant d'élément UI invalide",
+          { elementId }
+        );
+      }
+      const visible = isElementVisible(visibilityMap, elementId);
+      const editActive = Boolean(uiEditMode);
+      const meta = getElementMeta(elementId);
+      const shortLabel = getShortElementLabel(elementId);
+
+      return Object.freeze({
+        elementId,
+        meta,
+        shortLabel,
+        isVisible: visible,
+        isEditMode: editActive,
+        shouldRenderContent: visible,
+        shouldRenderGhost: editActive && !visible && Boolean(allowPlaceholder),
+        showRemoveControl: editActive && visible,
+      });
+    },
+    fallback,
+    { code: ERROR_CODES.UI_VISIBILITY_ERROR, elementId, uiEditMode }
+  ).value;
+};
+

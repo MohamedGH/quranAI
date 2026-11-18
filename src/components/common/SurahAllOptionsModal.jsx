@@ -590,29 +590,54 @@ export function SurahAllOptionsModal({
                     Activer ou masquer chaque bouton, badge, bannière ou barre
                   </div>
                 </div>
-                <button
-                  type="button"
-                  id="btn-surah-options-ui-visibility"
-                  onClick={() => {
-                    onClose();
-                    dispatch(uiActions.setShowUiVisibilityModal(true));
-                  }}
-                  style={{
-                    padding: "7px 12px",
-                    minHeight: 34,
-                    borderRadius: 7,
-                    border: "1px solid var(--gold)",
-                    background: "rgba(201, 168, 76, 0.18)",
-                    color: "var(--gold2)",
-                    fontSize: 9.5,
-                    fontWeight: 700,
-                    fontFamily: "'Cinzel', serif",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  PERSONNALISER →
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    id="btn-surah-options-ui-direct-edit"
+                    onClick={() => {
+                      dispatch(uiActions.setUiEditMode(true));
+                      onClose();
+                    }}
+                    style={{
+                      padding: "7px 10px",
+                      minHeight: 34,
+                      borderRadius: 7,
+                      border: "1px solid var(--teal)",
+                      background: "rgba(62, 184, 160, 0.16)",
+                      color: "var(--teal2)",
+                      fontSize: 9.5,
+                      fontWeight: 700,
+                      fontFamily: "'Cinzel', serif",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ✏️ ÉDITER UI
+                  </button>
+                  <button
+                    type="button"
+                    id="btn-surah-options-ui-visibility"
+                    onClick={() => {
+                      onClose();
+                      dispatch(uiActions.setShowUiVisibilityModal(true));
+                    }}
+                    style={{
+                      padding: "7px 12px",
+                      minHeight: 34,
+                      borderRadius: 7,
+                      border: "1px solid var(--gold)",
+                      background: "rgba(201, 168, 76, 0.18)",
+                      color: "var(--gold2)",
+                      fontSize: 9.5,
+                      fontWeight: 700,
+                      fontFamily: "'Cinzel', serif",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    PERSONNALISER →
+                  </button>
+                </div>
               </div>
             </div>
           )}

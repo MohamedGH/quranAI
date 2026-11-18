@@ -455,28 +455,53 @@ export function HeaderToolsModal({
                     </div>
                   </div>
                 </div>
-                <button
-                  id="btn-open-ui-visibility-modal"
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    dispatch(uiActions.setShowUiVisibilityModal(true));
-                  }}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 6,
-                    border: '1px solid var(--gold)',
-                    background: 'rgba(201, 168, 76, 0.15)',
-                    color: 'var(--gold2)',
-                    fontSize: 9.5,
-                    fontFamily: "'Cinzel', serif",
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  RÉGLER →
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button
+                    id="btn-header-tools-ui-direct-edit"
+                    type="button"
+                    onClick={() => {
+                      dispatch(uiActions.setUiEditMode(true));
+                      onClose();
+                    }}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      border: '1px solid var(--teal)',
+                      background: 'rgba(62, 184, 160, 0.16)',
+                      color: 'var(--teal2)',
+                      fontSize: 9.5,
+                      fontFamily: "'Cinzel', serif",
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title="Enlever ou ajouter des éléments directement dans l'interface"
+                  >
+                    ✏️ ÉDITER UI
+                  </button>
+                  <button
+                    id="btn-open-ui-visibility-modal"
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      dispatch(uiActions.setShowUiVisibilityModal(true));
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 6,
+                      border: '1px solid var(--gold)',
+                      background: 'rgba(201, 168, 76, 0.15)',
+                      color: 'var(--gold2)',
+                      fontSize: 9.5,
+                      fontFamily: "'Cinzel', serif",
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    RÉGLER →
+                  </button>
+                </div>
               </div>
 
               {/* Pages & Ressources (déplacées de la barre de navigation vers Outils) */}

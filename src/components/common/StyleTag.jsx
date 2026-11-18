@@ -3338,6 +3338,248 @@ export const CSS = `
       line-height: 1.55 !important;
     }
   }
+
+  /* ── DIRECT INLINE UI EDITING MODE (+ / − SUR L'INTERFACE) ───────── */
+  .header-ui-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 34px;
+    padding: 0 9px;
+    border-radius: 9px;
+    border: 1px solid rgba(201, 168, 76, 0.25);
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--text2);
+    cursor: pointer;
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: transform .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .header-ui-edit-btn:hover {
+    border-color: rgba(201, 168, 76, 0.55);
+    color: var(--gold2);
+    background: rgba(201, 168, 76, 0.12);
+  }
+  .header-ui-edit-btn.active {
+    border-color: var(--teal);
+    background: rgba(62, 184, 160, 0.2);
+    color: var(--teal2);
+    box-shadow: 0 0 12px rgba(62, 184, 160, 0.28);
+  }
+
+  .ui-edit-slot {
+    position: relative;
+    outline: 1px dashed rgba(201, 168, 76, 0.5);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+  .ui-edit-slot.is-inline {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+  }
+  .ui-edit-slot.is-block {
+    display: block;
+    width: 100%;
+  }
+
+  .ui-edit-remove-btn {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    z-index: 25;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid #0c0e14;
+    background: #dc2626;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+    transition: transform .15s ease, background .15s ease;
+    padding: 0;
+  }
+  .ui-edit-remove-btn::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }
+  .ui-edit-remove-btn:hover {
+    background: #ef4444;
+    transform: scale(1.12);
+  }
+  .ui-edit-remove-btn:active {
+    transform: scale(0.92);
+  }
+
+  .ui-edit-add-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 34px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1.5px dashed rgba(62, 184, 160, 0.65);
+    background: rgba(62, 184, 160, 0.1);
+    color: var(--teal2);
+    font-family: 'Cinzel', serif;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform .15s ease, background .15s ease, border-color .15s ease;
+  }
+  .ui-edit-add-ghost.is-block {
+    display: flex;
+    width: calc(100% - 16px);
+    margin: 4px 8px;
+    min-height: 38px;
+  }
+  .ui-edit-add-ghost:hover {
+    background: rgba(62, 184, 160, 0.22);
+    border-color: var(--teal2);
+    transform: translateY(-1px);
+  }
+  .ui-edit-add-ghost:active {
+    transform: scale(0.97);
+  }
+  .ui-edit-add-plus {
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .ui-edit-toolbar {
+    position: fixed;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
+    transform: translateX(-50%);
+    z-index: 2450;
+    width: min(calc(100vw - 20px), 760px);
+    background: rgba(16, 19, 29, 0.94);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1.5px solid rgba(62, 184, 160, 0.55);
+    border-radius: 14px;
+    padding: 8px 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .ui-edit-toolbar-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .ui-edit-toolbar-title {
+    font-family: 'Cinzel', serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: var(--teal2);
+    white-space: nowrap;
+  }
+  .ui-edit-toolbar-count {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--gold2);
+    white-space: nowrap;
+  }
+  .ui-edit-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    max-width: 100%;
+  }
+  .ui-edit-toolbar-actions::-webkit-scrollbar {
+    display: none;
+  }
+  .ui-edit-tb-btn {
+    min-height: 36px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+    font-size: 10.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .ui-edit-tb-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(201, 168, 76, 0.45);
+  }
+  .ui-edit-tb-btn.is-teal {
+    border-color: rgba(62, 184, 160, 0.45);
+    background: rgba(62, 184, 160, 0.14);
+    color: var(--teal2);
+  }
+  .ui-edit-tb-done {
+    min-height: 36px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--gold2);
+    background: var(--gold);
+    color: #0c0e14;
+    font-family: 'Cinzel', serif;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: transform .15s ease, filter .15s ease;
+  }
+  .ui-edit-tb-done:hover {
+    filter: brightness(1.08);
+  }
+  .ui-edit-tb-done:active {
+    transform: scale(0.96);
+  }
+
+  @media (max-width: 640px) {
+    .ui-edit-toolbar {
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+      padding: 7px 10px;
+      gap: 6px;
+    }
+    .header-ui-edit-btn {
+      padding: 0 7px;
+      min-width: 32px;
+      height: 32px;
+    }
+    .ui-edit-add-ghost {
+      min-height: 32px;
+      padding: 3px 8px;
+      font-size: 9px;
+    }
+  }
 `;
 
 export const StyleTag = () => {

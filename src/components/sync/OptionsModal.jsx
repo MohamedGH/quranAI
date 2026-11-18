@@ -300,27 +300,50 @@ export function OptionsModal({ onClose, onOpenReminders }) {
                   Masquez ou affichez chaque élément (logo, bannières, boutons, traduction, démarcations...)
                 </div>
               </div>
-              <button
-                type="button"
-                id="btn-options-open-ui-customizer"
-                onClick={() => {
-                  onClose();
-                  dispatch(uiActions.setShowUiVisibilityModal(true));
-                }}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 6,
-                  border: "1px solid var(--gold)",
-                  background: "rgba(201, 168, 76, 0.16)",
-                  color: "var(--gold2)",
-                  fontSize: 9.5,
-                  fontWeight: 700,
-                  fontFamily: "'Cinzel',serif",
-                  cursor: "pointer",
-                }}
-              >
-                GÉRER L'AFFICHAGE →
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  id="btn-options-ui-direct-edit"
+                  onClick={() => {
+                    dispatch(uiActions.setUiEditMode(true));
+                    onClose();
+                  }}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    border: "1px solid var(--teal)",
+                    background: "rgba(62, 184, 160, 0.16)",
+                    color: "var(--teal2)",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    fontFamily: "'Cinzel',serif",
+                    cursor: "pointer",
+                  }}
+                >
+                  ✏️ ÉDITER UI
+                </button>
+                <button
+                  type="button"
+                  id="btn-options-open-ui-customizer"
+                  onClick={() => {
+                    onClose();
+                    dispatch(uiActions.setShowUiVisibilityModal(true));
+                  }}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 6,
+                    border: "1px solid var(--gold)",
+                    background: "rgba(201, 168, 76, 0.16)",
+                    color: "var(--gold2)",
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    fontFamily: "'Cinzel',serif",
+                    cursor: "pointer",
+                  }}
+                >
+                  GÉRER L'AFFICHAGE →
+                </button>
+              </div>
             </div>
             {/* Quick presets */}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border)" }}>

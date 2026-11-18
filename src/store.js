@@ -75,6 +75,7 @@ const uiSlice = createSlice({
       ...(load("quran_uiElementsVisibility", {}) || {}),
     },
     showUiVisibilityModal: false,
+    uiEditMode:          false,
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -468,6 +469,12 @@ const uiSlice = createSlice({
     },
     toggleShowUiVisibilityModal: (s) => {
       s.showUiVisibilityModal = !s.showUiVisibilityModal;
+    },
+    setUiEditMode: (s, a) => {
+      s.uiEditMode = Boolean(a.payload);
+    },
+    toggleUiEditMode: (s) => {
+      s.uiEditMode = !s.uiEditMode;
     },
   },
   extraReducers: (builder) => {
@@ -1216,6 +1223,7 @@ const rawSel = {
   uiElementsVisibility:(s) => s.ui.uiElementsVisibility || getDefaultUiVisibility(),
   isUiElementVisible:  (s, id) => (s?.ui?.uiElementsVisibility ? s.ui.uiElementsVisibility[id] !== false : true),
   showUiVisibilityModal:(s) => Boolean(s.ui.showUiVisibilityModal),
+  uiEditMode:          (s) => Boolean(s.ui.uiEditMode),
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

@@ -33,6 +33,8 @@ import { AyatFullScreenModal } from "./components/common/AyatFullScreenModal.jsx
 const ArchitecturePdfModal = lazy(() => import("./components/common/ArchitecturePdfModal.jsx").then(m => ({ default: m.ArchitecturePdfModal })));
 import { SurahHeader } from "./components/common/SurahHeader.jsx";
 import { UiElementsVisibilityModal } from "./components/common/UiElementsVisibilityModal.jsx";
+import { EditableUiSlot } from "./components/common/EditableUiSlot.jsx";
+import { UiEditToolbar } from "./components/common/UiEditToolbar.jsx";
 import { isElementVisible } from "./utils/uiVisibilityManager.js";
 import { ErrorBoundary } from "./components/common/ErrorBoundary.jsx";
 import { safeGetItem, safeSetItem, safeRemoveItem } from "./utils/safeStorage.js";
@@ -160,6 +162,7 @@ function AppInner({ currentUser, onSignOut }) {
   const showUxModeModal = useSelector(sel.showUxModeModal);
   const uiElementsVisibility = useSelector(sel.uiElementsVisibility);
   const showUiVisibilityModal = useSelector(sel.showUiVisibilityModal);
+  const uiEditMode      = useSelector(sel.uiEditMode);
   const currentUxProfile = useMemo(() => getUxProfile(uxMode), [uxMode]);
   const navTabs          = useMemo(() => getNavigationTabs(uxMode, isQuranUnlocked), [uxMode, isQuranUnlocked]);
   const playerConfig     = useMemo(() => getPlayerConfig(uxMode), [uxMode]);
@@ -223,7 +226,7 @@ function AppInner({ currentUser, onSignOut }) {
   const urlSurahNum     = parsedRoute.surahNum ?? parseInt(urlSegs[1]);
   const urlAyatNum      = parsedRoute.ayatNum ?? parseInt(urlSegs[2]);
 
-  // ── Sync URL ux, compact & uiPreset params → Redux ──
+  // ── Sync URL ux, compact, uiPreset & uiEdit params → Redux ──
   useEffect(() => {
     if (parsedRoute.uxMode) {
       dispatch(uiActions.setUxMode(parsedRoute.uxMode));
@@ -234,7 +237,10 @@ function AppInner({ currentUser, onSignOut }) {
     if (parsedRoute.uiPreset) {
       dispatch(uiActions.applyUiVisibilityPreset(parsedRoute.uiPreset));
     }
-  }, [parsedRoute.uxMode, parsedRoute.compactMode, parsedRoute.uiPreset, dispatch]);
+    if (typeof parsedRoute.uiEditMode === "boolean") {
+      dispatch(uiActions.setUiEditMode(parsedRoute.uiEditMode));
+    }
+  }, [parsedRoute.uxMode, parsedRoute.compactMode, parsedRoute.uiPreset, parsedRoute.uiEditMode, dispatch]);
 
   // ── Child Mode First Connection: Launch Wizard & direct to letters (/prononciation) ──
   useEffect(() => {
@@ -2456,16 +2462,16 @@ function AppInner({ currentUser, onSignOut }) {
               ☰
             </button>
 
-            {isElementVisible(uiElementsVisibility, "headerLogo") && (
+            <EditableUiSlot elementId="headerLogo" inline={true}>
               <div className="header-logo" onClick={() => setActivePage('quran')} title="Accueil Coran">
                 <span>QUR<span className="logo-highlight">ÂN</span></span>
                 <span className="header-subtitle">STUDY</span>
               </div>
-            )}
+            </EditableUiSlot>
           </div>
 
           {/* Page nav tabs — Profile-adapted Segmented pill control */}
-          {isElementVisible(uiElementsVisibility, "headerNav") && (
+          <EditableUiSlot elementId="headerNav" inline={true}>
             <nav className="header-nav" aria-label="Navigation principale">
               {navTabs.map(({ id, icon, label, title }) => (
                 <button
@@ -2499,15 +2505,33 @@ function AppInner({ currentUser, onSignOut }) {
                 </button>
               )}
             </nav>
-          )}
+          </EditableUiSlot>
 
           {/* Right Action buttons & Compact Modal Hub */}
           <div className="header-actions">
             {/* In-app PWA install button */}
             <PWAInstallButton />
 
+            {/* Direct Inline UI Edit Mode Toggle */}
+            <button
+              id="header-ui-edit-btn"
+              type="button"
+              className={`header-ui-edit-btn${uiEditMode ? ' active' : ''}`}
+              aria-pressed={uiEditMode}
+              onClick={() => dispatch(uiActions.toggleUiEditMode())}
+              title={uiEditMode ? "Quitter l'édition directe de l'interface" : "Ajouter ou enlever des éléments directement dans l'interface"}
+              aria-label={uiEditMode ? "Terminer l'édition de l'interface" : "Éditer les éléments de l'interface"}
+            >
+              <span>{uiEditMode ? '✓' : '✏️'}</span>
+              <span className="desktop-only">{uiEditMode ? 'FIN UI' : 'UI ±'}</span>
+            </button>
+
             {/* Voice Command Mic (hidden in simplified child/beginner modes to prevent clutter) */}
-            {!isSimplifiedUxMode(uxMode) && isElementVisible(uiElementsVisibility, "headerVoice") && (
+            <EditableUiSlot
+              elementId="headerVoice"
+              condition={!isSimplifiedUxMode(uxMode)}
+              inline={true}
+            >
               <button
                 id="header-voice-btn"
                 className={`voice-btn${listening ? ' listening' : ''}`}
@@ -2517,10 +2541,10 @@ function AppInner({ currentUser, onSignOut }) {
               >
                 🎤
               </button>
-            )}
+            </EditableUiSlot>
 
             {/* Global Compact Mode Quick Toggle: accessible for ALL user types */}
-            {isElementVisible(uiElementsVisibility, "headerCompact") && (
+            <EditableUiSlot elementId="headerCompact" inline={true}>
               <button
                 id="header-compact-btn"
                 type="button"
@@ -2533,10 +2557,10 @@ function AppInner({ currentUser, onSignOut }) {
                 <span className="compact-icon">{compactMode ? '⊞' : '⊟'}</span>
                 <span className="compact-label desktop-only">COMPACT</span>
               </button>
-            )}
+            </EditableUiSlot>
 
-            {/* Interactive UX Mode Badge: ALWAYS visible, never squished */}
-            {isElementVisible(uiElementsVisibility, "headerUxBadge") && (
+            {/* Interactive UX Mode Badge */}
+            <EditableUiSlot elementId="headerUxBadge" inline={true}>
               <button
                 id="header-ux-mode-badge"
                 className={`header-ux-badge ux-${uxMode}`}
@@ -2551,10 +2575,14 @@ function AppInner({ currentUser, onSignOut }) {
                 <span className="ux-badge-label">{currentUxProfile.shortLabel.toUpperCase()}</span>
                 <span className="ux-badge-chevron">▾</span>
               </button>
-            )}
+            </EditableUiSlot>
 
             {/* Outils & Aides d'étude Modal Button (Hidden in Child mode to keep the interface simple) */}
-            {uxMode !== 'child' && isElementVisible(uiElementsVisibility, "headerToolsBtn") && (
+            <EditableUiSlot
+              elementId="headerToolsBtn"
+              condition={uxMode !== 'child'}
+              inline={true}
+            >
               <button
                 id="header-tools-btn"
                 className={`header-tool-btn${showArabicKeyboard || showRappel ? ' active' : ''}`}
@@ -2571,29 +2599,35 @@ function AppInner({ currentUser, onSignOut }) {
                   <span className="tool-active-dot" title="Outil actif" />
                 )}
               </button>
-            )}
+            </EditableUiSlot>
 
             {/* User Avatar / Account Profile Modal Trigger */}
-            {currentUser && isElementVisible(uiElementsVisibility, "headerAccount") && (
-              <button
-                id="header-user-btn"
-                className="header-user-btn"
-                onClick={() => {
-                  setHeaderToolsInitialTab('account');
-                  setShowHeaderToolsModal(true);
-                }}
-                title={currentUser.displayName || currentUser.email || "Mon compte & Profil"}
-                aria-label="Mon compte"
-              >
-                {currentUser.photoURL ? (
-                  <img src={currentUser.photoURL} alt="avatar" className="header-avatar" />
-                ) : (
-                  <div className="header-avatar-placeholder">
-                    {(currentUser.displayName || currentUser.email || "?")[0].toUpperCase()}
-                  </div>
-                )}
-              </button>
-            )}
+            <EditableUiSlot
+              elementId="headerAccount"
+              condition={Boolean(currentUser)}
+              inline={true}
+            >
+              {currentUser && (
+                <button
+                  id="header-user-btn"
+                  className="header-user-btn"
+                  onClick={() => {
+                    setHeaderToolsInitialTab('account');
+                    setShowHeaderToolsModal(true);
+                  }}
+                  title={currentUser.displayName || currentUser.email || "Mon compte & Profil"}
+                  aria-label="Mon compte"
+                >
+                  {currentUser.photoURL ? (
+                    <img src={currentUser.photoURL} alt="avatar" className="header-avatar" />
+                  ) : (
+                    <div className="header-avatar-placeholder">
+                      {(currentUser.displayName || currentUser.email || "?")[0].toUpperCase()}
+                    </div>
+                  )}
+                </button>
+              )}
+            </EditableUiSlot>
           </div>
         </header>
 
@@ -2674,7 +2708,7 @@ function AppInner({ currentUser, onSignOut }) {
 
           {/* Sidebar — always rendered, accessible via ☰ from any page */}
           <aside className={`sidebar${sidebarOpen ? ' open' : ''}${activePage !== 'quran' ? ' sidebar-floating' : ''}`}>
-            {isElementVisible(uiElementsVisibility, "sidebarSearch") && (
+            <EditableUiSlot elementId="sidebarSearch" inline={false}>
               <div className="sidebar-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input
                   placeholder={sidebarConfig.searchPlaceholder}
@@ -2702,7 +2736,7 @@ function AppInner({ currentUser, onSignOut }) {
                   </button>
                 )}
               </div>
-            )}
+            </EditableUiSlot>
             {isElementVisible(uiElementsVisibility, "sidebarSearch") && search.trim() && (
               <div style={{
                 padding: '4px 14px',
@@ -2768,35 +2802,62 @@ function AppInner({ currentUser, onSignOut }) {
               )}
               {loadingSurahs
                 ? <div className="loading"><div className="loading-ring" /><span>CHARGEMENT</span></div>
-                : filteredSurahs.map(s => (
+                : filteredSurahs.map((s, surahIdx) => (
                   <div key={s.number}
                     className={`surah-item${selectedSurah?.number === s.number ? " active surah-active" : ""}${(surahStats[s.number]?.learned >= s.numberOfAyahs && s.numberOfAyahs > 0) ? " fully-learned" : ""}`}
                     onClick={() => { setSelectedSurah(s); setSidebarOpen(false); if (activePage !== 'quran') setActivePage('quran'); }}>
-                    {isElementVisible(uiElementsVisibility, "sidebarSurahNumbers") && (
+                    <EditableUiSlot
+                      elementId="sidebarSurahNumbers"
+                      inline={true}
+                      showPlaceholder={surahIdx === 0}
+                      showRemove={surahIdx === 0}
+                    >
                       <div className="surah-num">{sidebarConfig.showStars ? "⭐ " : ""}{s.number}</div>
-                    )}
+                    </EditableUiSlot>
                     <div className="surah-info">
                       <div className="surah-name-en">{s.englishName}</div>
-                      {isElementVisible(uiElementsVisibility, "sidebarSurahMeta") && (
+                      <EditableUiSlot
+                        elementId="sidebarSurahMeta"
+                        inline={false}
+                        showPlaceholder={surahIdx === 0}
+                        showRemove={surahIdx === 0}
+                      >
                         <div className="surah-meta">{sidebarConfig.revelationLabel(s.revelationType)} · {sidebarConfig.versesLabel(s.numberOfAyahs)}{!isSimplifiedUxMode(uxMode) && surahStats[s.number]?.learned > 0 ? ` · ${surahStats[s.number].learned}✓` : ''}</div>
-                      )}
-                      {!compactMode && !isSimplifiedUxMode(uxMode) && isElementVisible(uiElementsVisibility, "sidebarMasteryBars") && (() => { const st = surahStats[s.number]; const total = s.numberOfAyahs || 0; const pct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0; return (
-                        <div style={{marginTop:3,display:'flex',alignItems:'center',gap:6}}>
-                          <div style={{flex:1,height:2,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
-                            <div style={{height:'100%',width:pct+'%',background:masteryColor(pct),borderRadius:2}} />
+                      </EditableUiSlot>
+                      <EditableUiSlot
+                        elementId="sidebarMasteryBars"
+                        condition={!compactMode && !isSimplifiedUxMode(uxMode)}
+                        inline={false}
+                        showPlaceholder={surahIdx === 0}
+                        showRemove={surahIdx === 0}
+                      >
+                        {(() => { const st = surahStats[s.number]; const total = s.numberOfAyahs || 0; const pct = total > 0 ? Math.round((st?.mastery || 0) / total) : 0; return (
+                          <div style={{marginTop:3,display:'flex',alignItems:'center',gap:6}}>
+                            <div style={{flex:1,height:2,background:'var(--surface3)',borderRadius:2,overflow:'hidden'}}>
+                              <div style={{height:'100%',width:pct+'%',background:masteryColor(pct),borderRadius:2}} />
+                            </div>
+                            <span style={{fontSize:7,fontFamily:"'Cinzel',serif",color:masteryColor(pct),flexShrink:0}}>{pct}%</span>
                           </div>
-                          <span style={{fontSize:7,fontFamily:"'Cinzel',serif",color:masteryColor(pct),flexShrink:0}}>{pct}%</span>
-                        </div>
-                      ); })()}
+                        ); })()}
+                      </EditableUiSlot>
                     </div>
-                    {isElementVisible(uiElementsVisibility, "sidebarArabicNames") && (
+                    <EditableUiSlot
+                      elementId="sidebarArabicNames"
+                      inline={true}
+                      showPlaceholder={surahIdx === 0}
+                      showRemove={surahIdx === 0}
+                    >
                       <div className="surah-name-ar">{s.name}</div>
-                    )}
+                    </EditableUiSlot>
                   </div>
                 ))}
             </div>
 
-            {sidebarConfig.showArchitectureDoc && isElementVisible(uiElementsVisibility, "sidebarArchitectureDoc") && (
+            <EditableUiSlot
+              elementId="sidebarArchitectureDoc"
+              condition={sidebarConfig.showArchitectureDoc}
+              inline={false}
+            >
               <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border)", background: "rgba(15, 23, 42, 0.5)" }}>
                 <button
                   type="button"
@@ -2822,7 +2883,7 @@ function AppInner({ currentUser, onSignOut }) {
                   <span>DOSSIER D'ARCHITECTURE & PATTERNS (PDF)</span>
                 </button>
               </div>
-            )}
+            </EditableUiSlot>
           </aside>
 
           <Routes>
@@ -4298,42 +4359,50 @@ function AppInner({ currentUser, onSignOut }) {
                               if (!isOtherSurah) ayatRefs.current[ayat.numberInSurah] = el;
                             }}>
 
-                          {(isPageStart || isHizbStart || isJuzStart) && isElementVisible(uiElementsVisibility, "ayatDividers") && (() => {
-                            const pageSlice = isPageStart ? (hizbMode ? visible : ayats).filter(a => a.page === ayat.page) : [];
-                            const hizbSlice = isHizbStart ? (hizbMode && currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === ayatHizb)) : [];
-                            const juzSlice  = isJuzStart  ? (hizbMode ? visible : ayats).filter(a => getAyatJuz(a) === ayatJuz) : [];
-                            const pMast = isPageStart ? computeDisplayedPartMastery(pageSlice, learnData, selectedSurah.number) : null;
-                            const hMast = isHizbStart ? computeDisplayedPartMastery(hizbSlice, learnData, selectedSurah.number) : null;
-                            const jMast = isJuzStart  ? computeDisplayedPartMastery(juzSlice, learnData, selectedSurah.number)  : null;
-                            return (
-                              <div className="edge-pills-bar start">
-                                {isPageStart && (
-                                  <div className="page-edge-pill start">
-                                    ◆ PAGE {ayat.page} · {pMast.masteryPct}% ({pMast.learnedCount}/{pMast.totalCount})
-                                  </div>
-                                )}
-                                {isHizbStart && (
-                                  <div
-                                    className="hizb-edge-pill start"
-                                    style={{ cursor: 'pointer' }}
-                                    title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — ${hizbBoundsForPill?.pageLabel || ''} — cliquer pour afficher tout le Hizb` : `Hizb ${ayatHizb} (${hizbBoundsForPill?.pageLabel || ''})`}
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      setActiveHizbCoran(ayatHizb);
-                                      if (!hizbMode) setHizbMode(true);
-                                    }}
-                                  >
-                                    ◆ HIZB {ayatHizb}{hizbBoundsForPill?.pageShort ? ` · ${hizbBoundsForPill.pageShort}` : ''}{isHizbCrossSurah ? ` · S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount})
-                                  </div>
-                                )}
-                                {isJuzStart && (
-                                  <div className="juz-edge-pill start">
-                                    ◆ JUZ {ayatJuz} · {jMast.masteryPct}% ({jMast.learnedCount}/{jMast.totalCount})
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
+                          <EditableUiSlot
+                            elementId="ayatDividers"
+                            condition={isPageStart || isHizbStart || isJuzStart}
+                            inline={false}
+                            showPlaceholder={visIdx === 0}
+                            showRemove={visIdx === 0}
+                          >
+                            {(() => {
+                              const pageSlice = isPageStart ? (hizbMode ? visible : ayats).filter(a => a.page === ayat.page) : [];
+                              const hizbSlice = isHizbStart ? (hizbMode && currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === ayatHizb)) : [];
+                              const juzSlice  = isJuzStart  ? (hizbMode ? visible : ayats).filter(a => getAyatJuz(a) === ayatJuz) : [];
+                              const pMast = isPageStart ? computeDisplayedPartMastery(pageSlice, learnData, selectedSurah.number) : null;
+                              const hMast = isHizbStart ? computeDisplayedPartMastery(hizbSlice, learnData, selectedSurah.number) : null;
+                              const jMast = isJuzStart  ? computeDisplayedPartMastery(juzSlice, learnData, selectedSurah.number)  : null;
+                              return (
+                                <div className="edge-pills-bar start">
+                                  {isPageStart && (
+                                    <div className="page-edge-pill start">
+                                      ◆ PAGE {ayat.page} · {pMast.masteryPct}% ({pMast.learnedCount}/{pMast.totalCount})
+                                    </div>
+                                  )}
+                                  {isHizbStart && (
+                                    <div
+                                      className="hizb-edge-pill start"
+                                      style={{ cursor: 'pointer' }}
+                                      title={isHizbCrossSurah ? `Hizb ${ayatHizb} multi-sourates (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}) — ${hizbBoundsForPill?.pageLabel || ''} — cliquer pour afficher tout le Hizb` : `Hizb ${ayatHizb} (${hizbBoundsForPill?.pageLabel || ''})`}
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        setActiveHizbCoran(ayatHizb);
+                                        if (!hizbMode) setHizbMode(true);
+                                      }}
+                                    >
+                                      ◆ HIZB {ayatHizb}{hizbBoundsForPill?.pageShort ? ` · ${hizbBoundsForPill.pageShort}` : ''}{isHizbCrossSurah ? ` · S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount})
+                                    </div>
+                                  )}
+                                  {isJuzStart && (
+                                    <div className="juz-edge-pill start">
+                                      ◆ JUZ {ayatJuz} · {jMast.masteryPct}% ({jMast.learnedCount}/{jMast.totalCount})
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </EditableUiSlot>
 
                           {/* Selection hint bar shown above the ayat when selecting */}
                           {isSelecting && (
@@ -4368,21 +4437,37 @@ function AppInner({ currentUser, onSignOut }) {
                                   S.{ayatSurahNum}
                                 </span>
                               )}
-                              {isElementVisible(uiElementsVisibility, "ayatNumber") && (
+                              <EditableUiSlot
+                                elementId="ayatNumber"
+                                inline={true}
+                                showPlaceholder={visIdx === 0}
+                                showRemove={visIdx === 0}
+                              >
                                 <div className="ayat-number-badge"
                                   title={isOtherSurah ? `Sourate ${ayatSurahNum} · Verset ${ayat.numberInSurah}${ayat.page != null ? ` · Page ${ayat.page}` : ''}` : `Verset ${ayat.numberInSurah}${ayat.page != null ? ` · Page ${ayat.page}` : ''}`}
                                   style={{cursor:'pointer'}}
                                 >{ayat.numberInSurah}</div>
-                              )}
-                              {ayat.page != null && isElementVisible(uiElementsVisibility, "ayatPageBadge") && (
+                              </EditableUiSlot>
+                              <EditableUiSlot
+                                elementId="ayatPageBadge"
+                                condition={ayat.page != null}
+                                inline={true}
+                                showPlaceholder={visIdx === 0}
+                                showRemove={visIdx === 0}
+                              >
                                 <span
                                   className="ayat-page-badge"
                                   title={`Page Mushaf : ${ayat.page} (Verset ${ayat.numberInSurah})`}
                                 >
                                   P.{ayat.page}
                                 </span>
-                              )}
-                              {isElementVisible(uiElementsVisibility, "ayatPlayBtn") && (
+                              </EditableUiSlot>
+                              <EditableUiSlot
+                                elementId="ayatPlayBtn"
+                                inline={true}
+                                showPlaceholder={visIdx === 0}
+                                showRemove={visIdx === 0}
+                              >
                                 <button
                                   title="Lire depuis ce verset"
                                   onClick={e => {
@@ -4412,7 +4497,7 @@ function AppInner({ currentUser, onSignOut }) {
                                     outline: isPlaying ? "2px solid var(--teal)" : "none",
                                     outlineOffset:2,
                                   }}>{isPlaying ? "⏸" : "▶"}</button>
-                              )}
+                              </EditableUiSlot>
                               {isOpen && (
                                 <button
                                   title="Afficher en plein écran (Focus)"
@@ -4438,107 +4523,121 @@ function AppInner({ currentUser, onSignOut }) {
                               )}
                             </div>
                             {renderAyatText()}
-                            {isElementVisible(uiElementsVisibility, "ayatMastery") && (() => {
-                              const m = masteryMap[lkey(ayatSurahNum, ayat.numberInSurah)] ?? 0;
-                              return (
-                                <div
-                                  className="ayat-mastery-col"
-                                  title={`Maîtrise du verset : ${m}%${ld.learned ? " · Appris" : ""}${ld.toRevise ? " · À réviser" : ""}`}
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    gap: 3,
-                                    alignItems: "flex-end",
-                                    justifyContent: "flex-start",
-                                    flexShrink: 0,
-                                    paddingTop: 3,
-                                    minWidth: 52,
-                                  }}
-                                >
-                                  {/* Badge Maîtrise toujours visible */}
+                            <EditableUiSlot
+                              elementId="ayatMastery"
+                              inline={true}
+                              showPlaceholder={visIdx === 0}
+                              showRemove={visIdx === 0}
+                            >
+                              {(() => {
+                                const m = masteryMap[lkey(ayatSurahNum, ayat.numberInSurah)] ?? 0;
+                                return (
                                   <div
-                                    className="ayat-mastery-badge"
+                                    className="ayat-mastery-col"
+                                    title={`Maîtrise du verset : ${m}%${ld.learned ? " · Appris" : ""}${ld.toRevise ? " · À réviser" : ""}`}
                                     style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
+                                      display: "flex",
+                                      flexDirection: "column",
                                       gap: 3,
-                                      fontSize: 8,
-                                      letterSpacing: 0.6,
-                                      padding: "2px 5px",
-                                      borderRadius: 8,
-                                      border: `1px solid ${masteryColor(m)}`,
-                                      color: masteryColor(m),
-                                      background: m > 0 ? "rgba(255,255,255,.04)" : "rgba(255,255,255,.01)",
-                                      fontFamily: "'Cinzel',serif",
-                                      fontWeight: 700,
-                                      whiteSpace: "nowrap",
+                                      alignItems: "flex-end",
+                                      justifyContent: "flex-start",
+                                      flexShrink: 0,
+                                      paddingTop: 3,
+                                      minWidth: 52,
                                     }}
                                   >
-                                    <span style={{ fontSize: 6.5, opacity: 0.8, letterSpacing: 0.4 }}>MAÎTRISE</span>
-                                    <span>{m}%</span>
-                                    {ld.learned && <span style={{ color: "var(--green)", fontSize: 8 }}>✓</span>}
-                                  </div>
+                                    {/* Badge Maîtrise toujours visible */}
+                                    <div
+                                      className="ayat-mastery-badge"
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 3,
+                                        fontSize: 8,
+                                        letterSpacing: 0.6,
+                                        padding: "2px 5px",
+                                        borderRadius: 8,
+                                        border: `1px solid ${masteryColor(m)}`,
+                                        color: masteryColor(m),
+                                        background: m > 0 ? "rgba(255,255,255,.04)" : "rgba(255,255,255,.01)",
+                                        fontFamily: "'Cinzel',serif",
+                                        fontWeight: 700,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      <span style={{ fontSize: 6.5, opacity: 0.8, letterSpacing: 0.4 }}>MAÎTRISE</span>
+                                      <span>{m}%</span>
+                                      {ld.learned && <span style={{ color: "var(--green)", fontSize: 8 }}>✓</span>}
+                                    </div>
 
-                                  {/* Micro barre de progression de maîtrise */}
-                                  <div
-                                    style={{
-                                      width: 46,
-                                      height: 2.5,
-                                      background: "var(--surface3)",
-                                      borderRadius: 2,
-                                      overflow: "hidden",
-                                    }}
-                                  >
+                                    {/* Micro barre de progression de maîtrise */}
                                     <div
                                       style={{
-                                        height: "100%",
-                                        width: `${m}%`,
-                                        background: masteryColor(m),
+                                        width: 46,
+                                        height: 2.5,
+                                        background: "var(--surface3)",
                                         borderRadius: 2,
-                                        transition: "width .3s ease",
+                                        overflow: "hidden",
                                       }}
-                                    />
-                                  </div>
+                                    >
+                                      <div
+                                        style={{
+                                          height: "100%",
+                                          width: `${m}%`,
+                                          background: masteryColor(m),
+                                          borderRadius: 2,
+                                          transition: "width .3s ease",
+                                        }}
+                                      />
+                                    </div>
 
-                                  {/* Indicateurs complémentaires */}
-                                  {ld.learned && (
-                                    <span style={{ fontSize: 7.5, letterSpacing: 0.8, color: "var(--green)", fontFamily: "'Cinzel',serif", fontWeight: 700 }} title="Verset appris">
-                                       ✓ APPRIS
-                                    </span>
-                                  )}
-                                  {ld.toRevise && (
-                                    <span style={{ fontSize: 7.5, letterSpacing: 0.6, color: "var(--gold2)", fontFamily: "'Cinzel',serif", fontWeight: 600 }} title="À réviser">
-                                       🔖 RÉVISER
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })()}
+                                    {/* Indicateurs complémentaires */}
+                                    {ld.learned && (
+                                      <span style={{ fontSize: 7.5, letterSpacing: 0.8, color: "var(--green)", fontFamily: "'Cinzel',serif", fontWeight: 700 }} title="Verset appris">
+                                         ✓ APPRIS
+                                      </span>
+                                    )}
+                                    {ld.toRevise && (
+                                      <span style={{ fontSize: 7.5, letterSpacing: 0.6, color: "var(--gold2)", fontFamily: "'Cinzel',serif", fontWeight: 600 }} title="À réviser">
+                                         🔖 RÉVISER
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </EditableUiSlot>
                           </div>
 
                           {/* Translation — full-width block below Arabic */}
-                          {translationLang && isElementVisible(uiElementsVisibility, "ayatTranslation") && (() => {
-                            const key = `${translationLang}:${ayatSurahNum}`;
-                            const tList = translations[key];
+                          {(() => {
+                            const tList = translationLang ? translations[`${translationLang}:${ayatSurahNum}`] : null;
                             const tText = tList?.find(t => t.numberInSurah === ayat.numberInSurah)?.text;
-                            return tText ? (
-                              <div style={{
-                                padding: '4px 14px 8px 54px',
-                                borderTop: '1px solid rgba(91,200,245,.08)',
-                                background: 'rgba(91,200,245,.03)',
-                                direction: translationLang === 'ur' ? 'rtl' : 'ltr',
-                              }}>
+                            return (
+                              <EditableUiSlot
+                                elementId="ayatTranslation"
+                                condition={Boolean(translationLang && tText)}
+                                inline={false}
+                                showPlaceholder={visIdx === 0}
+                                showRemove={visIdx === 0}
+                              >
                                 <div style={{
-                                  fontSize: 11,
-                                  color: 'rgba(91,200,245,.6)',
-                                  fontStyle: 'italic',
-                                  lineHeight: 1.65,
-                                  letterSpacing: .2,
+                                  padding: '4px 14px 8px 54px',
+                                  borderTop: '1px solid rgba(91,200,245,.08)',
+                                  background: 'rgba(91,200,245,.03)',
+                                  direction: translationLang === 'ur' ? 'rtl' : 'ltr',
                                 }}>
-                                  {tText}
+                                  <div style={{
+                                    fontSize: 11,
+                                    color: 'rgba(91,200,245,.6)',
+                                    fontStyle: 'italic',
+                                    lineHeight: 1.65,
+                                    letterSpacing: .2,
+                                  }}>
+                                    {tText}
+                                  </div>
                                 </div>
-                              </div>
-                            ) : null;
+                              </EditableUiSlot>
+                            );
                           })()}
 
                           <AnimatedSubmenu isOpen={isOpen}>
@@ -4775,6 +4874,9 @@ function AppInner({ currentUser, onSignOut }) {
             onClose={() => dispatch(uiActions.setShowUiVisibilityModal(false))}
           />
         )}
+
+        {/* DIRECT INLINE UI EDITING FLOATING TOOLBAR */}
+        <UiEditToolbar />
 
         {/* PLAYER AUDIO & TAJWEED OPTIONS MODAL */}
         {showPlayerAudioModal && (
@@ -5089,17 +5191,17 @@ function AppInner({ currentUser, onSignOut }) {
           >
 
             <div className="player-row">
-              {isElementVisible(uiElementsVisibility, "playerSurahTitle") && (
+              <EditableUiSlot elementId="playerSurahTitle" inline={true}>
                 <div className="player-info">
                   <div className="player-surah">{playerConfig.surahTitleFormat(selectedSurah)}</div>
                   <div className="player-ayah">
                     {playerConfig.verseCounterFormat(currentMainAyat?.numberInSurah || 1, ayats.length, loopActive ? `${loopStartNum}–${loopEndNum}${loopMax > 0 ? ` · ${loopCount + 1}/${loopMax}` : ''}` : '')}
                   </div>
                 </div>
-              )}
+              </EditableUiSlot>
 
               <div className="player-controls">
-                {isElementVisible(uiElementsVisibility, "playerControls") && (
+                <EditableUiSlot elementId="playerControls" inline={true}>
                   <>
                     <button
                       className="ctrl-btn"
@@ -5136,8 +5238,12 @@ function AppInner({ currentUser, onSignOut }) {
                       }}
                     >{playerConfig.nextBtnText()}</button>
                   </>
-                )}
-                {playerConfig.showLoopButton && isElementVisible(uiElementsVisibility, "playerLoop") && (
+                </EditableUiSlot>
+                <EditableUiSlot
+                  elementId="playerLoop"
+                  condition={playerConfig.showLoopButton}
+                  inline={true}
+                >
                   <button
                     className={`ctrl-btn${loopActive || showLoopBar ? " loop-on" : ""}`}
                     title={showLoopBar ? "Fermer les réglages de boucle" : (playerConfig.loopBtnAriaLabel ? playerConfig.loopBtnAriaLabel() : "Boucle de versets")}
@@ -5152,10 +5258,10 @@ function AppInner({ currentUser, onSignOut }) {
                       }
                     }}
                     style={{ fontSize: 13 }}>{playerConfig.loopBtnText()}</button>
-                )}
-                {/* Options Tajwid & Audio : Mode simplifié (enfant, débutant) bouton icône circulaire 🎨 */}
-                {isElementVisible(uiElementsVisibility, "playerTajweedModal") && (
-                  isSimplifiedUxMode(uxMode) ? (
+                </EditableUiSlot>
+                {/* Options Tajwid & Audio */}
+                <EditableUiSlot elementId="playerTajweedModal" inline={true}>
+                  {isSimplifiedUxMode(uxMode) ? (
                     <button
                       id="player-audio-options-modal-btn"
                       className={`ctrl-btn player-tajweed-modal-trigger${(isCoachEnabled || silenceWordsToRevise) ? " loop-on" : ""}`}
@@ -5195,7 +5301,7 @@ function AppInner({ currentUser, onSignOut }) {
                           });
                         }}
                       />
-                      {/* Coach Vocal Tajwid (pause prédictive & annonce vocale des règles) */}
+                      {/* Coach Vocal Tajwid */}
                       <TajweedAudioCoachControl
                         compact={true}
                         timestamps={currentMainAyat ? (timestampsMapRef.current[tskey(selectedSurah.number, currentMainAyat.numberInSurah)] || timestampsMap[tskey(selectedSurah.number, currentMainAyat.numberInSurah)]) : null}
@@ -5209,10 +5315,14 @@ function AppInner({ currentUser, onSignOut }) {
                         }}
                       />
                     </>
-                  )
-                )}
-                {/* Reciter picker (available in standard & expert, or inside Options modal in simplified modes) */}
-                {playerConfig.showStandaloneReciter && isElementVisible(uiElementsVisibility, "playerReciter") && (
+                  )}
+                </EditableUiSlot>
+                {/* Reciter picker */}
+                <EditableUiSlot
+                  elementId="playerReciter"
+                  condition={playerConfig.showStandaloneReciter}
+                  inline={true}
+                >
                   <button
                     className={`ctrl-btn reciter-trigger${showRecitPanel ? " loop-on" : ""}`}
                     aria-haspopup="dialog"
@@ -5223,7 +5333,7 @@ function AppInner({ currentUser, onSignOut }) {
                     <span>{activeRecitator?.flag || '🎙️'}</span>
                     <span className="reciter-trigger-label">{activeRecitator?.label || 'Récitateur'}</span>
                   </button>
-                )}
+                </EditableUiSlot>
               </div>
 
               {showRecitPanel && createPortal(

@@ -1987,15 +1987,15 @@ export const CSS = `
   .qbook-hc-front{
     position:absolute;top:0;left:0;width:100%;height:100%;
     transform-style:preserve-3d;transform-origin:left center;
-    transition:transform .8s cubic-bezier(.645,.045,.355,1.000);
-    z-index:100;
+    transition:transform .82s cubic-bezier(.645,.045,.355,1.000),opacity .26s ease 0s,visibility 0s linear 0s;
+    z-index:150;
   }
   .qbook-hc-front > li:first-child{
     /* front face */
     position:absolute;top:0;left:0;width:100%;height:100%;
     border-radius:0 3px 3px 0;overflow:hidden;
     background:linear-gradient(135deg,#2d0e02 0%,#5c1e06 35%,#8b3410 55%,#5c1e06 75%,#2d0e02 100%);
-    box-shadow:inset -6px 0 20px rgba(0,0,0,.5),inset 0 0 40px rgba(0,0,0,.3);
+    box-shadow:inset -6px 0 20px rgba(0,0,0,.5),inset 0 0 40px rgba(0,0,0,.3),0 18px 44px rgba(0,0,0,.78);
     backface-visibility:hidden;
     display:flex;align-items:center;justify-content:center;
   }
@@ -2006,9 +2006,15 @@ export const CSS = `
     background:linear-gradient(to right,#1a0500,#3d1208);
     transform:rotateY(180deg);backface-visibility:hidden;
   }
-  /* front cover open state */
+  /* front cover open state — flips open then hides completely behind/away from spread */
+  .qbook-hc-front.qbook-open,
   .qbook-open .qbook-hc-front{
-    transform:rotateY(-160deg);
+    transform:rotateY(-180deg);
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    z-index:0;
+    transition:transform .82s cubic-bezier(.645,.045,.355,1.000),opacity .26s ease .52s,visibility 0s linear .78s;
   }
   /* Cover decorative design */
   .qbook-cover-design{
@@ -2117,16 +2123,16 @@ export const CSS = `
     content:'';position:absolute;inset:0;pointer-events:none;mix-blend-mode:multiply;opacity:.5;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
   }
-  /* Flip animations */
+  /* Flip animations — both lift toward +Z (viewer) cleanly */
   .qbook-flip-fwd{animation:qFlipFwd .72s cubic-bezier(.455,.030,.515,.955) forwards;}
   .qbook-flip-bwd{animation:qFlipBwd .72s cubic-bezier(.455,.030,.515,.955) forwards;}
   @keyframes qFlipFwd{
     0%  {transform:rotateY(0deg);z-index:200;}
-    100%{transform:rotateY(-180deg);z-index:200;}
+    100%{transform:rotateY(180deg);z-index:200;}
   }
   @keyframes qFlipBwd{
-    0%  {transform:rotateY(-180deg);z-index:200;}
-    100%{transform:rotateY(0deg);z-index:200;}
+    0%  {transform:rotateY(0deg);z-index:200;}
+    100%{transform:rotateY(-180deg);z-index:200;}
   }
   /* Shadow during page turn */
   .qbook-flip-fwd .qbook-page-face::before,

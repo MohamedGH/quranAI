@@ -2016,6 +2016,32 @@ export const CSS = `
     z-index:0;
     transition:transform .82s cubic-bezier(.645,.045,.355,1.000),opacity .26s ease .52s,visibility 0s linear .78s;
   }
+  .qbook-hc-front:not(.qbook-open){
+    cursor:pointer;
+  }
+  .qbook-hc-front:not(.qbook-open):hover > li:first-child{
+    box-shadow:inset -6px 0 20px rgba(0,0,0,.45),inset 0 0 40px rgba(201,168,76,.14),0 22px 52px rgba(0,0,0,.85);
+  }
+  /* Left wing (back board + left page) stays folded edge-on at the spine during the first half of opening (0..48%), then unfolds smoothly with the cover onto the left table */
+  .qbook-opening-left{
+    transform-origin:right center;
+    animation:qOpenLeftWing .82s cubic-bezier(.25,.8,.25,1) forwards;
+    pointer-events:none;
+  }
+  @keyframes qOpenLeftWing{
+    0%,46%{
+      transform:rotateY(90deg);
+      opacity:0;
+    }
+    50%{
+      transform:rotateY(84deg);
+      opacity:1;
+    }
+    100%{
+      transform:rotateY(0deg);
+      opacity:1;
+    }
+  }
   /* Cover decorative design */
   .qbook-cover-design{
     position:absolute;inset:0;display:flex;flex-direction:column;

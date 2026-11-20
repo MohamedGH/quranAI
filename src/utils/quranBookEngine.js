@@ -63,16 +63,34 @@ export const computeCssBookLayout = ({ vw = 1024, vh = 768 } = {}) => {
   });
 };
 
+export const OPEN_ANIM_DURATION_MS = 820;
+
+export const BOOK3D_ZOOM = Object.freeze({
+  minDist: 2.0,
+  maxDist: 7.8,
+  defaultDesktopDist: 4.8,
+  defaultMobileDist: 5.6,
+  buttonStep: 0.65,
+  wheelSensitivity: 0.0032,
+  min2DScale: 0.75,
+  max2DScale: 2.2,
+  default2DScale: 1.0,
+});
+
 /**
  * Pure presentation descriptor for the CSS Quran book.
  * Guarantees:
  * - Closed book (`!bookOpen`): closed volume is horizontally centered, left page & back
  *   half are completely hidden, only front cover + spine + right stack edge appear.
+ * - Opening (`bookOpen && isOpening`): left page & back cover wait edge-on at the spine
+ *   during the first half of the cover swing (0%..48%) then unfold smoothly onto the table
+ *   (50%..100%) instead of popping in abruptly at t=0.
  * - Open book (`bookOpen`): front cover flips away and hides completely behind/off so it
  *   never obstructs reading pages; forward/backward flips always lift toward +Z (viewer).
  */
 export const computeCssBookPresentation = ({
   bookOpen = false,
+  isOpening = false,
   spread = 0,
   flipState = "idle",
   pageWidth = 440,
@@ -82,6 +100,7 @@ export const computeCssBookPresentation = ({
   const isBwd = flipState === "bwd";
   const isFlip = isFwd || isBwd;
   const isClosedAtRest = !bookOpen && spread === 0;
+  const activeOpening = Boolean(bookOpen && isOpening);
 
   // Closed volume spans [pageWidth, 2 * pageWidth + spineWidth] (midpoint = 1.5*W + spineW/2).
   // Container midpoint is (W + spineW/2). Difference to center closed cover is -W / 2.
@@ -92,14 +111,17 @@ export const computeCssBookPresentation = ({
     isBwd,
     isFlip,
     isClosedAtRest,
+    isOpening: activeOpening,
     bookTranslateX: bookOpen ? 0 : closedShiftX,
     showLeftHalf: Boolean(bookOpen),
     showLeftPageContent: Boolean(bookOpen && spread >= 1),
+    leftWingClassName: activeOpening ? "qbook-opening-left" : "",
     frontCover: Object.freeze({
       transform: bookOpen ? "rotateY(-180deg)" : "rotateY(0deg)",
       zIndex: bookOpen ? 0 : 150,
       hidden: Boolean(bookOpen),
       pointerEvents: bookOpen ? "none" : "auto",
+      cursor: bookOpen ? "default" : "pointer",
     }),
     boardLeftOffset: bookOpen ? 0 : pageWidth + spineWidth,
     stackLeftOffset: bookOpen ? 3 : pageWidth + spineWidth,
@@ -115,13 +137,185 @@ export const computeCssBookPresentation = ({
  * Computes Arabic RTL spread page numbers cleanly.
  */
 export const computeSpreadPages = (spread, isSingleMode = false) => {
-  const clamped = Math.max(1, Math.min(isSingleMode ? MUSHAF_TOTAL_PAGES : MUSHAF_DOUBLE_SPREADS, Number(spread) || 1));
+  const clamped = Math.max(
+    1,
+    Math.min(isSingleMode ? MUSHAF_TOTAL_PAGES : MUSHAF_DOUBLE_SPREADS, Number(spread) || 1)
+  );
   if (isSingleMode) {
     return Object.freeze({ rPage: clamped, lPage: null, spread: clamped });
   }
   const rPage = 2 * clamped - 1;
   const lPage = Math.min(2 * clamped, MUSHAF_TOTAL_PAGES);
   return Object.freeze({ rPage, lPage, spread: clamped });
+};
+
+/**
+ * Pure zoom calculators for 3D camera distance and 2D reader magnification.
+ */
+export const clamp3DZoomDist = (dist) => {
+  const num = Number(dist);
+  if (!Number.isFinite(num)) return BOOK3D_ZOOM.defaultDesktopDist;
+  return Math.max(BOOK3D_ZOOM.minDist, Math.min(BOOK3D_ZOOM.maxDist, num));
+};
+
+export const computeWheelZoomDist = (currentDist, deltaY) => {
+  const cur = clamp3DZoomDist(currentDist);
+  const d = Number(deltaY) || 0;
+  return clamp3DZoomDist(cur + d * BOOK3D_ZOOM.wheelSensitivity);
+};
+
+export const computePinchZoomDist = (startDist, startTouchDist, currentTouchDist) => {
+  const base = clamp3DZoomDist(startDist);
+  if (!Number.isFinite(startTouchDist) || !Number.isFinite(currentTouchDist) || startTouchDist <= 0 || currentTouchDist <= 0) {
+    return base;
+  }
+  // Larger finger separation -> zoom in (smaller camera Z distance)
+  return clamp3DZoomDist(base * (startTouchDist / currentTouchDist));
+};
+
+export const step3DZoomDist = (currentDist, direction) => {
+  const cur = clamp3DZoomDist(currentDist);
+  return clamp3DZoomDist(cur + (direction < 0 ? -BOOK3D_ZOOM.buttonStep : BOOK3D_ZOOM.buttonStep));
+};
+
+export const computeCameraPositionForZoom = (zoomDist, isSingleMode = false) => {
+  const z = clamp3DZoomDist(zoomDist);
+  const baseZ = isSingleMode ? BOOK3D_ZOOM.defaultMobileDist : BOOK3D_ZOOM.defaultDesktopDist;
+  const y = Math.max(0.95, 2.25 * (z / baseZ));
+  return Object.freeze({ y, z });
+};
+
+export const computeZoomPercent = (zoomDist, isSingleMode = false) => {
+  const z = clamp3DZoomDist(zoomDist);
+  const baseZ = isSingleMode ? BOOK3D_ZOOM.defaultMobileDist : BOOK3D_ZOOM.defaultDesktopDist;
+  return Math.round((baseZ / z) * 100);
+};
+
+export const clamp2DZoomScale = (scale) => {
+  const num = Number(scale);
+  if (!Number.isFinite(num)) return BOOK3D_ZOOM.default2DScale;
+  return Math.max(BOOK3D_ZOOM.min2DScale, Math.min(BOOK3D_ZOOM.max2DScale, Number(num.toFixed(2))));
+};
+
+/**
+ * Builds an ordered list of visible ayahs across right (odd) then left (even) pages
+ * following Arabic RTL reading order, and determines whether the next ayah stays on the
+ * currently open spread (e.g., transitioning seamlessly from last ayah of right page to
+ * first ayah of left page without turning the page) or requires turning the page.
+ */
+export const resolveSpreadPlaybackStep = ({
+  currentAudioAyah,
+  rPage,
+  lPage,
+  isSingleMode = false,
+  pageCache = {},
+  totalPages = MUSHAF_TOTAL_PAGES,
+}) => {
+  if (!currentAudioAyah) {
+    return Object.freeze({
+      action: "stop",
+      needsTurnNext: false,
+      targetNextPage: null,
+      nextAyah: null,
+    });
+  }
+
+  const normalizeEntry = (a, pageNum, side) => ({
+    surahNum: a?.surah?.number ?? a?.surahNum,
+    ayahNum: a?.numberInSurah ?? a?.ayahNum,
+    surahName: a?.surah?.name ?? a?.surahName ?? "",
+    surahEng: a?.surah?.englishName ?? a?.surahEng ?? "",
+    text: a?.text ?? "",
+    pageNum,
+    side,
+  });
+
+  const rightList = Array.isArray(pageCache[rPage])
+    ? pageCache[rPage].map((a) => normalizeEntry(a, rPage, "right"))
+    : [];
+  const leftList =
+    !isSingleMode && lPage && lPage !== rPage && Array.isArray(pageCache[lPage])
+      ? pageCache[lPage].map((a) => normalizeEntry(a, lPage, "left"))
+      : [];
+
+  const visibleAyahs = [...rightList, ...leftList];
+  const currIdx = visibleAyahs.findIndex(
+    (a) => a.surahNum === currentAudioAyah.surahNum && a.ayahNum === currentAudioAyah.ayahNum
+  );
+
+  if (currIdx >= 0 && currIdx < visibleAyahs.length - 1) {
+    return Object.freeze({
+      action: "play_ayah",
+      needsTurnNext: false,
+      targetNextPage: null,
+      nextAyah: visibleAyahs[currIdx + 1],
+    });
+  }
+
+  const lastVisiblePage = !isSingleMode && lPage ? Math.max(rPage, lPage) : rPage;
+  if (!lastVisiblePage || lastVisiblePage >= totalPages) {
+    return Object.freeze({
+      action: "stop",
+      needsTurnNext: false,
+      targetNextPage: null,
+      nextAyah: null,
+    });
+  }
+
+  const targetNextPage = lastVisiblePage + 1;
+  const nextPageList = Array.isArray(pageCache[targetNextPage]) ? pageCache[targetNextPage] : null;
+  const nextAyah =
+    nextPageList && nextPageList.length > 0
+      ? normalizeEntry(nextPageList[0], targetNextPage, "right")
+      : null;
+
+  return Object.freeze({
+    action: "turn_next_and_play",
+    needsTurnNext: true,
+    targetNextPage,
+    nextAyah,
+  });
+};
+
+/**
+ * Resolves full selectedAyah metadata from rendered hitboxes or pageCache so both the
+ * canvas highlight and the interactive verse study sheet update in lockstep with audio.
+ */
+export const findAyahMetadataOnSpread = ({
+  surahNum,
+  ayahNum,
+  rPage,
+  lPage,
+  isSingleMode = false,
+  pageCache = {},
+  boxesRight = [],
+  boxesLeft = [],
+}) => {
+  const boxHit = [...(boxesRight || []), ...(boxesLeft || [])].find(
+    (b) => b.surahNum === surahNum && b.ayahNum === ayahNum
+  );
+  if (boxHit) return boxHit;
+
+  const candidatePages = isSingleMode ? [rPage] : [rPage, lPage].filter(Boolean);
+  for (const p of candidatePages) {
+    const list = pageCache[p];
+    if (!Array.isArray(list)) continue;
+    const found = list.find(
+      (a) => a?.surah?.number === surahNum && a?.numberInSurah === ayahNum
+    );
+    if (found) {
+      return {
+        key: `${surahNum}:${ayahNum}`,
+        surahNum,
+        ayahNum,
+        surahName: found.surah?.name || "",
+        surahEng: found.surah?.englishName || "",
+        text: found.text || "",
+        pageNum: p,
+      };
+    }
+  }
+  return null;
 };
 
 /**

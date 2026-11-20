@@ -22,6 +22,7 @@ import {
   MUSHAF_TOTAL_PAGES,
   MUSHAF_DOUBLE_SPREADS,
   BOOK3D_SPEC,
+  BOOK3D_ZOOM,
   evalStaticPageLocalY,
   evalFlipPivotState,
   evalFlipSheetPoint,
@@ -29,6 +30,14 @@ import {
   buildPageRenderCacheKey,
   createPageCanvasCache,
   computeSpreadPages,
+  computeWheelZoomDist,
+  computePinchZoomDist,
+  step3DZoomDist,
+  computeCameraPositionForZoom,
+  computeZoomPercent,
+  clamp2DZoomScale,
+  resolveSpreadPlaybackStep,
+  findAyahMetadataOnSpread,
 } from "../../utils/quranBookEngine.js";
 import { withErrorRecovery, ERROR_CODES } from "../../utils/errorManager.js";
 
@@ -629,7 +638,13 @@ export function QuranBook3DPage({
   const [reciterKey, setReciterKey] = useState("alafasy");
   const [audioSpeed] = useState(1.0);
   const [currentAudioAyah, setCurrentAudioAyah] = useState(null);
+  const [zoomPercent, setZoomPercent] = useState(100);
+  const [zoom2dScale, setZoom2dScale] = useState(BOOK3D_ZOOM.default2DScale);
   const audioRef = useRef(null);
+  const translationReqIdRef = useRef(0);
+  const pendingAutoPlayRef = useRef(null);
+  const isSingleModeRef = useRef(isSingleMode);
+  isSingleModeRef.current = isSingleMode;
 
   // Three.js Scene Refs
   const containerRef = useRef(null);
@@ -659,13 +674,20 @@ export function QuranBook3DPage({
   const pageCacheRef = useRef(pageCache);
   pageCacheRef.current = pageCache;
 
-  // Animation & Orbit Interaction Refs
+  // Animation, Orbit & Zoom Interaction Refs
   const isDraggingRef = useRef(false);
   const dragDistRef = useRef(0);
   const prevMousePosRef = useRef({ x: 0, y: 0 });
+  const activePointersRef = useRef(new Map());
+  const pinchStateRef = useRef({
+    active: false,
+    startTouchDist: 0,
+    startZoomDist: BOOK3D_ZOOM.defaultDesktopDist,
+  });
   const targetRotationRef = useRef({ x: 0.35, y: 0.0 });
   const currentRotationRef = useRef({ x: 0.35, y: 0.0 });
-  const zoomDistRef = useRef(4.8);
+  const zoomDistRef = useRef(BOOK3D_ZOOM.defaultDesktopDist);
+  const targetZoomRef = useRef(BOOK3D_ZOOM.defaultDesktopDist);
   const flipAnimRef = useRef({
     active: false,
     progress: 0,
@@ -683,12 +705,18 @@ export function QuranBook3DPage({
       if (typeof window === "undefined") return;
       const isMobile = window.innerWidth < 768;
       setIsSingleMode(isMobile);
-      zoomDistRef.current = isMobile ? 5.6 : 4.8;
+      isSingleModeRef.current = isMobile;
+      const defaultDist = isMobile ? BOOK3D_ZOOM.defaultMobileDist : BOOK3D_ZOOM.defaultDesktopDist;
+      zoomDistRef.current = defaultDist;
+      targetZoomRef.current = defaultDist;
+      setZoomPercent(computeZoomPercent(defaultDist, isMobile));
       if (cameraRef.current && rendererRef.current && containerRef.current) {
         const w = containerRef.current.clientWidth || window.innerWidth;
         const h = containerRef.current.clientHeight || 460;
+        const camPos = computeCameraPositionForZoom(defaultDist, isMobile);
         cameraRef.current.aspect = w / h;
-        cameraRef.current.position.z = zoomDistRef.current;
+        cameraRef.current.position.set(0, camPos.y, camPos.z);
+        cameraRef.current.lookAt(0, -0.1, 0);
         cameraRef.current.updateProjectionMatrix();
         rendererRef.current.setSize(w, h, false);
         requestRenderRef.current();
@@ -862,7 +890,8 @@ export function QuranBook3DPage({
     }
 
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 60);
-    camera.position.set(0, 2.25, zoomDistRef.current);
+    const initialCam = computeCameraPositionForZoom(zoomDistRef.current, isSingleModeRef.current);
+    camera.position.set(0, initialCam.y, initialCam.z);
     camera.lookAt(0, -0.1, 0);
     cameraRef.current = camera;
 
@@ -1250,6 +1279,16 @@ export function QuranBook3DPage({
         bookGroup.rotation.y = currentRotationRef.current.y;
       }
 
+      const zoomDiff = targetZoomRef.current - zoomDistRef.current;
+      const zoomMoving = Math.abs(zoomDiff) > 0.002;
+      if (zoomMoving) {
+        const zBlend = Math.min(1, dt * 10);
+        zoomDistRef.current += zoomDiff * zBlend;
+        const camPos = computeCameraPositionForZoom(zoomDistRef.current, isSingleModeRef.current);
+        camera.position.set(0, camPos.y, camPos.z);
+        camera.lookAt(0, -0.1, 0);
+      }
+
       // Sync stand & dust visibility without traversing unnecessarily
       if (standGroup.visible !== showStandRef.current) {
         standGroup.visible = showStandRef.current;
@@ -1301,8 +1340,8 @@ export function QuranBook3DPage({
         console.warn("Render loop error:", renderErr);
       }
 
-      // Continue ticking only when animating, orbiting, or subtle dust particles active on GPU
-      if (fAnim.active || orbitMoving || dustActive) {
+      // Continue ticking while animating, orbiting, zooming, or dust active on GPU
+      if (fAnim.active || orbitMoving || zoomMoving || dustActive) {
         rafId = requestAnimationFrame(renderFrame);
       }
     };
@@ -1314,6 +1353,16 @@ export function QuranBook3DPage({
     };
     requestRenderRef.current = scheduleFrame;
 
+    // Non-passive wheel zoom over WebGL canvas so scroll zooms the Mushaf smoothly
+    const onWheel = (e) => {
+      e.preventDefault();
+      const nextZ = computeWheelZoomDist(targetZoomRef.current, e.deltaY);
+      targetZoomRef.current = nextZ;
+      setZoomPercent(computeZoomPercent(nextZ, isSingleModeRef.current));
+      scheduleFrame();
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+
     // Draw initial frame cleanly
     scheduleFrame();
 
@@ -1322,6 +1371,7 @@ export function QuranBook3DPage({
       requestRenderRef.current = () => {};
       if (rafId) cancelAnimationFrame(rafId);
       if (resizeObserver) resizeObserver.disconnect();
+      container.removeEventListener("wheel", onWheel);
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
 
       // Explicit GPU disposal
@@ -1455,6 +1505,7 @@ export function QuranBook3DPage({
 
   const turnPrev = useCallback(() => {
     if (spread <= 1) return;
+    pendingAutoPlayRef.current = null;
 
     if (viewMode === "2d" || webglFailed) {
       setSpread((s) => Math.max(1, s - 1));
@@ -1525,6 +1576,7 @@ export function QuranBook3DPage({
 
   const jumpToPage = useCallback(
     (targetPage) => {
+      pendingAutoPlayRef.current = null;
       const p = Math.max(1, Math.min(_MUSHAF_PAGES, parseInt(targetPage, 10) || 1));
       const targetSp = isSingleMode ? p : Math.floor((p - 1) / 2) + 1;
       setSpread(targetSp);
@@ -1544,8 +1596,40 @@ export function QuranBook3DPage({
     [jumpToPage]
   );
 
-  // ── 3D Orbit Drag & Raycast Ayah Selection ──
+  // ── Zoom Helpers (3D camera + 2D scale) ──
+  const handleZoomStep = useCallback(
+    (direction) => {
+      if (viewMode === "3d" && !webglFailed) {
+        const nextZ = step3DZoomDist(targetZoomRef.current, direction);
+        targetZoomRef.current = nextZ;
+        setZoomPercent(computeZoomPercent(nextZ, isSingleModeRef.current));
+        requestRenderRef.current();
+      } else {
+        setZoom2dScale((s) => {
+          const nextScale = clamp2DZoomScale(s + (direction < 0 ? 0.15 : -0.15));
+          setZoomPercent(Math.round(nextScale * 100));
+          return nextScale;
+        });
+      }
+    },
+    [viewMode, webglFailed]
+  );
+
+  // ── 3D Orbit Drag, Pinch-Zoom & Raycast Ayah Selection ──
   const handlePointerDown = (e) => {
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointersRef.current.size === 2) {
+      const [p1, p2] = Array.from(activePointersRef.current.values());
+      pinchStateRef.current = {
+        active: true,
+        startTouchDist: Math.max(10, Math.hypot(p2.x - p1.x, p2.y - p1.y)),
+        startZoomDist: targetZoomRef.current,
+      };
+      isDraggingRef.current = false;
+      dragDistRef.current = 100;
+      return;
+    }
+    pinchStateRef.current.active = false;
     isDraggingRef.current = true;
     dragDistRef.current = 0;
     prevMousePosRef.current = { x: e.clientX, y: e.clientY };
@@ -1553,6 +1637,24 @@ export function QuranBook3DPage({
   };
 
   const handlePointerMove = (e) => {
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (activePointersRef.current.size === 2 && pinchStateRef.current.active) {
+      const [p1, p2] = Array.from(activePointersRef.current.values());
+      const curDist = Math.max(10, Math.hypot(p2.x - p1.x, p2.y - p1.y));
+      const nextZ = computePinchZoomDist(
+        pinchStateRef.current.startZoomDist,
+        pinchStateRef.current.startTouchDist,
+        curDist
+      );
+      targetZoomRef.current = nextZ;
+      setZoomPercent(computeZoomPercent(nextZ, isSingleModeRef.current));
+      dragDistRef.current = 100;
+      requestRenderRef.current();
+      return;
+    }
+
     if (!isDraggingRef.current) return;
     const dx = e.clientX - prevMousePosRef.current.x;
     const dy = e.clientY - prevMousePosRef.current.y;
@@ -1566,12 +1668,36 @@ export function QuranBook3DPage({
     requestRenderRef.current();
   };
 
-  const handlePointerUp = () => {
-    isDraggingRef.current = false;
+  const handlePointerUp = (e) => {
+    if (e?.pointerId !== undefined) {
+      activePointersRef.current.delete(e.pointerId);
+    } else {
+      activePointersRef.current.clear();
+    }
+    if (activePointersRef.current.size < 2) {
+      pinchStateRef.current.active = false;
+    }
+    if (activePointersRef.current.size === 0) {
+      isDraggingRef.current = false;
+    }
   };
 
+  const selectAyahWithTranslation = useCallback(
+    (ayahMeta) => {
+      if (!ayahMeta) return;
+      setSelectedAyah(ayahMeta);
+      const reqId = ++translationReqIdRef.current;
+      fetchSurahTranslation(ayahMeta.surahNum, transLang).then((list) => {
+        if (translationReqIdRef.current !== reqId) return;
+        const item = (list || []).find((t) => t.numberInSurah === ayahMeta.ayahNum);
+        setAyahTranslation(item?.text || "Traduction indisponible.");
+      });
+    },
+    [transLang]
+  );
+
   const handleClickOnCanvas = (e) => {
-    // Ignore drags so orbiting never accidentally triggers verse sheet
+    // Ignore drags or pinch gestures so orbiting/zooming never accidentally triggers verse sheet
     if (dragDistRef.current > 8) return;
     if (!containerRef.current || !cameraRef.current || !sceneRef.current) return;
 
@@ -1599,22 +1725,25 @@ export function QuranBook3DPage({
         const matched = boxes.find(
           (b) => uv.x >= b.uMin && uv.x <= b.uMax && uv.y >= b.vMin && uv.y <= b.vMax
         );
-
         if (matched) {
-          setSelectedAyah(matched);
-          fetchSurahTranslation(matched.surahNum, transLang).then((list) => {
-            const item = list.find((t) => t.numberInSurah === matched.ayahNum);
-            setAyahTranslation(item?.text || "Traduction indisponible.");
-          });
+          selectAyahWithTranslation(matched);
         }
       }
     }
   };
 
   const reset3DView = () => {
+    const defaultDist = isSingleModeRef.current
+      ? BOOK3D_ZOOM.defaultMobileDist
+      : BOOK3D_ZOOM.defaultDesktopDist;
     targetRotationRef.current = { x: 0.35, y: 0.0 };
+    targetZoomRef.current = defaultDist;
+    zoomDistRef.current = defaultDist;
+    setZoom2dScale(BOOK3D_ZOOM.default2DScale);
+    setZoomPercent(100);
     if (cameraRef.current) {
-      cameraRef.current.position.set(0, 2.25, zoomDistRef.current);
+      const camPos = computeCameraPositionForZoom(defaultDist, isSingleModeRef.current);
+      cameraRef.current.position.set(0, camPos.y, camPos.z);
       cameraRef.current.lookAt(0, -0.1, 0);
     }
     requestRenderRef.current();
@@ -1631,13 +1760,8 @@ export function QuranBook3DPage({
       const matched = boxes.find(
         (b) => u >= b.uMin && u <= b.uMax && v3d >= b.vMin && v3d <= b.vMax
       );
-
       if (matched) {
-        setSelectedAyah(matched);
-        fetchSurahTranslation(matched.surahNum, transLang).then((list) => {
-          const item = list.find((t) => t.numberInSurah === matched.ayahNum);
-          setAyahTranslation(item?.text || "Traduction indisponible.");
-        });
+        selectAyahWithTranslation(matched);
       }
     }
   };
@@ -1650,6 +1774,8 @@ export function QuranBook3DPage({
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       if (e.key === "ArrowLeft") turnNext();
       if (e.key === "ArrowRight") turnPrev();
+      if (e.key === "+" || e.key === "=") handleZoomStep(-1);
+      if (e.key === "-") handleZoomStep(1);
       if (e.key === "Escape") {
         setSelectedAyah(null);
         setShowSurahDrawer(false);
@@ -1663,31 +1789,93 @@ export function QuranBook3DPage({
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [turnNext, turnPrev]);
+  }, [turnNext, turnPrev, handleZoomStep]);
 
-  // ── Audio Handling ──
-  const handlePlayAyah = (surahNum, ayahNum) => {
-    const reciterObj = GLOBAL_RECITERS.find((r) => r.key === reciterKey) || GLOBAL_RECITERS[0];
-    const sPadded = String(surahNum).padStart(3, "0");
-    const aPadded = String(ayahNum).padStart(3, "0");
-    const audioUrl = `${reciterObj.url}/${sPadded}${aPadded}.mp3`;
+  // ── Audio Handling (Synced selectedAyah + continuous RTL spread -> next spread playback) ──
+  const handlePlayAyah = useCallback(
+    (surahNum, ayahNum, explicitAyahMeta = null) => {
+      const reciterObj = GLOBAL_RECITERS.find((r) => r.key === reciterKey) || GLOBAL_RECITERS[0];
+      const sPadded = String(surahNum).padStart(3, "0");
+      const aPadded = String(ayahNum).padStart(3, "0");
+      const audioUrl = `${reciterObj.url}/${sPadded}${aPadded}.mp3`;
 
-    if (audioRef.current) {
-      audioRef.current.src = audioUrl;
-      audioRef.current.playbackRate = audioSpeed;
-      audioRef.current.play().catch(() => {});
-      setIsPlaying(true);
-      setCurrentAudioAyah({ surahNum, ayahNum });
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.playbackRate = audioSpeed;
+        audioRef.current.play().catch(() => {});
+        setIsPlaying(true);
+        setCurrentAudioAyah({ surahNum, ayahNum });
+      }
+
+      const resolvedMeta =
+        (explicitAyahMeta && explicitAyahMeta.surahName && explicitAyahMeta.text
+          ? explicitAyahMeta
+          : null) ||
+        findAyahMetadataOnSpread({
+          surahNum,
+          ayahNum,
+          rPage,
+          lPage,
+          isSingleMode,
+          pageCache: pageCacheRef.current,
+          boxesRight: rightBoxesRef.current,
+          boxesLeft: leftBoxesRef.current,
+        }) ||
+        explicitAyahMeta;
+
+      if (resolvedMeta) {
+        selectAyahWithTranslation(resolvedMeta);
+      }
+    },
+    [reciterKey, audioSpeed, rPage, lPage, isSingleMode, selectAyahWithTranslation]
+  );
+
+  // Resume pending continuous playback seamlessly once the flipped spread lands & page loads
+  useEffect(() => {
+    const pending = pendingAutoPlayRef.current;
+    if (!pending) return;
+    if (spread !== pending.expectedSpread || flipAnimRef.current.active) return;
+
+    const firstPageList = pageCache[rPage];
+    if (Array.isArray(firstPageList) && firstPageList.length > 0) {
+      pendingAutoPlayRef.current = null;
+      const firstAyah = firstPageList[0];
+      handlePlayAyah(firstAyah.surah.number, firstAyah.numberInSurah, {
+        key: `${firstAyah.surah.number}:${firstAyah.numberInSurah}`,
+        surahNum: firstAyah.surah.number,
+        ayahNum: firstAyah.numberInSurah,
+        surahName: firstAyah.surah?.name || "",
+        surahEng: firstAyah.surah?.englishName || "",
+        text: firstAyah.text || "",
+      });
     }
-  };
+  }, [spread, pageCache, rPage, handlePlayAyah]);
 
   const togglePlayCurrentPage = () => {
     if (isPlaying) {
+      pendingAutoPlayRef.current = null;
       if (audioRef.current) audioRef.current.pause();
       setIsPlaying(false);
     } else {
-      const activePage = rPage;
-      const ayahs = pageCache[activePage];
+      const target =
+        selectedAyah &&
+        findAyahMetadataOnSpread({
+          surahNum: selectedAyah.surahNum,
+          ayahNum: selectedAyah.ayahNum,
+          rPage,
+          lPage,
+          isSingleMode,
+          pageCache: pageCacheRef.current,
+        })
+          ? selectedAyah
+          : null;
+
+      if (target) {
+        handlePlayAyah(target.surahNum, target.ayahNum, target);
+        return;
+      }
+
+      const ayahs = pageCache[rPage];
       if (ayahs && ayahs.length) {
         handlePlayAyah(ayahs[0].surah.number, ayahs[0].numberInSurah);
       }
@@ -1697,20 +1885,31 @@ export function QuranBook3DPage({
 
   const handleAudioEnded = () => {
     if (!currentAudioAyah) return;
-    const activeAyahs = pageCache[rPage] || [];
-    const currIdx = activeAyahs.findIndex(
-      (a) =>
-        a.surah.number === currentAudioAyah.surahNum &&
-        a.numberInSurah === currentAudioAyah.ayahNum
-    );
+    const step = resolveSpreadPlaybackStep({
+      currentAudioAyah,
+      rPage,
+      lPage,
+      isSingleMode,
+      pageCache: pageCacheRef.current,
+      totalPages: _MUSHAF_PAGES,
+    });
 
-    if (currIdx >= 0 && currIdx < activeAyahs.length - 1) {
-      const nextA = activeAyahs[currIdx + 1];
-      handlePlayAyah(nextA.surah.number, nextA.numberInSurah);
-    } else {
-      turnNext();
-      setIsPlaying(false);
+    if (step.action === "play_ayah" && step.nextAyah) {
+      handlePlayAyah(step.nextAyah.surahNum, step.nextAyah.ayahNum, step.nextAyah);
+      return;
     }
+
+    if (step.action === "turn_next_and_play" && step.needsTurnNext) {
+      pendingAutoPlayRef.current = {
+        expectedSpread: spread + 1,
+        expectedPage: step.targetNextPage,
+      };
+      turnNext();
+      return;
+    }
+
+    pendingAutoPlayRef.current = null;
+    setIsPlaying(false);
   };
 
   // ── Bookmark ──
@@ -1796,7 +1995,7 @@ export function QuranBook3DPage({
         overflow: "hidden",
       }}
     >
-      <audio ref={audioRef} onEnded={handleAudioEnded} />
+      <audio data-testid="q3d-audio-el" ref={audioRef} onEnded={handleAudioEnded} />
 
       {/* ── Top Header Navigation Bar ───────────────────────────────── */}
       <header
@@ -1926,6 +2125,64 @@ export function QuranBook3DPage({
             {activeTajweedCount > 0 && <span>({activeTajweedCount})</span>}
           </button>
 
+          {/* Zoom Controls (3D camera & 2D magnification) */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 3,
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(212,175,55,0.28)",
+              borderRadius: 8,
+              padding: "2px 4px",
+            }}
+          >
+            <button
+              data-testid="q3d-zoom-out"
+              onClick={() => handleZoomStep(1)}
+              title="Dézoomer (-)"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#d4af37",
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 800,
+                padding: "3px 7px",
+              }}
+            >
+              −
+            </button>
+            <span
+              data-testid="q3d-zoom-badge"
+              style={{
+                fontSize: 11,
+                fontFamily: "'Cinzel', serif",
+                color: "#ebd8b0",
+                minWidth: 38,
+                textAlign: "center",
+              }}
+            >
+              {zoomPercent}%
+            </span>
+            <button
+              data-testid="q3d-zoom-in"
+              onClick={() => handleZoomStep(-1)}
+              title="Zoomer (+)"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#d4af37",
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 800,
+                padding: "3px 7px",
+              }}
+            >
+              +
+            </button>
+          </div>
+
           {viewMode === "3d" && !webglFailed && (
             <>
               <button
@@ -1966,8 +2223,9 @@ export function QuranBook3DPage({
               </button>
 
               <button
+                data-testid="q3d-reset-view"
                 onClick={reset3DView}
-                title="Réinitialiser l'angle de vue"
+                title="Réinitialiser l'angle et le zoom"
                 style={{
                   background: "rgba(255,255,255,0.05)",
                   border: "1px solid rgba(255,255,255,0.15)",
@@ -2008,19 +2266,23 @@ export function QuranBook3DPage({
         {viewMode === "3d" && !webglFailed ? (
           <div
             ref={containerRef}
+            data-testid="q3d-webgl-container"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onPointerLeave={handlePointerUp}
             onClick={handleClickOnCanvas}
             style={{
               width: "100%",
               height: "100%",
               minHeight: 460,
               cursor: "grab",
+              touchAction: "none",
             }}
           />
         ) : (
-          /* 2D Medina Mushaf Page Reader Mode (High-DPI sharp layout) */
+          /* 2D Medina Mushaf Page Reader Mode (High-DPI sharp layout with 2D zoom) */
           <div
             style={{
               width: "100%",
@@ -2035,49 +2297,63 @@ export function QuranBook3DPage({
               overflow: "auto",
             }}
           >
-            {/* Left Page (Double page view) */}
-            {!isSingleMode && leftCanvas && (
-              <div
-                data-testid="q3d-2d-left-page"
-                style={{
-                  flex: "1 1 0",
-                  maxWidth: 480,
-                  maxHeight: "calc(100vh - 220px)",
-                  aspectRatio: "1024/1536",
-                  boxShadow: "0 15px 45px rgba(0,0,0,0.85), 0 0 0 1px rgba(212,175,55,0.35)",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  cursor: "pointer",
-                  transition: "transform 0.2s ease",
-                }}
-                onClick={(e) => handle2DCanvasClick(e, false)}
-                title="Page Gauche — Touchez un verset"
-              >
-                <CanvasMirror canvas={leftCanvas} alt={`Page ${lPage}`} />
-              </div>
-            )}
+            <div
+              data-testid="q3d-2d-spread-stage"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 16,
+                width: "100%",
+                transform: `scale(${zoom2dScale})`,
+                transformOrigin: "center top",
+                transition: "transform 0.18s ease",
+              }}
+            >
+              {/* Left Page (Double page view) */}
+              {!isSingleMode && leftCanvas && (
+                <div
+                  data-testid="q3d-2d-left-page"
+                  style={{
+                    flex: "1 1 0",
+                    maxWidth: 480,
+                    maxHeight: "calc(100vh - 220px)",
+                    aspectRatio: "1024/1536",
+                    boxShadow: "0 15px 45px rgba(0,0,0,0.85), 0 0 0 1px rgba(212,175,55,0.35)",
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    cursor: "pointer",
+                    transition: "transform 0.2s ease",
+                  }}
+                  onClick={(e) => handle2DCanvasClick(e, false)}
+                  title="Page Gauche — Touchez un verset"
+                >
+                  <CanvasMirror canvas={leftCanvas} alt={`Page ${lPage}`} />
+                </div>
+              )}
 
-            {/* Right Page */}
-            {rightCanvas && (
-              <div
-                data-testid="q3d-2d-right-page"
-                style={{
-                  flex: "1 1 0",
-                  maxWidth: 480,
-                  maxHeight: "calc(100vh - 220px)",
-                  aspectRatio: "1024/1536",
-                  boxShadow: "0 15px 45px rgba(0,0,0,0.85), 0 0 0 1px rgba(212,175,55,0.35)",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  cursor: "pointer",
-                  transition: "transform 0.2s ease",
-                }}
-                onClick={(e) => handle2DCanvasClick(e, true)}
-                title="Page Droite — Touchez un verset"
-              >
-                <CanvasMirror canvas={rightCanvas} alt={`Page ${rPage}`} />
-              </div>
-            )}
+              {/* Right Page */}
+              {rightCanvas && (
+                <div
+                  data-testid="q3d-2d-right-page"
+                  style={{
+                    flex: "1 1 0",
+                    maxWidth: 480,
+                    maxHeight: "calc(100vh - 220px)",
+                    aspectRatio: "1024/1536",
+                    boxShadow: "0 15px 45px rgba(0,0,0,0.85), 0 0 0 1px rgba(212,175,55,0.35)",
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    cursor: "pointer",
+                    transition: "transform 0.2s ease",
+                  }}
+                  onClick={(e) => handle2DCanvasClick(e, true)}
+                  title="Page Droite — Touchez un verset"
+                >
+                  <CanvasMirror canvas={rightCanvas} alt={`Page ${rPage}`} />
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -2160,7 +2436,7 @@ export function QuranBook3DPage({
           }}
         >
           {viewMode === "3d" && !webglFailed
-            ? "🖐️ Glissez pour incliner le Mushaf 3D • Touchez un verset pour l'étudier"
+            ? "🖐️ Glissez pour incliner • Molette / Pincement pour zoomer • Touchez un verset"
             : "📖 Mushaf de Médine • Touchez un verset pour l'écouter et voir sa traduction"}
         </div>
       </main>
@@ -2184,6 +2460,7 @@ export function QuranBook3DPage({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button
+            data-testid="q3d-play-btn"
             onClick={togglePlayCurrentPage}
             style={{
               width: 40,
@@ -2272,6 +2549,7 @@ export function QuranBook3DPage({
       {/* ── Selected Ayah Interactive Sheet ─────────────────────────── */}
       {selectedAyah && (
         <div
+          data-testid="q3d-selected-sheet"
           style={{
             position: "fixed",
             bottom: 0,

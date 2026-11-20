@@ -6,6 +6,7 @@ import { sel } from "../../store.js";
 import { computeDisplayedPartMastery, masteryColor } from "../common/Mastery.jsx";
 import {
   MUSHAF_TOTAL_PAGES,
+  OPEN_ANIM_DURATION_MS,
   computeCssBookLayout,
   computeCssBookPresentation,
   computeSpreadPages,
@@ -22,6 +23,7 @@ export function QuranBookPage({ surahs }) {
   const [pageCache, setPageCache] = useState({});
   const [inputVal, setInputVal] = useState("1");
   const [bookOpen, setBookOpen] = useState(false);
+  const [isOpening, setIsOpening] = useState(false);
   const [sz, setSz] = useState(() =>
     computeCssBookLayout(
       typeof window !== "undefined" ? { vw: window.innerWidth, vh: window.innerHeight } : {}
@@ -93,18 +95,21 @@ export function QuranBookPage({ surahs }) {
     if (rPage) setInputVal(String(rPage));
   }, [rPage]);
 
-  // Open book: reveal spread 1 immediately underneath while cover flips open & disappears
+  // Open book: lift cover from right side, then unfold left page smoothly as cover crosses spine
   const openBook = useCallback(() => {
     if (bookOpen) return;
     setBookOpen(true);
+    setIsOpening(true);
     setSpread((s) => (s === 0 ? 1 : s));
     setFlipState("idle");
-  }, [bookOpen]);
+    scheduleTimer(() => setIsOpening(false), OPEN_ANIM_DURATION_MS);
+  }, [bookOpen, scheduleTimer]);
 
   const closeBook = useCallback(() => {
     setFlipState("idle");
+    setIsOpening(false);
     setBookOpen(false);
-    scheduleTimer(() => setSpread(0), 820);
+    scheduleTimer(() => setSpread(0), OPEN_ANIM_DURATION_MS);
   }, [scheduleTimer]);
 
   const goNext = useCallback(async () => {
@@ -182,6 +187,7 @@ export function QuranBookPage({ surahs }) {
 
   const pres = computeCssBookPresentation({
     bookOpen,
+    isOpening,
     spread,
     flipState,
     pageWidth: pageW,
@@ -489,6 +495,21 @@ export function QuranBookPage({ surahs }) {
         <div
           data-testid="qbook-root"
           data-open={bookOpen ? "true" : "false"}
+          data-opening={pres.isOpening ? "true" : "false"}
+          onClick={!bookOpen ? openBook : undefined}
+          role={!bookOpen ? "button" : undefined}
+          tabIndex={!bookOpen ? 0 : undefined}
+          aria-label={!bookOpen ? "Ouvrir le Saint Coran" : undefined}
+          onKeyDown={
+            !bookOpen
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openBook();
+                  }
+                }
+              : undefined
+          }
           style={{
             position: "relative",
             width: totalW,
@@ -496,12 +517,14 @@ export function QuranBookPage({ surahs }) {
             transformStyle: "preserve-3d",
             transition: "transform .82s cubic-bezier(.645,.045,.355,1)",
             transform: `translateX(${pres.bookTranslateX}px) rotateX(4deg)`,
+            cursor: !bookOpen ? "pointer" : "default",
           }}
         >
-          {/* ── HARDCOVER BACK (visible only once opened) ── */}
+          {/* ── HARDCOVER BACK (unfolds with left page once cover crosses spine) ── */}
           {pres.showLeftHalf && (
             <ul
               data-testid="qbook-hc-back"
+              className={pres.leftWingClassName}
               style={{
                 listStyle: "none",
                 margin: 0,
@@ -512,6 +535,7 @@ export function QuranBookPage({ surahs }) {
                 width: pageW,
                 height: pageH,
                 transformStyle: "preserve-3d",
+                transformOrigin: "right center",
                 zIndex: 0,
               }}
             >
@@ -541,7 +565,7 @@ export function QuranBookPage({ surahs }) {
             </ul>
           )}
 
-          {/* ── STACKED PAGES (right half only when closed, full spread when opened) ── */}
+          {/* ── STACKED PAGES (right half only when closed, expands left smoothly as cover opens) ── */}
           <ul
             style={{
               listStyle: "none",
@@ -554,6 +578,9 @@ export function QuranBookPage({ surahs }) {
               height: pageH - 6,
               transformStyle: "preserve-3d",
               zIndex: 1,
+              transition: pres.isOpening
+                ? "left .42s cubic-bezier(.25,.8,.25,1) .39s, width .42s cubic-bezier(.25,.8,.25,1) .39s"
+                : "none",
             }}
           >
             {[0, 1, 2, 3, 4].map((k) => (
@@ -573,10 +600,11 @@ export function QuranBookPage({ surahs }) {
             ))}
           </ul>
 
-          {/* ── LEFT PAGE (even) — strictly hidden when book is closed ── */}
+          {/* ── LEFT PAGE (even) — strictly hidden while closed, unfolds from spine during opening ── */}
           {pres.showLeftHalf && (
             <div
               data-testid="qbook-left-page"
+              className={pres.leftWingClassName}
               style={{
                 position: "absolute",
                 top: 0,
@@ -585,6 +613,7 @@ export function QuranBookPage({ surahs }) {
                 height: pageH,
                 zIndex: 2,
                 overflow: "hidden",
+                transformOrigin: "right center",
                 background: "linear-gradient(160deg,#fef9ee,#fdf3d8,#faecc0)",
                 borderRadius: "2px 0 0 2px",
                 boxShadow: "inset 8px 0 20px rgba(0,0,0,.08), -4px 12px 28px rgba(0,0,0,.6)",
@@ -669,11 +698,12 @@ export function QuranBookPage({ surahs }) {
             </div>
           )}
 
-          {/* ── HARDCOVER FRONT (flips away & hides completely once open) ── */}
+          {/* ── HARDCOVER FRONT (flips away & hides completely once open; clickable anywhere while closed) ── */}
           <ul
             data-testid="qbook-hc-front"
             className={`qbook-hc-front${bookOpen ? " qbook-open" : ""}`}
             aria-hidden={bookOpen ? "true" : "false"}
+            onClick={!bookOpen ? openBook : undefined}
             style={{
               listStyle: "none",
               margin: 0,
@@ -690,6 +720,7 @@ export function QuranBookPage({ surahs }) {
               opacity: pres.frontCover.hidden ? 0 : 1,
               visibility: pres.frontCover.hidden ? "hidden" : "visible",
               pointerEvents: pres.frontCover.pointerEvents,
+              cursor: pres.frontCover.cursor,
               transition: bookOpen
                 ? "transform .82s cubic-bezier(.645,.045,.355,1), opacity .26s ease .52s, visibility 0s linear .78s"
                 : "transform .82s cubic-bezier(.645,.045,.355,1), opacity .15s ease 0s, visibility 0s linear 0s",
@@ -717,7 +748,14 @@ export function QuranBookPage({ surahs }) {
                 <div className="qbook-cover-title">القرآن الكريم</div>
                 <div className="qbook-cover-sub">THE NOBLE QURAN</div>
                 {!bookOpen && (
-                  <button className="qbook-open-btn" style={{ marginTop: 16 }} onClick={openBook}>
+                  <button
+                    className="qbook-open-btn"
+                    style={{ marginTop: 16 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openBook();
+                    }}
+                  >
                     OUVRIR LE LIVRE
                   </button>
                 )}
@@ -788,7 +826,7 @@ export function QuranBookPage({ surahs }) {
             </>
           )}
 
-          {/* ── Top & bottom hardcover boards (right half when closed, full spread when opened) ── */}
+          {/* ── Top & bottom hardcover boards (right half when closed, unfolds smoothly to full spread) ── */}
           <div
             style={{
               position: "absolute",
@@ -799,6 +837,7 @@ export function QuranBookPage({ surahs }) {
               background: "linear-gradient(to bottom,#1e0602,#5a1a08)",
               borderRadius: "2px 2px 0 0",
               boxShadow: "0 -2px 8px rgba(0,0,0,.5)",
+              transition: pres.isOpening ? "left .42s cubic-bezier(.25,.8,.25,1) .39s" : "none",
             }}
           />
           <div
@@ -811,6 +850,7 @@ export function QuranBookPage({ surahs }) {
               background: "linear-gradient(to top,#1e0602,#5a1a08)",
               borderRadius: "0 0 2px 2px",
               boxShadow: "0 2px 8px rgba(0,0,0,.5)",
+              transition: pres.isOpening ? "left .42s cubic-bezier(.25,.8,.25,1) .39s" : "none",
             }}
           />
         </div>

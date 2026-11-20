@@ -8,10 +8,21 @@ import { store, uiActions, sel } from "../src/store.js";
 import {
   MUSHAF_TOTAL_PAGES,
   MUSHAF_DOUBLE_SPREADS,
+  OPEN_ANIM_DURATION_MS,
   BOOK3D_SPEC,
+  BOOK3D_ZOOM,
   computeCssBookLayout,
   computeCssBookPresentation,
   computeSpreadPages,
+  clamp3DZoomDist,
+  computeWheelZoomDist,
+  computePinchZoomDist,
+  step3DZoomDist,
+  computeCameraPositionForZoom,
+  computeZoomPercent,
+  clamp2DZoomScale,
+  resolveSpreadPlaybackStep,
+  findAyahMetadataOnSpread,
   evalStaticPageLocalY,
   evalStaticPageWorldPoint,
   evalRehalTopWorldYAtDistance,
@@ -196,6 +207,54 @@ describe("CSS Quran & 3D Quran Engine + Component Fixes", () => {
         act(() => {
           vi.advanceTimersByTime(850);
         });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("opens CSS book when clicking directly on the closed book cover itself AND unfolds left wing cleanly via qbook-opening-left", () => {
+      vi.useFakeTimers();
+      try {
+        render(
+          React.createElement(
+            Provider,
+            { store },
+            React.createElement(
+              MemoryRouter,
+              null,
+              React.createElement(QuranBookPage, {
+                surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha", startPage: 1 }],
+              })
+            )
+          )
+        );
+
+        const root = document.querySelector('[data-testid="qbook-root"]');
+        const coverTitle = document.querySelector(".qbook-cover-title");
+        expect(root.getAttribute("data-open")).toBe("false");
+        expect(document.querySelector('[data-testid="qbook-left-page"]')).toBeNull();
+
+        // Click directly on the cover surface / title (not the button)
+        act(() => {
+          fireEvent.click(coverTitle);
+        });
+
+        expect(root.getAttribute("data-open")).toBe("true");
+        expect(root.getAttribute("data-opening")).toBe("true");
+
+        // During the opening swing, left page & back cover carry .qbook-opening-left so they stay folded edge-on until cover crosses spine
+        const leftPage = document.querySelector('[data-testid="qbook-left-page"]');
+        const backCover = document.querySelector('[data-testid="qbook-hc-back"]');
+        expect(leftPage).toBeTruthy();
+        expect(leftPage.className).toContain("qbook-opening-left");
+        expect(backCover.className).toContain("qbook-opening-left");
+
+        // Once opening finishes (820ms), left wing settles flat cleanly
+        act(() => {
+          vi.advanceTimersByTime(OPEN_ANIM_DURATION_MS + 10);
+        });
+        expect(root.getAttribute("data-opening")).toBe("false");
+        expect(document.querySelector('[data-testid="qbook-left-page"]').className).not.toContain("qbook-opening-left");
       } finally {
         vi.useRealTimers();
       }
@@ -405,6 +464,300 @@ describe("CSS Quran & 3D Quran Engine + Component Fixes", () => {
       const initialQalqala = sel.showQalqala(store.getState());
       store.dispatch(uiActions.toggleQalqala());
       expect(sel.showQalqala(store.getState())).toBe(!initialQalqala);
+    });
+
+    it("supports zooming via +/- header buttons and resets zoom cleanly", async () => {
+      const drawCtxStub = {
+        fillStyle: "",
+        strokeStyle: "",
+        lineWidth: 1,
+        font: "",
+        textAlign: "",
+        textBaseline: "",
+        fillRect: vi.fn(),
+        strokeRect: vi.fn(),
+        fillText: vi.fn(),
+        drawImage: vi.fn(),
+        measureText: vi.fn((txt) => ({ width: (txt?.length || 1) * 10 })),
+        beginPath: vi.fn(),
+        closePath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        quadraticCurveTo: vi.fn(),
+        arc: vi.fn(),
+        roundRect: vi.fn(),
+        fill: vi.fn(),
+        stroke: vi.fn(),
+        save: vi.fn(),
+        restore: vi.fn(),
+        createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+        createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+      };
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((type) =>
+        type === "2d" ? drawCtxStub : null
+      );
+
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            null,
+            React.createElement(QuranBook3DPage, {
+              surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha" }],
+            })
+          )
+        )
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector('[data-testid="q3d-zoom-badge"]')).toBeTruthy();
+      });
+
+      const badge = document.querySelector('[data-testid="q3d-zoom-badge"]');
+      const stage = document.querySelector('[data-testid="q3d-2d-spread-stage"]');
+      expect(badge.textContent).toBe("100%");
+      expect(stage.style.transform).toBe("scale(1)");
+
+      fireEvent.click(document.querySelector('[data-testid="q3d-zoom-in"]'));
+      expect(badge.textContent).toBe("115%");
+      expect(stage.style.transform).toBe("scale(1.15)");
+
+      fireEvent.click(document.querySelector('[data-testid="q3d-zoom-out"]'));
+      fireEvent.click(document.querySelector('[data-testid="q3d-zoom-out"]'));
+      expect(badge.textContent).toBe("85%");
+      expect(stage.style.transform).toBe("scale(0.85)");
+    });
+
+    it("continues audio from last ayah of RIGHT page to first ayah of LEFT page without turning, updates selectedAyah, and turns + continues at end of LEFT page", async () => {
+      const makeMockAyah = (pageNum, surahNum, ayahNum, text) => ({
+        number: pageNum * 10 + ayahNum,
+        numberInSurah: ayahNum,
+        text,
+        page: pageNum,
+        hizb: 1,
+        hizbQuarter: 1,
+        surah: { number: surahNum, name: "البَقَرَةِ", englishName: "Al-Baqarah" },
+      });
+
+      reciterAudio.fetchQuranPage.mockImplementation(async (pageNum) => {
+        if (pageNum === 1) {
+          return [
+            makeMockAyah(1, 2, 1, "آيَة ١"),
+            makeMockAyah(1, 2, 2, "آيَة ٢"),
+          ];
+        }
+        if (pageNum === 2) {
+          return [makeMockAyah(2, 2, 3, "آيَة ٣")];
+        }
+        if (pageNum === 3) {
+          return [makeMockAyah(3, 2, 4, "آيَة ٤")];
+        }
+        return [makeMockAyah(pageNum, 2, pageNum + 10, `آيَة ${pageNum}`)];
+      });
+      reciterAudio.fetchSurahTranslation.mockResolvedValue([
+        { numberInSurah: 1, text: "Traduction v1" },
+        { numberInSurah: 2, text: "Traduction v2" },
+        { numberInSurah: 3, text: "Traduction v3" },
+        { numberInSurah: 4, text: "Traduction v4" },
+      ]);
+
+      const drawCtxStub = {
+        fillStyle: "",
+        strokeStyle: "",
+        lineWidth: 1,
+        font: "",
+        textAlign: "",
+        textBaseline: "",
+        fillRect: vi.fn(),
+        strokeRect: vi.fn(),
+        fillText: vi.fn(),
+        drawImage: vi.fn(),
+        measureText: vi.fn((txt) => ({ width: (txt?.length || 1) * 10 })),
+        beginPath: vi.fn(),
+        closePath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        quadraticCurveTo: vi.fn(),
+        arc: vi.fn(),
+        roundRect: vi.fn(),
+        fill: vi.fn(),
+        stroke: vi.fn(),
+        save: vi.fn(),
+        restore: vi.fn(),
+        createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+        createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+      };
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((type) =>
+        type === "2d" ? drawCtxStub : null
+      );
+      vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
+      vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            null,
+            React.createElement(QuranBook3DPage, {
+              surahs: [{ number: 2, name: "البَقَرَةِ", englishName: "Al-Baqarah" }],
+            })
+          )
+        )
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector('[data-testid="q3d-2d-right-page"]')).toBeTruthy();
+        expect(document.querySelector('[data-testid="q3d-2d-left-page"]')).toBeTruthy();
+      });
+
+      const playBtn = document.querySelector('[data-testid="q3d-play-btn"]');
+      const audioEl = document.querySelector('[data-testid="q3d-audio-el"]');
+
+      // Start playback -> Verset 1 selected & highlighted automatically
+      fireEvent.click(playBtn);
+      await waitFor(() => {
+        const sheet = document.querySelector('[data-testid="q3d-selected-sheet"]');
+        expect(sheet).toBeTruthy();
+        expect(sheet.textContent).toContain("Verset 1");
+        expect(sheet.textContent).toContain("Traduction v1");
+      });
+      expect(audioEl.getAttribute("src")).toContain("002001.mp3");
+      expect(playBtn.textContent).toBe("⏸");
+
+      // Ayah 1 ends -> moves to Ayah 2 on RIGHT page + updates selectedAyah to Verset 2
+      fireEvent.ended(audioEl);
+      await waitFor(() => {
+        const sheet = document.querySelector('[data-testid="q3d-selected-sheet"]');
+        expect(sheet.textContent).toContain("Verset 2");
+        expect(sheet.textContent).toContain("Traduction v2");
+      });
+      expect(audioEl.getAttribute("src")).toContain("002002.mp3");
+      expect(document.querySelector('[data-testid="q3d-2d-right-page"] canvas').getAttribute("aria-label")).toBe("Page 1");
+
+      // LAST ayah of RIGHT page (Ayah 2) ends -> MUST NOT turn page! Moves straight to Page 2 (LEFT page) Ayah 3 without stopping!
+      fireEvent.ended(audioEl);
+      await waitFor(() => {
+        const sheet = document.querySelector('[data-testid="q3d-selected-sheet"]');
+        expect(sheet.textContent).toContain("Verset 3");
+        expect(sheet.textContent).toContain("Traduction v3");
+      });
+      expect(audioEl.getAttribute("src")).toContain("002003.mp3");
+      expect(document.querySelector('[data-testid="q3d-2d-right-page"] canvas').getAttribute("aria-label")).toBe("Page 1");
+      expect(playBtn.textContent).toBe("⏸");
+
+      // LAST ayah of LEFT page (Ayah 3) ends -> NOW turns to Spread 2 (Pages 3-4) AND keeps playing Ayah 4 automatically!
+      fireEvent.ended(audioEl);
+      await waitFor(() => {
+        expect(document.querySelector('[data-testid="q3d-2d-right-page"] canvas').getAttribute("aria-label")).toBe("Page 3");
+        const sheet = document.querySelector('[data-testid="q3d-selected-sheet"]');
+        expect(sheet.textContent).toContain("Verset 4");
+        expect(sheet.textContent).toContain("Traduction v4");
+      });
+      expect(audioEl.getAttribute("src")).toContain("002004.mp3");
+      expect(playBtn.textContent).toBe("⏸");
+    });
+  });
+
+  describe("6. Pure 3D/2D Zoom & Continuous RTL Playback Resolvers", () => {
+    it("clamps zoom distances & converts wheel, pinch, and button steps cleanly", () => {
+      expect(clamp3DZoomDist(0.5)).toBe(BOOK3D_ZOOM.minDist);
+      expect(clamp3DZoomDist(99)).toBe(BOOK3D_ZOOM.maxDist);
+      expect(clamp3DZoomDist(NaN)).toBe(BOOK3D_ZOOM.defaultDesktopDist);
+
+      // Negative wheel deltaY zooms in (smaller Z)
+      expect(computeWheelZoomDist(4.8, -200)).toBeLessThan(4.8);
+      // Positive wheel deltaY zooms out (larger Z)
+      expect(computeWheelZoomDist(4.8, 200)).toBeGreaterThan(4.8);
+
+      // Spreading fingers apart (pinch out: 100 -> 200) zooms in cleanly (half distance)
+      expect(computePinchZoomDist(4.8, 100, 200)).toBeCloseTo(2.4, 3);
+      // Pinching together (200 -> 100) zooms out cleanly (clamped maxDist)
+      expect(computePinchZoomDist(4.8, 200, 100)).toBe(BOOK3D_ZOOM.maxDist);
+
+      expect(step3DZoomDist(4.8, -1)).toBeCloseTo(4.8 - BOOK3D_ZOOM.buttonStep, 4);
+      expect(step3DZoomDist(4.8, 1)).toBeCloseTo(4.8 + BOOK3D_ZOOM.buttonStep, 4);
+
+      expect(computeZoomPercent(4.8, false)).toBe(100);
+      expect(computeZoomPercent(2.4, false)).toBe(200);
+      expect(computeCameraPositionForZoom(2.4, false).y).toBeCloseTo(1.125, 3);
+      expect(clamp2DZoomScale(5)).toBe(BOOK3D_ZOOM.max2DScale);
+      expect(clamp2DZoomScale(0.1)).toBe(BOOK3D_ZOOM.min2DScale);
+    });
+
+    it("resolves continuous RTL audio steps across right page -> left page -> next spread", () => {
+      const pageCache = {
+        1: [
+          { surah: { number: 2, name: "البقرة", englishName: "Al-Baqarah" }, numberInSurah: 1, text: "v1" },
+          { surah: { number: 2, name: "البقرة", englishName: "Al-Baqarah" }, numberInSurah: 2, text: "v2" },
+        ],
+        2: [{ surah: { number: 2, name: "البقرة", englishName: "Al-Baqarah" }, numberInSurah: 3, text: "v3" }],
+        3: [{ surah: { number: 2, name: "البقرة", englishName: "Al-Baqarah" }, numberInSurah: 4, text: "v4" }],
+        604: [{ surah: { number: 114, name: "الناس", englishName: "An-Nas" }, numberInSurah: 6, text: "v6" }],
+      };
+
+      // Last ayah of RIGHT page (2:2 on page 1) moves to LEFT page (2:3 on page 2) with needsTurnNext=false
+      const rightToLeft = resolveSpreadPlaybackStep({
+        currentAudioAyah: { surahNum: 2, ayahNum: 2 },
+        rPage: 1,
+        lPage: 2,
+        isSingleMode: false,
+        pageCache,
+      });
+      expect(rightToLeft.action).toBe("play_ayah");
+      expect(rightToLeft.needsTurnNext).toBe(false);
+      expect(rightToLeft.nextAyah.ayahNum).toBe(3);
+      expect(rightToLeft.nextAyah.side).toBe("left");
+
+      // Last ayah of LEFT page (2:3 on page 2) triggers page turn to page 3 with nextAyah = 2:4
+      const leftToNextSpread = resolveSpreadPlaybackStep({
+        currentAudioAyah: { surahNum: 2, ayahNum: 3 },
+        rPage: 1,
+        lPage: 2,
+        isSingleMode: false,
+        pageCache,
+      });
+      expect(leftToNextSpread.action).toBe("turn_next_and_play");
+      expect(leftToNextSpread.needsTurnNext).toBe(true);
+      expect(leftToNextSpread.targetNextPage).toBe(3);
+      expect(leftToNextSpread.nextAyah.ayahNum).toBe(4);
+
+      // Single mobile mode: last ayah of page 1 triggers page turn to page 2
+      const singleModeStep = resolveSpreadPlaybackStep({
+        currentAudioAyah: { surahNum: 2, ayahNum: 2 },
+        rPage: 1,
+        lPage: null,
+        isSingleMode: true,
+        pageCache,
+      });
+      expect(singleModeStep.action).toBe("turn_next_and_play");
+      expect(singleModeStep.targetNextPage).toBe(2);
+
+      // Very end of Quran (page 604) stops cleanly
+      const endOfMushaf = resolveSpreadPlaybackStep({
+        currentAudioAyah: { surahNum: 114, ayahNum: 6 },
+        rPage: 603,
+        lPage: 604,
+        isSingleMode: false,
+        pageCache,
+      });
+      expect(endOfMushaf.action).toBe("stop");
+      expect(endOfMushaf.needsTurnNext).toBe(false);
+
+      // findAyahMetadataOnSpread locates ayahs across both right and left pages
+      const metaLeft = findAyahMetadataOnSpread({
+        surahNum: 2,
+        ayahNum: 3,
+        rPage: 1,
+        lPage: 2,
+        pageCache,
+      });
+      expect(metaLeft).toBeTruthy();
+      expect(metaLeft.pageNum).toBe(2);
+      expect(metaLeft.text).toBe("v3");
     });
   });
 });

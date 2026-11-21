@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, fireEvent, cleanup, act, waitFor } from "@testing-library/react";
 import { Provider } from "react-redux";
 import { MemoryRouter } from "react-router-dom";
+import * as THREE from "three";
 import { store, uiActions, sel } from "../src/store.js";
 import {
   MUSHAF_TOTAL_PAGES,
@@ -11,6 +12,8 @@ import {
   OPEN_ANIM_DURATION_MS,
   BOOK3D_SPEC,
   BOOK3D_ZOOM,
+  BOOK3D_PAN,
+  BOOK3D_PARTICLES,
   computeCssBookLayout,
   computeCssBookPresentation,
   computeSpreadPages,
@@ -21,6 +24,13 @@ import {
   computeCameraPositionForZoom,
   computeZoomPercent,
   clamp2DZoomScale,
+  clampCameraPan,
+  clamp2DPan,
+  stepCameraPan,
+  computePanDeltaFromDrag,
+  computeTwoFingerMetrics,
+  computeCameraPose,
+  generateParticleFieldData,
   resolveSpreadPlaybackStep,
   findAyahMetadataOnSpread,
   evalStaticPageLocalY,
@@ -35,7 +45,13 @@ import {
 } from "../src/utils/quranBookEngine.js";
 import * as reciterAudio from "../src/utils/reciterAudio.js";
 import { QuranBookPage } from "../src/components/pages/QuranBookPage.jsx";
-import { QuranBook3DPage } from "../src/components/pages/QuranBook3DPage.jsx";
+import {
+  QuranBook3DPage,
+  createParticleGlowTexture,
+  createAuraGlowTexture,
+} from "../src/components/pages/QuranBook3DPage.jsx";
+import { SurahHeader } from "../src/components/common/SurahHeader.jsx";
+import { HeaderToolsModal } from "../src/components/common/HeaderToolsModal.jsx";
 
 describe("CSS Quran & 3D Quran Engine + Component Fixes", () => {
   beforeEach(() => {
@@ -43,6 +59,9 @@ describe("CSS Quran & 3D Quran Engine + Component Fixes", () => {
     try {
       localStorage.clear();
     } catch {}
+    store.dispatch(uiActions.resetUiElementsVisibility());
+    store.dispatch(uiActions.setUiEditMode(false));
+    store.dispatch(uiActions.setShowUiVisibilityModal(false));
     vi.spyOn(reciterAudio, "fetchQuranPage").mockImplementation(async (pageNum) => [
       {
         number: pageNum,
@@ -758,6 +777,327 @@ describe("CSS Quran & 3D Quran Engine + Component Fixes", () => {
       expect(metaLeft).toBeTruthy();
       expect(metaLeft.pageNum).toBe(2);
       expect(metaLeft.text).toBe("v3");
+    });
+  });
+
+  describe("7. Coran 3D UI Toggleability & Direct Inline UI Edit Mode", () => {
+    const mockDrawCtx = () => ({
+      fillStyle: "",
+      strokeStyle: "",
+      lineWidth: 1,
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      fillRect: vi.fn(),
+      strokeRect: vi.fn(),
+      fillText: vi.fn(),
+      drawImage: vi.fn(),
+      measureText: vi.fn((txt) => ({ width: (txt?.length || 1) * 10 })),
+      beginPath: vi.fn(),
+      closePath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      quadraticCurveTo: vi.fn(),
+      arc: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
+      stroke: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+      createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+    });
+
+    it("toggles Coran 3D launcher visibility (quran3dAccess) in SurahHeader and HeaderToolsModal", () => {
+      const mockSurah = {
+        number: 1,
+        name: "سُورَةُ ٱلْفَاتِحَةِ",
+        englishName: "Al-Fatiha",
+        numberOfAyahs: 7,
+        revelationType: "Meccan",
+      };
+
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            null,
+            React.createElement(SurahHeader, {
+              selectedSurah: mockSurah,
+              surahs: [mockSurah],
+              setSelectedSurah: () => {},
+              setSidebarOpen: () => {},
+              ayats: [{ numberInSurah: 1, text: "بسم الله" }],
+              getLData: () => ({}),
+              setLData: () => {},
+              surahStats: {},
+              pageMode: false,
+              setPageMode: () => {},
+              activePageCoran: null,
+              setactivePageCoran: () => {},
+              mainAyatIdx: 0,
+              learnData: {},
+              lkey: (s, a) => `${s}:${a}`,
+              jumpToAyatNumber: () => {},
+              navigate: () => {},
+            }),
+            React.createElement(HeaderToolsModal, {
+              isOpen: true,
+              onClose: () => {},
+              currentUser: { displayName: "Amin" },
+              onSignOut: () => {},
+              showArabicKeyboard: false,
+              setShowArabicKeyboard: () => {},
+              showRappel: false,
+              setShowRappel: () => {},
+              onOpenScheduledReminders: () => {},
+              onOpenOptionsModal: () => {},
+              toggleVoice: () => {},
+              listening: false,
+              selectedSurah: mockSurah,
+              activeHizb: 1,
+              initialTab: "tools",
+            })
+          )
+        )
+      );
+
+      // Open SurahHeader options drawer to see LIVRE 3D button
+      const optionsBtn = document.querySelector(".m-action-btn.options");
+      expect(optionsBtn).toBeTruthy();
+      fireEvent.click(optionsBtn);
+      expect(document.getElementById("btn-surah-open-book3d")).toBeTruthy();
+      expect(document.getElementById("btn-tools-nav-book3d")).toBeTruthy();
+
+      // Disable quran3dAccess via Redux UI visibility manager
+      act(() => {
+        store.dispatch(uiActions.setUiElementVisibility({ id: "quran3dAccess", visible: false }));
+      });
+      expect(document.getElementById("btn-surah-open-book3d")).toBeNull();
+      expect(document.getElementById("btn-tools-nav-book3d")).toBeNull();
+
+      // Re-enable quran3dAccess -> both launchers return
+      act(() => {
+        store.dispatch(uiActions.setUiElementVisibility({ id: "quran3dAccess", visible: true }));
+      });
+      expect(document.getElementById("btn-surah-open-book3d")).toBeTruthy();
+      expect(document.getElementById("btn-tools-nav-book3d")).toBeTruthy();
+    });
+
+    it("toggles internal QuranBook3DPage UI bars & supports direct in-place +/- editing via ✏️ UI ±", async () => {
+      const stub = mockDrawCtx();
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((type) =>
+        type === "2d" ? stub : null
+      );
+
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            null,
+            React.createElement(QuranBook3DPage, {
+              surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha" }],
+            })
+          )
+        )
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector('[data-testid="q3d-audio-footer"]')).toBeTruthy();
+      });
+
+      // Verify all internal controls present initially
+      expect(document.querySelector('[data-testid="q3d-index-btn"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="q3d-page-info"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="q3d-view-toggle"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="q3d-tajweed-btn"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="q3d-zoom-controls"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="q3d-hint-bar"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="q3d-audio-footer"]')).toBeTruthy();
+
+      // Toggle UI elements OFF programmatically -> elements unmount cleanly
+      act(() => {
+        store.dispatch(uiActions.setUiElementVisibility({ id: "quran3dAudioFooter", visible: false }));
+        store.dispatch(uiActions.setUiElementVisibility({ id: "quran3dHintBar", visible: false }));
+      });
+      expect(document.querySelector('[data-testid="q3d-audio-footer"]')).toBeNull();
+      expect(document.querySelector('[data-testid="q3d-hint-bar"]')).toBeNull();
+
+      // Enable inline UI edit mode right from inside QuranBook3DPage header
+      fireEvent.click(document.querySelector('[data-testid="q3d-ui-edit-btn"]'));
+      expect(sel.uiEditMode(store.getState())).toBe(true);
+
+      // Ghost add buttons appear in-place for hidden Coran 3D elements
+      const addFooterGhost = document.querySelector('[data-testid="ui-edit-add-quran3dAudioFooter"]');
+      expect(addFooterGhost).toBeTruthy();
+      fireEvent.click(addFooterGhost);
+      expect(document.querySelector('[data-testid="q3d-audio-footer"]')).toBeTruthy();
+
+      // Remove zoom controls directly in-place using − button, then re-add via + ghost
+      const removeZoomBtn = document.querySelector('[data-testid="ui-edit-remove-quran3dZoomControls"]');
+      expect(removeZoomBtn).toBeTruthy();
+      fireEvent.click(removeZoomBtn);
+      expect(document.querySelector('[data-testid="q3d-zoom-controls"]')).toBeNull();
+
+      const addZoomGhost = document.querySelector('[data-testid="ui-edit-add-quran3dZoomControls"]');
+      expect(addZoomGhost).toBeTruthy();
+      fireEvent.click(addZoomGhost);
+      expect(document.querySelector('[data-testid="q3d-zoom-controls"]')).toBeTruthy();
+
+      // Clicking 🎛️ opens full UI visibility modal state
+      fireEvent.click(document.querySelector('[data-testid="q3d-ui-modal-btn"]'));
+      expect(sel.showUiVisibilityModal(store.getState())).toBe(true);
+    });
+  });
+
+  describe("8. Camera Translation (Pan), Procedural Particle Texture & Sacred Glow", () => {
+    const makeRichDrawCtx = () => {
+      const gradStub = { addColorStop: vi.fn() };
+      return {
+        fillStyle: "",
+        strokeStyle: "",
+        lineWidth: 1,
+        font: "",
+        textAlign: "",
+        textBaseline: "",
+        fillRect: vi.fn(),
+        strokeRect: vi.fn(),
+        fillText: vi.fn(),
+        drawImage: vi.fn(),
+        measureText: vi.fn((txt) => ({ width: (txt?.length || 1) * 10 })),
+        beginPath: vi.fn(),
+        closePath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        quadraticCurveTo: vi.fn(),
+        arc: vi.fn(),
+        ellipse: vi.fn(),
+        roundRect: vi.fn(),
+        fill: vi.fn(),
+        stroke: vi.fn(),
+        save: vi.fn(),
+        restore: vi.fn(),
+        createLinearGradient: vi.fn(() => gradStub),
+        createRadialGradient: vi.fn(() => gradStub),
+        gradStub,
+      };
+    };
+
+    it("clamps and steps 3D/2D camera pan, computes drag + two-finger parallel translation, and synchronizes camera lookAt pose", () => {
+      expect(clampCameraPan({ x: 99, y: -99 })).toEqual({
+        x: BOOK3D_PAN.maxX,
+        y: BOOK3D_PAN.minY,
+      });
+      expect(clampCameraPan({ x: NaN, y: undefined })).toEqual({ x: 0, y: 0 });
+      expect(clamp2DPan({ x: -999, y: 999 })).toEqual({
+        x: BOOK3D_PAN.min2DX,
+        y: BOOK3D_PAN.max2DY,
+      });
+
+      const stepped = stepCameraPan({ x: 0, y: 0 }, 2, -1);
+      expect(stepped.x).toBeCloseTo(BOOK3D_PAN.step * 2, 5);
+      expect(stepped.y).toBeCloseTo(-BOOK3D_PAN.step, 5);
+
+      // Dragging right (+100px) translates camera left (dx < 0) so book moves right under cursor
+      const dragDelta = computePanDeltaFromDrag(100, 50, BOOK3D_ZOOM.defaultDesktopDist, false);
+      expect(dragDelta.dx).toBeLessThan(0);
+      expect(dragDelta.dy).toBeGreaterThan(0);
+
+      // Two-finger metrics compute midpoint and Euclidean separation cleanly
+      const twoF = computeTwoFingerMetrics({ x: 100, y: 200 }, { x: 200, y: 200 });
+      expect(twoF.dist).toBe(100);
+      expect(twoF.midX).toBe(150);
+      expect(twoF.midY).toBe(200);
+
+      // Parallel camera pose translates both position and lookAt target identically on X and Y
+      const pose = computeCameraPose({
+        zoomDist: BOOK3D_ZOOM.defaultDesktopDist,
+        panX: 0.75,
+        panY: 0.4,
+        isSingleMode: false,
+      });
+      expect(pose.posX).toBe(0.75);
+      expect(pose.targetX).toBe(0.75);
+      expect(pose.posY - pose.targetY).toBeCloseTo(2.35, 2);
+      expect(pose.posZ).toBe(BOOK3D_ZOOM.defaultDesktopDist);
+    });
+
+    it("generates varied golden particle field attributes & procedural radial glow CanvasTextures with sRGB + fallback safety", () => {
+      const field = generateParticleFieldData(BOOK3D_PARTICLES.hardwareCount);
+      expect(field.count).toBe(BOOK3D_PARTICLES.hardwareCount);
+      expect(field.positions).toBeInstanceOf(Float32Array);
+      expect(field.positions.length).toBe(BOOK3D_PARTICLES.hardwareCount * 3);
+      expect(field.colors.length).toBe(BOOK3D_PARTICLES.hardwareCount * 3);
+      expect(field.scales.length).toBe(BOOK3D_PARTICLES.hardwareCount);
+      expect(field.phases.length).toBe(BOOK3D_PARTICLES.hardwareCount);
+
+      // Procedural particle star/orb glow texture
+      const richCtx = makeRichDrawCtx();
+      const ctxSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => richCtx);
+
+      const particleTex = createParticleGlowTexture(64);
+      expect(particleTex).toBeInstanceOf(THREE.CanvasTexture);
+      expect(particleTex.colorSpace).toBe(THREE.SRGBColorSpace);
+      expect(richCtx.createRadialGradient).toHaveBeenCalledTimes(1);
+      expect(richCtx.gradStub.addColorStop).toHaveBeenCalledTimes(5);
+      expect(richCtx.ellipse).toHaveBeenCalledTimes(2);
+      particleTex.dispose();
+
+      const auraTex = createAuraGlowTexture(128);
+      expect(auraTex).toBeInstanceOf(THREE.CanvasTexture);
+      expect(auraTex.colorSpace).toBe(THREE.SRGBColorSpace);
+      expect(richCtx.createRadialGradient).toHaveBeenCalledTimes(2);
+      auraTex.dispose();
+
+      // Fallback still produces valid CanvasTexture even on minimal 2D mock without createRadialGradient/ellipse
+      ctxSpy.mockImplementation(() => ({
+        fillStyle: "",
+        fillRect: vi.fn(),
+        beginPath: vi.fn(),
+        arc: vi.fn(),
+        fill: vi.fn(),
+      }));
+      const fallbackTex = createParticleGlowTexture(64);
+      expect(fallbackTex).toBeInstanceOf(THREE.CanvasTexture);
+      fallbackTex.dispose();
+    });
+
+    it("translates 2D zoomed Mushaf stage cleanly via keyboard WASD/Alt+Arrows and resets on Escape/ZoomReset", async () => {
+      const stub = makeRichDrawCtx();
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((type) =>
+        type === "2d" ? stub : null
+      );
+
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            null,
+            React.createElement(QuranBook3DPage, {
+              surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha" }],
+            })
+          )
+        )
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector('[data-testid="q3d-2d-spread-stage"]')).toBeTruthy();
+      });
+
+      const stage = document.querySelector('[data-testid="q3d-2d-spread-stage"]');
+      expect(stage.style.transform).toBe("scale(1)");
+
+      // Pan using Alt+ArrowRight and 'w'
+      fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
+      fireEvent.keyDown(window, { key: "w" });
+
+      expect(stage.style.transform).toContain(`translate3d(${-BOOK3D_PAN.step2D}px, ${BOOK3D_PAN.step2D}px, 0)`);
     });
   });
 });

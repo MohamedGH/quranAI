@@ -42,10 +42,11 @@ describe("Direct Inline UI Editing Mode (+ / − on Live UI Canvas)", () => {
   });
 
   describe("1. Pure Functional Helpers (uiVisibilityManager)", () => {
-    it("exposes frozen UI_ELEMENTS_BY_ID containing all 32 elements", () => {
+    it("exposes frozen UI_ELEMENTS_BY_ID containing all registered elements", () => {
       expect(Object.isFrozen(UI_ELEMENTS_BY_ID)).toBe(true);
       expect(Object.keys(UI_ELEMENTS_BY_ID)).toHaveLength(UI_ELEMENTS.length);
       expect(getElementMeta("surahBismillah")?.category).toBe("surahHeader");
+      expect(getElementMeta("quran3dAccess")?.category).toBe("quran3d");
       expect(getElementMeta("unknownInvalidId")).toBeNull();
       expect(getElementMeta(null)).toBeNull();
     });
@@ -57,6 +58,7 @@ describe("Direct Inline UI Editing Mode (+ / − on Live UI Canvas)", () => {
         expect(lbl.length).toBeGreaterThan(0);
       });
       expect(getShortElementLabel("headerLogo")).toBe("Logo");
+      expect(getShortElementLabel("quran3dAccess")).toBe("Coran 3D");
       expect(getShortElementLabel("")).toBe("");
     });
 
@@ -237,17 +239,18 @@ describe("Direct Inline UI Editing Mode (+ / − on Live UI Canvas)", () => {
       store.dispatch(uiActions.setUiEditMode(true));
       rerender(React.createElement(Provider, { store }, React.createElement(UiEditToolbar)));
 
+      const expectedAll = `${UI_ELEMENTS.length}/${UI_ELEMENTS.length} actifs`;
       const toolbar = document.querySelector('[data-testid="ui-edit-toolbar"]');
       expect(toolbar).toBeTruthy();
-      expect(document.querySelector('[data-testid="ui-edit-active-count"]').textContent).toBe("32/32 actifs");
+      expect(document.querySelector('[data-testid="ui-edit-active-count"]').textContent).toBe(expectedAll);
 
       // Click Zen preset
       fireEvent.click(document.getElementById("btn-ui-edit-preset-zen"));
-      expect(document.querySelector('[data-testid="ui-edit-active-count"]').textContent).not.toBe("32/32 actifs");
+      expect(document.querySelector('[data-testid="ui-edit-active-count"]').textContent).not.toBe(expectedAll);
 
       // Click + Tout
       fireEvent.click(document.getElementById("btn-ui-edit-show-all"));
-      expect(document.querySelector('[data-testid="ui-edit-active-count"]').textContent).toBe("32/32 actifs");
+      expect(document.querySelector('[data-testid="ui-edit-active-count"]').textContent).toBe(expectedAll);
 
       // Click Liste
       fireEvent.click(document.getElementById("btn-ui-edit-open-modal"));

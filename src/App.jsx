@@ -55,7 +55,7 @@ import { LearningMapPage } from "./components/pages/LearningMapPage.jsx";
 import { QuestionsModePage } from "./components/pages/QuestionsModePage.jsx";
 import { ConcordancePage } from "./components/pages/ConcordancePage.jsx";
 import { QuranBookPage } from "./components/pages/QuranBookPage.jsx";
-const QuranBook3DPage = lazy(() => import("./components/pages/QuranBook3DPage.jsx").then(m => ({ default: m.QuranBook3DPage })));
+import { QuranBook3DPage } from "./components/pages/QuranBook3DPage.jsx";
 import { PrononciationPage } from "./components/pages/PrononciationPage.jsx";
 import { GlossairePage } from "./components/pages/GlossairePage.jsx";
 import { RecordingsPage } from "./components/pages/RecordingsPage.jsx";
@@ -2526,6 +2526,25 @@ function AppInner({ currentUser, onSignOut }) {
               <span className="desktop-only">{uiEditMode ? 'FIN UI' : 'UI ±'}</span>
             </button>
 
+            {/* Toggleable Coran 3D Quick Launcher */}
+            <EditableUiSlot
+              elementId="quran3dAccess"
+              condition={uxMode !== 'child'}
+              inline={true}
+            >
+              <button
+                id="header-book3d-btn"
+                type="button"
+                className="header-ui-edit-btn"
+                onClick={() => navigate('/quran/book3d')}
+                title="Ouvrir le Saint Coran 3D (Mushaf WebGL)"
+                aria-label="Ouvrir le Coran 3D"
+              >
+                <span>🧊</span>
+                <span className="desktop-only">CORAN 3D</span>
+              </button>
+            </EditableUiSlot>
+
             {/* Voice Command Mic (hidden in simplified child/beginner modes to prevent clutter) */}
             <EditableUiSlot
               elementId="headerVoice"
@@ -3146,11 +3165,15 @@ function AppInner({ currentUser, onSignOut }) {
                       fontFamily:"'Cinzel',serif", background:'rgba(201,168,76,.08)',
                       border:'1px solid rgba(201,168,76,.3)', color:'var(--gold2)',
                       borderRadius:8, cursor:'pointer' }}>📖 LIVRE CSS</button>
-                  <button onClick={() => navigate('/quran/book3d')}
-                    style={{ fontSize:9, letterSpacing:1.5, padding:'7px 16px',
-                      fontFamily:"'Cinzel',serif", background:'rgba(201,168,76,.14)',
-                      border:'1px solid rgba(201,168,76,.5)', color:'var(--gold)',
-                      borderRadius:8, cursor:'pointer' }}>✨ LIVRE 3D WEBGL</button>
+                  <EditableUiSlot elementId="quran3dAccess" inline={true}>
+                    <button
+                      id="btn-empty-open-book3d"
+                      onClick={() => navigate('/quran/book3d')}
+                      style={{ fontSize:9, letterSpacing:1.5, padding:'7px 16px',
+                        fontFamily:"'Cinzel',serif", background:'rgba(201,168,76,.14)',
+                        border:'1px solid rgba(201,168,76,.5)', color:'var(--gold)',
+                        borderRadius:8, cursor:'pointer' }}>✨ LIVRE 3D WEBGL</button>
+                  </EditableUiSlot>
                 </div>
               </div>
             ) : (

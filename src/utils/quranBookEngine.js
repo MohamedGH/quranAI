@@ -77,6 +77,28 @@ export const BOOK3D_ZOOM = Object.freeze({
   default2DScale: 1.0,
 });
 
+export const BOOK3D_PAN = Object.freeze({
+  minX: -2.2,
+  maxX: 2.2,
+  minY: -1.4,
+  maxY: 1.6,
+  step: 0.24,
+  dragSensitivity: 0.0042,
+  min2DX: -360,
+  max2DX: 360,
+  min2DY: -300,
+  max2DY: 300,
+  step2D: 36,
+});
+
+export const BOOK3D_PARTICLES = Object.freeze({
+  hardwareCount: 72,
+  softwareCount: 24,
+  baseSize: 18.0,
+  defaultGlowStrength: 1.25,
+  auraOpacity: 0.28,
+});
+
 /**
  * Pure presentation descriptor for the CSS Quran book.
  * Guarantees:
@@ -195,6 +217,126 @@ export const clamp2DZoomScale = (scale) => {
   const num = Number(scale);
   if (!Number.isFinite(num)) return BOOK3D_ZOOM.default2DScale;
   return Math.max(BOOK3D_ZOOM.min2DScale, Math.min(BOOK3D_ZOOM.max2DScale, Number(num.toFixed(2))));
+};
+
+/**
+ * Pure camera translation (panning) calculators for 3D & 2D Mushaf views.
+ */
+export const clampCameraPan = (pan = {}) => {
+  const rawX = Number(pan?.x);
+  const rawY = Number(pan?.y);
+  const x = Number.isFinite(rawX)
+    ? Math.max(BOOK3D_PAN.minX, Math.min(BOOK3D_PAN.maxX, rawX))
+    : 0;
+  const y = Number.isFinite(rawY)
+    ? Math.max(BOOK3D_PAN.minY, Math.min(BOOK3D_PAN.maxY, rawY))
+    : 0;
+  return Object.freeze({ x, y });
+};
+
+export const clamp2DPan = (pan = {}) => {
+  const rawX = Number(pan?.x);
+  const rawY = Number(pan?.y);
+  const x = Number.isFinite(rawX)
+    ? Math.max(BOOK3D_PAN.min2DX, Math.min(BOOK3D_PAN.max2DX, Math.round(rawX)))
+    : 0;
+  const y = Number.isFinite(rawY)
+    ? Math.max(BOOK3D_PAN.min2DY, Math.min(BOOK3D_PAN.max2DY, Math.round(rawY)))
+    : 0;
+  return Object.freeze({ x, y });
+};
+
+export const stepCameraPan = (currentPan = { x: 0, y: 0 }, dirX = 0, dirY = 0) => {
+  const safe = clampCameraPan(currentPan);
+  const dx = Number(dirX) || 0;
+  const dy = Number(dirY) || 0;
+  return clampCameraPan({
+    x: safe.x + dx * BOOK3D_PAN.step,
+    y: safe.y + dy * BOOK3D_PAN.step,
+  });
+};
+
+export const computePanDeltaFromDrag = (dxPx, dyPx, zoomDist, isSingleMode = false) => {
+  const z = clamp3DZoomDist(zoomDist);
+  const baseZ = isSingleMode ? BOOK3D_ZOOM.defaultMobileDist : BOOK3D_ZOOM.defaultDesktopDist;
+  const zoomRatio = z / baseZ;
+  const dx = Number(dxPx) || 0;
+  const dy = Number(dyPx) || 0;
+  // Dragging canvas right pulls book right -> camera translates left (-dx); dragging down translates camera up (+dy)
+  return Object.freeze({
+    dx: -dx * BOOK3D_PAN.dragSensitivity * zoomRatio,
+    dy: dy * BOOK3D_PAN.dragSensitivity * zoomRatio,
+  });
+};
+
+export const computeTwoFingerMetrics = (p1, p2) => {
+  if (!p1 || !p2) {
+    return Object.freeze({ dist: 10, midX: 0, midY: 0 });
+  }
+  const dist = Math.max(10, Math.hypot((p2.x || 0) - (p1.x || 0), (p2.y || 0) - (p1.y || 0)));
+  const midX = ((p1.x || 0) + (p2.x || 0)) * 0.5;
+  const midY = ((p1.y || 0) + (p2.y || 0)) * 0.5;
+  return Object.freeze({ dist, midX, midY });
+};
+
+export const computeCameraPose = ({
+  zoomDist,
+  panX = 0,
+  panY = 0,
+  isSingleMode = false,
+} = {}) => {
+  const { y: baseY, z } = computeCameraPositionForZoom(zoomDist, isSingleMode);
+  const pan = clampCameraPan({ x: panX, y: panY });
+  return Object.freeze({
+    posX: pan.x,
+    posY: baseY + pan.y,
+    posZ: z,
+    targetX: pan.x,
+    targetY: -0.1 + pan.y,
+    targetZ: 0,
+  });
+};
+
+/**
+ * Pure deterministic/varied particle field builder for glowing spiritual dust.
+ * Returns typed arrays ready for BufferGeometry + ShaderMaterial / Points.
+ */
+export const generateParticleFieldData = (count = BOOK3D_PARTICLES.hardwareCount) => {
+  const n = Math.max(1, Math.min(256, Math.round(Number(count) || BOOK3D_PARTICLES.hardwareCount)));
+  const positions = new Float32Array(n * 3);
+  const colors = new Float32Array(n * 3);
+  const scales = new Float32Array(n);
+  const phases = new Float32Array(n);
+
+  const palette = [
+    [1.0, 0.87, 0.35], // radiant gold
+    [1.0, 0.96, 0.78], // warm pearl cream
+    [0.98, 0.72, 0.24], // amber lantern
+    [0.83, 0.69, 0.22], // antique bronze-gold
+  ];
+
+  // Deterministic golden-ratio quasi-random scatter + organic variation
+  const phi = 1.61803398875;
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n;
+    const h1 = ((i * phi) % 1);
+    const h2 = (((i * 0.7548776662) + 0.37) % 1);
+    const h3 = (((i * 0.5698402909) + 0.19) % 1);
+
+    positions[i * 3] = (h1 - 0.5) * 6.8;
+    positions[i * 3 + 1] = t * 3.8 - 0.8;
+    positions[i * 3 + 2] = (h2 - 0.5) * 4.8;
+
+    const col = palette[i % palette.length];
+    colors[i * 3] = col[0];
+    colors[i * 3 + 1] = col[1];
+    colors[i * 3 + 2] = col[2];
+
+    scales[i] = 0.65 + h3 * 1.15;
+    phases[i] = (h1 + h2) * Math.PI * 2;
+  }
+
+  return Object.freeze({ count: n, positions, colors, scales, phases });
 };
 
 /**

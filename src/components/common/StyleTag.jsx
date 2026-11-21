@@ -3444,6 +3444,7 @@ export const CSS = `
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
     transition: transform .15s ease, background .15s ease;
     padding: 0;
+    pointer-events: auto;
   }
   .ui-edit-remove-btn::after {
     content: "";
@@ -3476,6 +3477,7 @@ export const CSS = `
     white-space: nowrap;
     cursor: pointer;
     flex-shrink: 0;
+    pointer-events: auto;
     transition: transform .15s ease, background .15s ease, border-color .15s ease;
   }
   .ui-edit-add-ghost.is-block {

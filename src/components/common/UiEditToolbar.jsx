@@ -80,7 +80,7 @@ export function UiEditToolbar() {
           id="btn-ui-edit-open-modal"
           className="ui-edit-tb-btn"
           onClick={() => dispatch(uiActions.setShowUiVisibilityModal(true))}
-          title="Ouvrir la liste complète des 32 éléments"
+          title={`Ouvrir la liste complète des ${stats.total} éléments`}
         >
           🎛️ Liste
         </button>

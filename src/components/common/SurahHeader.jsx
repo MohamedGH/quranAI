@@ -1473,12 +1473,15 @@ export function SurahHeader({
               >
                 📖 LIVRE CSS
               </button>
-              <button
-                onClick={() => { setShowOptionsDrawer(false); navigate('/quran/book3d'); }}
-                className="m-extra-view-btn gold"
-              >
-                ✨ LIVRE 3D
-              </button>
+              <EditableUiSlot elementId="quran3dAccess" inline={true}>
+                <button
+                  id="btn-surah-open-book3d"
+                  onClick={() => { setShowOptionsDrawer(false); navigate('/quran/book3d'); }}
+                  className="m-extra-view-btn gold"
+                >
+                  ✨ LIVRE 3D
+                </button>
+              </EditableUiSlot>
             </div>
           </div>
         </div>

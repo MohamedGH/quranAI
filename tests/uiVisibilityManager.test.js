@@ -47,8 +47,8 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
   });
 
   describe("1. Pure Functional Architecture & Schema Validation", () => {
-    it("defines 6 frozen UI categories with valid IDs and names", () => {
-      expect(UI_CATEGORIES).toHaveLength(6);
+    it("defines 7 frozen UI categories with valid IDs and names", () => {
+      expect(UI_CATEGORIES).toHaveLength(7);
       const catIds = UI_CATEGORIES.map((c) => c.id);
       expect(catIds).toEqual([
         "header",
@@ -57,13 +57,14 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
         "player",
         "sidebar",
         "guides",
+        "quran3d",
       ]);
       expect(Object.isFrozen(UI_CATEGORIES)).toBe(true);
       UI_CATEGORIES.forEach((c) => expect(Object.isFrozen(c)).toBe(true));
     });
 
-    it("defines 32 modular UI elements across all defined categories", () => {
-      expect(UI_ELEMENTS).toHaveLength(32);
+    it("defines 42 modular UI elements across all defined categories", () => {
+      expect(UI_ELEMENTS).toHaveLength(42);
       expect(Object.isFrozen(UI_ELEMENTS)).toBe(true);
 
       const validCatIds = new Set(UI_CATEGORIES.map((c) => c.id));
@@ -86,7 +87,7 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
 
     it("getDefaultUiVisibility returns all elements set to true by default", () => {
       const def = getDefaultUiVisibility();
-      expect(Object.keys(def)).toHaveLength(32);
+      expect(Object.keys(def)).toHaveLength(UI_ELEMENTS.length);
       UI_ELEMENTS.forEach((el) => {
         expect(def[el.id]).toBe(true);
       });
@@ -168,16 +169,16 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
     it("getVisibilityStats computes totals, visible count, and percentage accurately", () => {
       const def = getDefaultUiVisibility();
       const initialStats = getVisibilityStats(def);
-      expect(initialStats.total).toBe(32);
-      expect(initialStats.visible).toBe(32);
+      expect(initialStats.total).toBe(UI_ELEMENTS.length);
+      expect(initialStats.visible).toBe(UI_ELEMENTS.length);
       expect(initialStats.hidden).toBe(0);
       expect(initialStats.percent).toBe(100);
 
       const modified = setElement(def, "headerLogo", false);
       const modStats = getVisibilityStats(modified);
-      expect(modStats.visible).toBe(31);
+      expect(modStats.visible).toBe(UI_ELEMENTS.length - 1);
       expect(modStats.hidden).toBe(1);
-      expect(modStats.percent).toBe(97);
+      expect(modStats.percent).toBe(Math.round(((UI_ELEMENTS.length - 1) / UI_ELEMENTS.length) * 100));
     });
 
     it("getElementsByCategory returns only elements belonging to that category", () => {
@@ -307,6 +308,7 @@ describe("UI Visibility Manager — Granular Element Activation/Deactivation", (
       expect(document.getElementById("filter-category-player")).not.toBeNull();
       expect(document.getElementById("filter-category-sidebar")).not.toBeNull();
       expect(document.getElementById("filter-category-guides")).not.toBeNull();
+      expect(document.getElementById("filter-category-quran3d")).not.toBeNull();
 
       // Preset action buttons
       expect(document.getElementById("btn-ui-preset-all")).not.toBeNull();

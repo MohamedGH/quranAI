@@ -8,6 +8,8 @@ import { useOnlineStatus } from "../../hooks/useOnlineStatus.js";
 import { getAvailableUxProfiles, getUxProfile } from "../../utils/uxProfileManager.js";
 import { buildGlossaryRoute, buildQuranRoute } from "../../utils/routeManager.js";
 import { ERROR_CODES, createAppError, trySync } from "../../utils/errorManager.js";
+import { UI_ELEMENTS } from "../../utils/uiVisibilityManager.js";
+import { EditableUiSlot } from "./EditableUiSlot.jsx";
 
 export const HEADER_TOOLS_TABS = [
   { id: 'tools', icon: '🎛️', label: 'OUTILS' },
@@ -451,7 +453,7 @@ export function HeaderToolsModal({
                       Éléments Visibles de l'Interface
                     </div>
                     <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
-                      Activer ou masquer individuellement chaque composant (32 éléments)
+                      Activer ou masquer individuellement chaque composant ({UI_ELEMENTS.length} éléments)
                     </div>
                   </div>
                 </div>
@@ -578,6 +580,41 @@ export function HeaderToolsModal({
                     );
                   })}
                 </div>
+
+                <EditableUiSlot elementId="quran3dAccess" inline={false}>
+                  <button
+                    type="button"
+                    id="btn-tools-nav-book3d"
+                    onClick={() =>
+                      handleOpenToolPage({
+                        id: "quran",
+                        buildPath: () => "/quran/book3d",
+                      })
+                    }
+                    style={{
+                      width: '100%',
+                      minHeight: 42,
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(201, 168, 76, 0.45)',
+                      background: 'linear-gradient(135deg, rgba(201,168,76,0.16) 0%, rgba(138,107,35,0.12) 100%)',
+                      color: 'var(--gold2)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, fontWeight: 700 }}>
+                      <span>🧊</span>
+                      <span>Coran 3D (Mushaf WebGL)</span>
+                    </span>
+                    <span style={{ fontSize: 9.5, color: 'var(--gold)', fontFamily: "'Cinzel', serif", fontWeight: 700 }}>
+                      OUVRIR →
+                    </span>
+                  </button>
+                </EditableUiSlot>
               </div>
 
               {/* Taille du Texte des Versets */}

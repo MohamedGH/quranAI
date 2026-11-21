@@ -23,6 +23,8 @@ import {
   MUSHAF_DOUBLE_SPREADS,
   BOOK3D_SPEC,
   BOOK3D_ZOOM,
+  BOOK3D_PAN,
+  BOOK3D_PARTICLES,
   evalStaticPageLocalY,
   evalFlipPivotState,
   evalFlipSheetPoint,
@@ -36,12 +38,23 @@ import {
   computeCameraPositionForZoom,
   computeZoomPercent,
   clamp2DZoomScale,
+  clampCameraPan,
+  clamp2DPan,
+  stepCameraPan,
+  computePanDeltaFromDrag,
+  computeTwoFingerMetrics,
+  computeCameraPose,
+  generateParticleFieldData,
   resolveSpreadPlaybackStep,
   findAyahMetadataOnSpread,
 } from "../../utils/quranBookEngine.js";
 import { withErrorRecovery, ERROR_CODES } from "../../utils/errorManager.js";
+import { EditableUiSlot } from "../common/EditableUiSlot.jsx";
 
 const _MUSHAF_PAGES = MUSHAF_TOTAL_PAGES;
+
+// Pre-allocated camera lookAt target so render loop causes zero GC allocations
+const _cameraLookAtTarget = new THREE.Vector3(0, -0.1, 0);
 
 // Bounded LRU cache for rasterized offscreen canvases across page flips & drawer toggles
 const _pageCanvasCache = createPageCanvasCache(18);
@@ -548,6 +561,98 @@ function createWoodTexture() {
   return tex;
 }
 
+// ─── Procedural Soft-Glow Star/Orb Texture for Spiritual Dust Particles ──────
+export function createParticleGlowTexture(size = 64) {
+  if (typeof document === "undefined") return null;
+  const s = Math.max(16, Number(size) || 64);
+  const cvs = document.createElement("canvas");
+  cvs.width = s;
+  cvs.height = s;
+  const ctx = cvs.getContext("2d");
+  if (!ctx) return null;
+
+  const cx = s * 0.5;
+  const cy = s * 0.5;
+  const r = s * 0.5;
+
+  if (typeof ctx.createRadialGradient === "function") {
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0.0, "rgba(255, 255, 255, 1)");
+    grad.addColorStop(0.18, "rgba(255, 244, 195, 0.95)");
+    grad.addColorStop(0.42, "rgba(255, 215, 90, 0.48)");
+    grad.addColorStop(0.72, "rgba(212, 175, 55, 0.14)");
+    grad.addColorStop(1.0, "rgba(212, 175, 55, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, s, s);
+  } else {
+    ctx.fillStyle = "rgba(255, 232, 145, 0.85)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.65, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Delicate 4-point celestial starflare core
+  if (typeof ctx.ellipse === "function") {
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 252, 230, 0.72)";
+    const armLen = r * 0.78;
+    const armThick = Math.max(1.2, s * 0.04);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, armLen, armThick, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, armThick, armLen, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// ─── Procedural Volumetric Sacred Halo Texture behind the 3D Mushaf ──────────
+export function createAuraGlowTexture(size = 128) {
+  if (typeof document === "undefined") return null;
+  const s = Math.max(32, Number(size) || 128);
+  const cvs = document.createElement("canvas");
+  cvs.width = s;
+  cvs.height = s;
+  const ctx = cvs.getContext("2d");
+  if (!ctx) return null;
+
+  const cx = s * 0.5;
+  const cy = s * 0.5;
+  const r = s * 0.5;
+
+  if (typeof ctx.createRadialGradient === "function") {
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0.0, "rgba(255, 228, 138, 0.78)");
+    grad.addColorStop(0.35, "rgba(212, 175, 55, 0.34)");
+    grad.addColorStop(0.7, "rgba(180, 120, 30, 0.1)");
+    grad.addColorStop(1.0, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, s, s);
+  } else {
+    ctx.fillStyle = "rgba(212, 175, 55, 0.3)";
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(cvs);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 // Helper to build collision-free static wing curved page in XZ plane
 function createStaticCurvedPageGeo(side) {
   const { pageWidth, pageDepth, pageInnerMarginX } = BOOK3D_SPEC;
@@ -594,6 +699,7 @@ export function QuranBook3DPage({
   const reduxShowIzhar = useSelector(sel.showIzhar);
   const reduxShowIdgham = useSelector(sel.showIdgham);
   const reduxShowTajweedTone = useSelector(sel.showTajweedTone);
+  const uiEditMode = useSelector(sel.uiEditMode);
 
   const surahs = propSurahs || reduxSurahs || [];
   const learnData = propLearnData || reduxLearnData || {};
@@ -626,6 +732,9 @@ export function QuranBook3DPage({
   const [searchQuery, setSearchQuery] = useState("");
   const [showStand, setShowStand] = useState(true);
   const [showDust, setShowDust] = useState(true);
+  const [showGlow, setShowGlow] = useState(true);
+  const [interactionMode, setInteractionMode] = useState("orbit"); // "orbit" | "pan"
+  const [pan2d, setPan2d] = useState({ x: 0, y: 0 });
   const [bookmark, setBookmark] = useState(() => {
     try {
       return parseInt(localStorage.getItem("quran_bm_page"), 10) || null;
@@ -645,6 +754,8 @@ export function QuranBook3DPage({
   const pendingAutoPlayRef = useRef(null);
   const isSingleModeRef = useRef(isSingleMode);
   isSingleModeRef.current = isSingleMode;
+  const interactionModeRef = useRef(interactionMode);
+  interactionModeRef.current = interactionMode;
 
   // Three.js Scene Refs
   const containerRef = useRef(null);
@@ -659,8 +770,10 @@ export function QuranBook3DPage({
   const flipRightFaceMeshRef = useRef(null);
   const flipLeftFaceMeshRef = useRef(null);
   const dustParticlesRef = useRef(null);
+  const auraSpriteRef = useRef(null);
   const showStandRef = useRef(showStand);
   const showDustRef = useRef(showDust);
+  const showGlowRef = useRef(showGlow);
   const isSoftwareGlRef = useRef(false);
   const requestRenderRef = useRef(() => {});
 
@@ -674,8 +787,9 @@ export function QuranBook3DPage({
   const pageCacheRef = useRef(pageCache);
   pageCacheRef.current = pageCache;
 
-  // Animation, Orbit & Zoom Interaction Refs
+  // Animation, Orbit, Camera Pan & Zoom Interaction Refs
   const isDraggingRef = useRef(false);
+  const panDragActiveRef = useRef(false);
   const dragDistRef = useRef(0);
   const prevMousePosRef = useRef({ x: 0, y: 0 });
   const activePointersRef = useRef(new Map());
@@ -683,9 +797,13 @@ export function QuranBook3DPage({
     active: false,
     startTouchDist: 0,
     startZoomDist: BOOK3D_ZOOM.defaultDesktopDist,
+    prevMidX: 0,
+    prevMidY: 0,
   });
   const targetRotationRef = useRef({ x: 0.35, y: 0.0 });
   const currentRotationRef = useRef({ x: 0.35, y: 0.0 });
+  const targetPanRef = useRef({ x: 0, y: 0 });
+  const currentPanRef = useRef({ x: 0, y: 0 });
   const zoomDistRef = useRef(BOOK3D_ZOOM.defaultDesktopDist);
   const targetZoomRef = useRef(BOOK3D_ZOOM.defaultDesktopDist);
   const flipAnimRef = useRef({
@@ -713,10 +831,16 @@ export function QuranBook3DPage({
       if (cameraRef.current && rendererRef.current && containerRef.current) {
         const w = containerRef.current.clientWidth || window.innerWidth;
         const h = containerRef.current.clientHeight || 460;
-        const camPos = computeCameraPositionForZoom(defaultDist, isMobile);
+        const pose = computeCameraPose({
+          zoomDist: defaultDist,
+          panX: currentPanRef.current.x,
+          panY: currentPanRef.current.y,
+          isSingleMode: isMobile,
+        });
         cameraRef.current.aspect = w / h;
-        cameraRef.current.position.set(0, camPos.y, camPos.z);
-        cameraRef.current.lookAt(0, -0.1, 0);
+        cameraRef.current.position.set(pose.posX, pose.posY, pose.posZ);
+        _cameraLookAtTarget.set(pose.targetX, pose.targetY, pose.targetZ);
+        cameraRef.current.lookAt(_cameraLookAtTarget);
         cameraRef.current.updateProjectionMatrix();
         rendererRef.current.setSize(w, h, false);
         requestRenderRef.current();
@@ -890,9 +1014,15 @@ export function QuranBook3DPage({
     }
 
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 60);
-    const initialCam = computeCameraPositionForZoom(zoomDistRef.current, isSingleModeRef.current);
-    camera.position.set(0, initialCam.y, initialCam.z);
-    camera.lookAt(0, -0.1, 0);
+    const initialPose = computeCameraPose({
+      zoomDist: zoomDistRef.current,
+      panX: currentPanRef.current.x,
+      panY: currentPanRef.current.y,
+      isSingleMode: isSingleModeRef.current,
+    });
+    camera.position.set(initialPose.posX, initialPose.posY, initialPose.posZ);
+    _cameraLookAtTarget.set(initialPose.targetX, initialPose.targetY, initialPose.targetZ);
+    camera.lookAt(_cameraLookAtTarget);
     cameraRef.current = camera;
 
     const onContextLost = (e) => {
@@ -923,21 +1053,62 @@ export function QuranBook3DPage({
     rimLight.position.set(-3, 2, -3);
     scene.add(rimLight);
 
-    // ── Subtle Spiritual Dust Particles (disabled cleanly in software GL) ──
-    const dustCount = isSwGl ? 24 : 56;
+    // ── Textured Glowing Spiritual Dust Particles (Procedural CanvasTexture + Custom Glow Shader) ──
+    const dustCount = isSwGl ? BOOK3D_PARTICLES.softwareCount : BOOK3D_PARTICLES.hardwareCount;
+    const particleField = generateParticleFieldData(dustCount);
     const dustGeo = new THREE.BufferGeometry();
-    const dustPos = new Float32Array(dustCount * 3);
-    for (let i = 0; i < dustCount * 3; i += 3) {
-      dustPos[i] = (Math.random() - 0.5) * 7.5;
-      dustPos[i + 1] = Math.random() * 4.2 - 0.8;
-      dustPos[i + 2] = (Math.random() - 0.5) * 5.2;
-    }
-    dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
-    const dustMat = new THREE.PointsMaterial({
-      color: 0xffd700,
-      size: 0.036,
+    dustGeo.setAttribute("position", new THREE.BufferAttribute(particleField.positions, 3));
+    dustGeo.setAttribute("aColor", new THREE.BufferAttribute(particleField.colors, 3));
+    dustGeo.setAttribute("aScale", new THREE.BufferAttribute(particleField.scales, 1));
+    dustGeo.setAttribute("aPhase", new THREE.BufferAttribute(particleField.phases, 1));
+
+    const particleGlowTex = createParticleGlowTexture(64);
+    const dustMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uMap: { value: particleGlowTex },
+        uTime: { value: 0 },
+        uPixelRatio: { value: renderer.getPixelRatio() },
+        uBaseSize: { value: BOOK3D_PARTICLES.baseSize },
+        uGlowStrength: {
+          value: showGlowRef.current ? BOOK3D_PARTICLES.defaultGlowStrength : 0.45,
+        },
+      },
+      vertexShader: `
+        attribute float aScale;
+        attribute float aPhase;
+        attribute vec3 aColor;
+        uniform float uTime;
+        uniform float uPixelRatio;
+        uniform float uBaseSize;
+        varying vec3 vColor;
+        varying float vTwinkle;
+
+        void main() {
+          vColor = aColor;
+          vTwinkle = 0.65 + 0.35 * sin(uTime * 1.9 + aPhase);
+          vec3 p = position;
+          p.x += sin(uTime * 0.45 + aPhase) * 0.14;
+          p.z += cos(uTime * 0.38 + aPhase * 1.3) * 0.14;
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = uBaseSize * aScale * uPixelRatio * (4.8 / max(1.4, -mvPosition.z)) * (0.85 + 0.25 * vTwinkle);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uMap;
+        uniform float uGlowStrength;
+        varying vec3 vColor;
+        varying float vTwinkle;
+
+        void main() {
+          vec4 tex = texture2D(uMap, gl_PointCoord);
+          if (tex.a < 0.01) discard;
+          vec3 glowColor = mix(vColor, vec3(1.0, 0.98, 0.88), tex.a * 0.42);
+          float alpha = tex.a * (0.52 + 0.38 * vTwinkle);
+          gl_FragColor = vec4(glowColor * (0.85 + uGlowStrength * 0.52) * vTwinkle, alpha);
+        }
+      `,
       transparent: true,
-      opacity: 0.42,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
@@ -945,6 +1116,23 @@ export function QuranBook3DPage({
     dustPoints.visible = !isSwGl && showDustRef.current;
     scene.add(dustPoints);
     dustParticlesRef.current = dustPoints;
+
+    // ── Volumetric Radial Golden Aura Sprite behind Sacred Mushaf ──
+    const auraTex = createAuraGlowTexture(128);
+    const auraMat = new THREE.SpriteMaterial({
+      map: auraTex,
+      color: 0xffd275,
+      transparent: true,
+      opacity: BOOK3D_PARTICLES.auraOpacity,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const auraSprite = new THREE.Sprite(auraMat);
+    auraSprite.position.set(0, 0.12, -0.65);
+    auraSprite.scale.set(5.4, 3.6, 1);
+    auraSprite.visible = !isSwGl && showGlowRef.current;
+    scene.add(auraSprite);
+    auraSpriteRef.current = auraSprite;
 
     // ── Main Book & Stand Root Group ──
     const bookGroup = new THREE.Group();
@@ -1281,15 +1469,29 @@ export function QuranBook3DPage({
 
       const zoomDiff = targetZoomRef.current - zoomDistRef.current;
       const zoomMoving = Math.abs(zoomDiff) > 0.002;
-      if (zoomMoving) {
+      const panDx = targetPanRef.current.x - currentPanRef.current.x;
+      const panDy = targetPanRef.current.y - currentPanRef.current.y;
+      const panMoving = Math.abs(panDx) > 0.0008 || Math.abs(panDy) > 0.0008;
+
+      if (zoomMoving || panMoving) {
         const zBlend = Math.min(1, dt * 10);
-        zoomDistRef.current += zoomDiff * zBlend;
-        const camPos = computeCameraPositionForZoom(zoomDistRef.current, isSingleModeRef.current);
-        camera.position.set(0, camPos.y, camPos.z);
-        camera.lookAt(0, -0.1, 0);
+        if (zoomMoving) zoomDistRef.current += zoomDiff * zBlend;
+        if (panMoving) {
+          currentPanRef.current.x += panDx * zBlend;
+          currentPanRef.current.y += panDy * zBlend;
+        }
+        const pose = computeCameraPose({
+          zoomDist: zoomDistRef.current,
+          panX: currentPanRef.current.x,
+          panY: currentPanRef.current.y,
+          isSingleMode: isSingleModeRef.current,
+        });
+        camera.position.set(pose.posX, pose.posY, pose.posZ);
+        _cameraLookAtTarget.set(pose.targetX, pose.targetY, pose.targetZ);
+        camera.lookAt(_cameraLookAtTarget);
       }
 
-      // Sync stand & dust visibility without traversing unnecessarily
+      // Sync stand, dust & glow halo visibility cleanly
       if (standGroup.visible !== showStandRef.current) {
         standGroup.visible = showStandRef.current;
       }
@@ -1297,16 +1499,30 @@ export function QuranBook3DPage({
       if (dustPoints.visible !== dustActive) {
         dustPoints.visible = dustActive;
       }
+      const glowActive = !isSwGl && showGlowRef.current;
+      if (auraSprite.visible !== glowActive) {
+        auraSprite.visible = glowActive;
+      }
 
-      // Gentle ambient dust update every 2nd frame on hardware GPU only
-      if (dustActive && frameCount % 2 === 0) {
-        const posArr = dustGeo.attributes.position.array;
-        const liftStep = dt * 0.28;
-        for (let i = 1; i < posArr.length; i += 3) {
-          posArr[i] += liftStep;
-          if (posArr[i] > 3.2) posArr[i] = -0.8;
+      // Animate glowing particle shimmer & gentle rising drift on hardware GPU
+      if (dustActive) {
+        dustMat.uniforms.uTime.value += dt;
+        dustMat.uniforms.uGlowStrength.value = showGlowRef.current
+          ? BOOK3D_PARTICLES.defaultGlowStrength
+          : 0.45;
+        if (frameCount % 2 === 0) {
+          const posArr = dustGeo.attributes.position.array;
+          const liftStep = dt * 0.24;
+          for (let i = 1; i < posArr.length; i += 3) {
+            posArr[i] += liftStep;
+            if (posArr[i] > 3.1) posArr[i] = -0.8;
+          }
+          dustGeo.attributes.position.needsUpdate = true;
         }
-        dustGeo.attributes.position.needsUpdate = true;
+      }
+      if (glowActive) {
+        const pulse = 1 + Math.sin(dustMat.uniforms.uTime.value * 1.1) * 0.04;
+        auraSprite.scale.set(5.4 * pulse, 3.6 * pulse, 1);
       }
 
       // Delta-timed 3D Page Flip Physics
@@ -1340,8 +1556,8 @@ export function QuranBook3DPage({
         console.warn("Render loop error:", renderErr);
       }
 
-      // Continue ticking while animating, orbiting, zooming, or dust active on GPU
-      if (fAnim.active || orbitMoving || zoomMoving || dustActive) {
+      // Continue ticking while animating, orbiting, zooming, panning, or dust active on GPU
+      if (fAnim.active || orbitMoving || zoomMoving || panMoving || dustActive || glowActive) {
         rafId = requestAnimationFrame(renderFrame);
       }
     };
@@ -1377,6 +1593,9 @@ export function QuranBook3DPage({
       // Explicit GPU disposal
       dustGeo.dispose();
       dustMat.dispose();
+      particleGlowTex?.dispose();
+      auraMat.dispose();
+      auraTex?.dispose();
       rehalPlankGeo.dispose();
       pivotGeo.dispose();
       footGeo.dispose();
@@ -1409,7 +1628,7 @@ export function QuranBook3DPage({
     };
   }, [viewMode, webglFailed]);
 
-  // Toggle Stand & Dust visibility & wake render loop
+  // Toggle Stand, Dust & Glow visibility & wake render loop
   useEffect(() => {
     showStandRef.current = showStand;
     if (standGroupRef.current) {
@@ -1428,6 +1647,14 @@ export function QuranBook3DPage({
     }
     requestRenderRef.current();
   }, [showDust]);
+
+  useEffect(() => {
+    showGlowRef.current = showGlow;
+    if (auraSpriteRef.current) {
+      auraSpriteRef.current.visible = !isSoftwareGlRef.current && showGlow;
+    }
+    requestRenderRef.current();
+  }, [showGlow]);
 
   // ── 3D & 2D Page Turns (RTL Arabic: Next lifts Left -> Right; Prev lifts Right -> Left) ──
   const turnNext = useCallback(() => {
@@ -1615,22 +1842,51 @@ export function QuranBook3DPage({
     [viewMode, webglFailed]
   );
 
-  // ── 3D Orbit Drag, Pinch-Zoom & Raycast Ayah Selection ──
+  // ── Camera Pan Helpers (3D & 2D translation) ──
+  const handlePanStep = useCallback(
+    (dirX, dirY) => {
+      if (viewMode === "3d" && !webglFailed) {
+        targetPanRef.current = stepCameraPan(targetPanRef.current, dirX, dirY);
+        requestRenderRef.current();
+      } else {
+        setPan2d((p) =>
+          clamp2DPan({
+            x: p.x - (Number(dirX) || 0) * BOOK3D_PAN.step2D,
+            y: p.y + (Number(dirY) || 0) * BOOK3D_PAN.step2D,
+          })
+        );
+      }
+    },
+    [viewMode, webglFailed]
+  );
+
+  // ── 3D Orbit Drag, Camera Translation (Pan), Two-Finger Pinch/Pan & Raycast Ayah Selection ──
   const handlePointerDown = (e) => {
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (activePointersRef.current.size === 2) {
       const [p1, p2] = Array.from(activePointersRef.current.values());
+      const metrics = computeTwoFingerMetrics(p1, p2);
       pinchStateRef.current = {
         active: true,
-        startTouchDist: Math.max(10, Math.hypot(p2.x - p1.x, p2.y - p1.y)),
+        startTouchDist: metrics.dist,
         startZoomDist: targetZoomRef.current,
+        prevMidX: metrics.midX,
+        prevMidY: metrics.midY,
       };
       isDraggingRef.current = false;
+      panDragActiveRef.current = false;
       dragDistRef.current = 100;
       return;
     }
     pinchStateRef.current.active = false;
     isDraggingRef.current = true;
+    panDragActiveRef.current =
+      interactionModeRef.current === "pan" ||
+      e.button === 2 ||
+      e.button === 1 ||
+      (e.buttons & 2) !== 0 ||
+      (e.buttons & 4) !== 0 ||
+      Boolean(e.shiftKey || e.altKey);
     dragDistRef.current = 0;
     prevMousePosRef.current = { x: e.clientX, y: e.clientY };
     requestRenderRef.current();
@@ -1642,14 +1898,33 @@ export function QuranBook3DPage({
     }
     if (activePointersRef.current.size === 2 && pinchStateRef.current.active) {
       const [p1, p2] = Array.from(activePointersRef.current.values());
-      const curDist = Math.max(10, Math.hypot(p2.x - p1.x, p2.y - p1.y));
+      const metrics = computeTwoFingerMetrics(p1, p2);
       const nextZ = computePinchZoomDist(
         pinchStateRef.current.startZoomDist,
         pinchStateRef.current.startTouchDist,
-        curDist
+        metrics.dist
       );
       targetZoomRef.current = nextZ;
       setZoomPercent(computeZoomPercent(nextZ, isSingleModeRef.current));
+
+      // Simultaneous two-finger parallel camera translation
+      const midDx = metrics.midX - pinchStateRef.current.prevMidX;
+      const midDy = metrics.midY - pinchStateRef.current.prevMidY;
+      pinchStateRef.current.prevMidX = metrics.midX;
+      pinchStateRef.current.prevMidY = metrics.midY;
+      if (Math.abs(midDx) > 0.2 || Math.abs(midDy) > 0.2) {
+        const panDelta = computePanDeltaFromDrag(
+          midDx,
+          midDy,
+          targetZoomRef.current,
+          isSingleModeRef.current
+        );
+        targetPanRef.current = clampCameraPan({
+          x: targetPanRef.current.x + panDelta.dx,
+          y: targetPanRef.current.y + panDelta.dy,
+        });
+      }
+
       dragDistRef.current = 100;
       requestRenderRef.current();
       return;
@@ -1661,10 +1936,30 @@ export function QuranBook3DPage({
     dragDistRef.current += Math.abs(dx) + Math.abs(dy);
     prevMousePosRef.current = { x: e.clientX, y: e.clientY };
 
-    targetRotationRef.current.y += dx * 0.005;
-    targetRotationRef.current.x += dy * 0.005;
-    targetRotationRef.current.x = Math.max(0.05, Math.min(0.75, targetRotationRef.current.x));
-    targetRotationRef.current.y = Math.max(-0.6, Math.min(0.6, targetRotationRef.current.y));
+    const isPanningNow =
+      panDragActiveRef.current ||
+      interactionModeRef.current === "pan" ||
+      (e.buttons & 2) !== 0 ||
+      (e.buttons & 4) !== 0 ||
+      Boolean(e.shiftKey || e.altKey);
+
+    if (isPanningNow) {
+      const panDelta = computePanDeltaFromDrag(
+        dx,
+        dy,
+        targetZoomRef.current,
+        isSingleModeRef.current
+      );
+      targetPanRef.current = clampCameraPan({
+        x: targetPanRef.current.x + panDelta.dx,
+        y: targetPanRef.current.y + panDelta.dy,
+      });
+    } else {
+      targetRotationRef.current.y += dx * 0.005;
+      targetRotationRef.current.x += dy * 0.005;
+      targetRotationRef.current.x = Math.max(0.05, Math.min(0.75, targetRotationRef.current.x));
+      targetRotationRef.current.y = Math.max(-0.6, Math.min(0.6, targetRotationRef.current.y));
+    }
     requestRenderRef.current();
   };
 
@@ -1679,6 +1974,7 @@ export function QuranBook3DPage({
     }
     if (activePointersRef.current.size === 0) {
       isDraggingRef.current = false;
+      panDragActiveRef.current = false;
     }
   };
 
@@ -1697,7 +1993,7 @@ export function QuranBook3DPage({
   );
 
   const handleClickOnCanvas = (e) => {
-    // Ignore drags or pinch gestures so orbiting/zooming never accidentally triggers verse sheet
+    // Ignore drags or pinch gestures so orbiting/zooming/panning never accidentally triggers verse sheet
     if (dragDistRef.current > 8) return;
     if (!containerRef.current || !cameraRef.current || !sceneRef.current) return;
 
@@ -1737,14 +2033,23 @@ export function QuranBook3DPage({
       ? BOOK3D_ZOOM.defaultMobileDist
       : BOOK3D_ZOOM.defaultDesktopDist;
     targetRotationRef.current = { x: 0.35, y: 0.0 };
+    targetPanRef.current = { x: 0, y: 0 };
+    currentPanRef.current = { x: 0, y: 0 };
     targetZoomRef.current = defaultDist;
     zoomDistRef.current = defaultDist;
+    setPan2d({ x: 0, y: 0 });
     setZoom2dScale(BOOK3D_ZOOM.default2DScale);
     setZoomPercent(100);
     if (cameraRef.current) {
-      const camPos = computeCameraPositionForZoom(defaultDist, isSingleModeRef.current);
-      cameraRef.current.position.set(0, camPos.y, camPos.z);
-      cameraRef.current.lookAt(0, -0.1, 0);
+      const pose = computeCameraPose({
+        zoomDist: defaultDist,
+        panX: 0,
+        panY: 0,
+        isSingleMode: isSingleModeRef.current,
+      });
+      cameraRef.current.position.set(pose.posX, pose.posY, pose.posZ);
+      _cameraLookAtTarget.set(pose.targetX, pose.targetY, pose.targetZ);
+      cameraRef.current.lookAt(_cameraLookAtTarget);
     }
     requestRenderRef.current();
   };
@@ -1768,10 +2073,38 @@ export function QuranBook3DPage({
 
   const togglePlayRef = useRef(() => {});
 
-  // ── Keyboard Shortcuts ──
+  // ── Keyboard Shortcuts (Arrows turn pages, Alt+Arrows or WASD translate camera) ──
   useEffect(() => {
     const handleKey = (e) => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (e.altKey) {
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          handlePanStep(-1, 0);
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          handlePanStep(1, 0);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          handlePanStep(0, 1);
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          handlePanStep(0, -1);
+          return;
+        }
+      }
+      const lower = String(e.key || "").toLowerCase();
+      if (lower === "q" || lower === "a") handlePanStep(-1, 0);
+      if (lower === "d") handlePanStep(1, 0);
+      if (lower === "z" || lower === "w") handlePanStep(0, 1);
+      if (lower === "s") handlePanStep(0, -1);
+
       if (e.key === "ArrowLeft") turnNext();
       if (e.key === "ArrowRight") turnPrev();
       if (e.key === "+" || e.key === "=") handleZoomStep(-1);
@@ -1789,7 +2122,7 @@ export function QuranBook3DPage({
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [turnNext, turnPrev, handleZoomStep]);
+  }, [turnNext, turnPrev, handleZoomStep, handlePanStep]);
 
   // ── Audio Handling (Synced selectedAyah + continuous RTL spread -> next spread playback) ──
   const handlePlayAyah = useCallback(
@@ -2036,155 +2369,197 @@ export function QuranBook3DPage({
             <span>SOURATES</span>
           </button>
 
-          <button
-            onClick={() => setShowSurahDrawer(true)}
-            style={{
-              background: "linear-gradient(135deg, rgba(212,175,55,0.22) 0%, rgba(138,107,35,0.22) 100%)",
-              border: "1px solid rgba(212, 175, 55, 0.6)",
-              color: "#ebd8b0",
-              borderRadius: 8,
-              padding: "6px 14px",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <span>📖</span>
-            <span>INDEX DU MUSHAF</span>
-          </button>
+          <EditableUiSlot elementId="quran3dIndexBtn" inline={true}>
+            <button
+              data-testid="q3d-index-btn"
+              onClick={() => setShowSurahDrawer(true)}
+              style={{
+                background: "linear-gradient(135deg, rgba(212,175,55,0.22) 0%, rgba(138,107,35,0.22) 100%)",
+                border: "1px solid rgba(212, 175, 55, 0.6)",
+                color: "#ebd8b0",
+                borderRadius: 8,
+                padding: "6px 14px",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <span>📖</span>
+              <span>INDEX DU MUSHAF</span>
+            </button>
+          </EditableUiSlot>
         </div>
 
         {/* Page / Juz Information */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 13, fontFamily: "'Cinzel', serif", color: "#d4af37", letterSpacing: 0.5 }}>
-            {isSingleMode ? `PAGE ${rPage} / 604` : `PAGES ${rPage}–${lPage} / 604`}
-          </span>
-
-          <button
-            onClick={toggleBookmark}
-            title={bookmark === rPage ? "Retirer marque-page" : "Poser marque-page"}
-            style={{
-              background: bookmark === rPage ? "rgba(212,175,55,0.3)" : "rgba(255,255,255,0.05)",
-              border: `1px solid ${bookmark === rPage ? "#ffd700" : "rgba(255,255,255,0.15)"}`,
-              color: bookmark === rPage ? "#ffd700" : "#a89060",
-              borderRadius: 8,
-              padding: "6px 10px",
-              cursor: "pointer",
-              fontSize: 14,
-            }}
-          >
-            🔖
-          </button>
-        </div>
-
-        {/* Tajweed & 3D Controls */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <button
-            data-testid="q3d-view-toggle"
-            onClick={() => setViewMode((m) => (m === "3d" ? "2d" : "3d"))}
-            style={{
-              background: viewMode === "3d" ? "rgba(212,175,55,0.25)" : "rgba(56,189,248,0.2)",
-              border: `1px solid ${viewMode === "3d" ? "#d4af37" : "#38bdf8"}`,
-              color: viewMode === "3d" ? "#ffd700" : "#38bdf8",
-              borderRadius: 8,
-              padding: "6px 12px",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 700,
-              fontFamily: "'Cinzel', serif",
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-            }}
-            title={viewMode === "3d" ? "Passer en vue 2D directe" : "Passer en vue 3D interactive"}
-          >
-            <span>{viewMode === "3d" ? "🧊 MODE 3D" : "📖 MODE 2D"}</span>
-          </button>
-
-          <button
-            onClick={() => setShowTajweedDrawer((v) => !v)}
-            style={{
-              background: activeTajweedCount > 0 ? "rgba(6,182,212,0.25)" : "rgba(255,255,255,0.05)",
-              border: `1px solid ${activeTajweedCount > 0 ? "#06b6d4" : "rgba(255,255,255,0.15)"}`,
-              color: activeTajweedCount > 0 ? "#22d3ee" : "#a89060",
-              borderRadius: 8,
-              padding: "6px 12px",
-              cursor: "pointer",
-              fontSize: 12,
-              fontFamily: "'Cinzel', serif",
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-            }}
-          >
-            <span>🎨</span>
-            <span>TAJWEED</span>
-            {activeTajweedCount > 0 && <span>({activeTajweedCount})</span>}
-          </button>
-
-          {/* Zoom Controls (3D camera & 2D magnification) */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 3,
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(212,175,55,0.28)",
-              borderRadius: 8,
-              padding: "2px 4px",
-            }}
-          >
-            <button
-              data-testid="q3d-zoom-out"
-              onClick={() => handleZoomStep(1)}
-              title="Dézoomer (-)"
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#d4af37",
-                cursor: "pointer",
-                fontSize: 14,
-                fontWeight: 800,
-                padding: "3px 7px",
-              }}
-            >
-              −
-            </button>
-            <span
-              data-testid="q3d-zoom-badge"
-              style={{
-                fontSize: 11,
-                fontFamily: "'Cinzel', serif",
-                color: "#ebd8b0",
-                minWidth: 38,
-                textAlign: "center",
-              }}
-            >
-              {zoomPercent}%
+        <EditableUiSlot elementId="quran3dPageInfo" inline={true}>
+          <div data-testid="q3d-page-info" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, fontFamily: "'Cinzel', serif", color: "#d4af37", letterSpacing: 0.5 }}>
+              {isSingleMode ? `PAGE ${rPage} / 604` : `PAGES ${rPage}–${lPage} / 604`}
             </span>
+
             <button
-              data-testid="q3d-zoom-in"
-              onClick={() => handleZoomStep(-1)}
-              title="Zoomer (+)"
+              onClick={toggleBookmark}
+              title={bookmark === rPage ? "Retirer marque-page" : "Poser marque-page"}
               style={{
-                background: "transparent",
-                border: "none",
-                color: "#d4af37",
+                background: bookmark === rPage ? "rgba(212,175,55,0.3)" : "rgba(255,255,255,0.05)",
+                border: `1px solid ${bookmark === rPage ? "#ffd700" : "rgba(255,255,255,0.15)"}`,
+                color: bookmark === rPage ? "#ffd700" : "#a89060",
+                borderRadius: 8,
+                padding: "6px 10px",
                 cursor: "pointer",
                 fontSize: 14,
-                fontWeight: 800,
-                padding: "3px 7px",
               }}
             >
-              +
+              🔖
             </button>
           </div>
+        </EditableUiSlot>
 
-          {viewMode === "3d" && !webglFailed && (
-            <>
+        {/* Tajweed, 3D & Modular UI Controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <EditableUiSlot elementId="quran3dViewModeBtn" inline={true}>
+            <button
+              data-testid="q3d-view-toggle"
+              onClick={() => setViewMode((m) => (m === "3d" ? "2d" : "3d"))}
+              style={{
+                background: viewMode === "3d" ? "rgba(212,175,55,0.25)" : "rgba(56,189,248,0.2)",
+                border: `1px solid ${viewMode === "3d" ? "#d4af37" : "#38bdf8"}`,
+                color: viewMode === "3d" ? "#ffd700" : "#38bdf8",
+                borderRadius: 8,
+                padding: "6px 12px",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+                fontFamily: "'Cinzel', serif",
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+              title={viewMode === "3d" ? "Passer en vue 2D directe" : "Passer en vue 3D interactive"}
+            >
+              <span>{viewMode === "3d" ? "🧊 MODE 3D" : "📖 MODE 2D"}</span>
+            </button>
+          </EditableUiSlot>
+
+          <EditableUiSlot elementId="quran3dTajweedBtn" inline={true}>
+            <button
+              data-testid="q3d-tajweed-btn"
+              onClick={() => setShowTajweedDrawer((v) => !v)}
+              style={{
+                background: activeTajweedCount > 0 ? "rgba(6,182,212,0.25)" : "rgba(255,255,255,0.05)",
+                border: `1px solid ${activeTajweedCount > 0 ? "#06b6d4" : "rgba(255,255,255,0.15)"}`,
+                color: activeTajweedCount > 0 ? "#22d3ee" : "#a89060",
+                borderRadius: 8,
+                padding: "6px 12px",
+                cursor: "pointer",
+                fontSize: 12,
+                fontFamily: "'Cinzel', serif",
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <span>🎨</span>
+              <span>TAJWEED</span>
+              {activeTajweedCount > 0 && <span>({activeTajweedCount})</span>}
+            </button>
+          </EditableUiSlot>
+
+          {/* Zoom Controls (3D camera & 2D magnification) */}
+          <EditableUiSlot elementId="quran3dZoomControls" inline={true}>
+            <div
+              data-testid="q3d-zoom-controls"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(212,175,55,0.28)",
+                borderRadius: 8,
+                padding: "2px 4px",
+              }}
+            >
+              <button
+                data-testid="q3d-zoom-out"
+                onClick={() => handleZoomStep(1)}
+                title="Dézoomer (-)"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#d4af37",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  fontWeight: 800,
+                  padding: "3px 7px",
+                }}
+              >
+                −
+              </button>
+              <span
+                data-testid="q3d-zoom-badge"
+                style={{
+                  fontSize: 11,
+                  fontFamily: "'Cinzel', serif",
+                  color: "#ebd8b0",
+                  minWidth: 38,
+                  textAlign: "center",
+                }}
+              >
+                {zoomPercent}%
+              </span>
+              <button
+                data-testid="q3d-zoom-in"
+                onClick={() => handleZoomStep(-1)}
+                title="Zoomer (+)"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#d4af37",
+                  cursor: "pointer",
+                  fontSize: 14,
+                  fontWeight: 800,
+                  padding: "3px 7px",
+                }}
+              >
+                +
+              </button>
+            </div>
+          </EditableUiSlot>
+
+          <EditableUiSlot
+            elementId="quran3dSceneControls"
+            condition={viewMode === "3d" && !webglFailed}
+            inline={true}
+          >
+            <div data-testid="q3d-scene-controls" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                data-testid="q3d-pan-toggle"
+                aria-pressed={interactionMode === "pan"}
+                onClick={() => setInteractionMode((m) => (m === "orbit" ? "pan" : "orbit"))}
+                title="Basculer entre Rotation Orbite et Translation de Caméra"
+                style={{
+                  background: interactionMode === "pan" ? "rgba(56,189,248,0.22)" : "rgba(255,255,255,0.05)",
+                  border: `1px solid ${interactionMode === "pan" ? "#38bdf8" : "rgba(255,255,255,0.15)"}`,
+                  color: interactionMode === "pan" ? "#7dd3fc" : "#a89060",
+                  borderRadius: 8,
+                  padding: "6px 10px",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  fontFamily: "'Cinzel', serif",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <span>{interactionMode === "pan" ? "✋" : "🔄"}</span>
+                <span>{interactionMode === "pan" ? "CAMÉRA" : "ORBITE"}</span>
+              </button>
+
               <button
                 onClick={() => setShowStand((s) => !s)}
                 title={showStand ? "Masquer le support en bois" : "Afficher le support en bois"}
@@ -2225,7 +2600,7 @@ export function QuranBook3DPage({
               <button
                 data-testid="q3d-reset-view"
                 onClick={reset3DView}
-                title="Réinitialiser l'angle et le zoom"
+                title="Réinitialiser l'angle, la translation et le zoom"
                 style={{
                   background: "rgba(255,255,255,0.05)",
                   border: "1px solid rgba(255,255,255,0.15)",
@@ -2239,8 +2614,51 @@ export function QuranBook3DPage({
               >
                 RESET VUE
               </button>
-            </>
-          )}
+            </div>
+          </EditableUiSlot>
+
+          {/* Direct UI Edit & Visibility List Triggers inside Coran 3D */}
+          <button
+            type="button"
+            data-testid="q3d-ui-edit-btn"
+            aria-pressed={uiEditMode}
+            onClick={() => dispatch(uiActions.toggleUiEditMode())}
+            title={uiEditMode ? "Terminer l'édition UI" : "Ajouter / enlever des éléments directement dans le Coran 3D"}
+            style={{
+              background: uiEditMode ? "rgba(62, 184, 160, 0.24)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${uiEditMode ? "#3eb8a0" : "rgba(212,175,55,0.3)"}`,
+              color: uiEditMode ? "#56d4bc" : "#d4af37",
+              borderRadius: 8,
+              padding: "6px 10px",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 700,
+              fontFamily: "'Cinzel', serif",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <span>{uiEditMode ? "✓ FIN UI" : "✏️ UI ±"}</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="q3d-ui-modal-btn"
+            onClick={() => dispatch(uiActions.setShowUiVisibilityModal(true))}
+            title="Activer ou désactiver chaque élément de l'interface"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(212,175,55,0.3)",
+              color: "#ebd8b0",
+              borderRadius: 8,
+              padding: "6px 9px",
+              cursor: "pointer",
+              fontSize: 12,
+            }}
+          >
+            🎛️
+          </button>
         </div>
       </header>
 
@@ -2267,6 +2685,7 @@ export function QuranBook3DPage({
           <div
             ref={containerRef}
             data-testid="q3d-webgl-container"
+            onContextMenu={(e) => e.preventDefault()}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -2277,12 +2696,12 @@ export function QuranBook3DPage({
               width: "100%",
               height: "100%",
               minHeight: 460,
-              cursor: "grab",
+              cursor: interactionMode === "pan" ? "move" : "grab",
               touchAction: "none",
             }}
           />
         ) : (
-          /* 2D Medina Mushaf Page Reader Mode (High-DPI sharp layout with 2D zoom) */
+          /* 2D Medina Mushaf Page Reader Mode (High-DPI sharp layout with 2D zoom & pan) */
           <div
             style={{
               width: "100%",
@@ -2305,7 +2724,10 @@ export function QuranBook3DPage({
                 justifyContent: "center",
                 gap: 16,
                 width: "100%",
-                transform: `scale(${zoom2dScale})`,
+                transform:
+                  pan2d.x === 0 && pan2d.y === 0
+                    ? `scale(${zoom2dScale})`
+                    : `translate3d(${pan2d.x}px, ${pan2d.y}px, 0) scale(${zoom2dScale})`,
                 transformOrigin: "center top",
                 transition: "transform 0.18s ease",
               }}
@@ -2358,61 +2780,196 @@ export function QuranBook3DPage({
         )}
 
         {/* 3D / 2D Page Turn Floating Buttons */}
-        <button
-          data-testid="q3d-prev-btn"
-          onClick={turnPrev}
-          disabled={spread <= 1}
+        <div
           style={{
             position: "absolute",
-            right: 16,
             top: "50%",
-            transform: "translateY(-50%)",
-            width: 46,
-            height: 68,
-            borderRadius: "14px 0 0 14px",
-            background: "rgba(22, 13, 6, 0.85)",
-            border: "1px solid rgba(212, 175, 55, 0.4)",
-            color: spread <= 1 ? "rgba(255,255,255,0.2)" : "#ffd700",
-            fontSize: 22,
-            cursor: spread <= 1 ? "default" : "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.8)",
-            zIndex: 20,
-          }}
-          title="Page Précédente (Droite)"
-        >
-          ▶
-        </button>
-
-        <button
-          data-testid="q3d-next-btn"
-          onClick={turnNext}
-          disabled={rPage >= _MUSHAF_PAGES}
-          style={{
-            position: "absolute",
             left: 16,
-            top: "50%",
+            right: 16,
             transform: "translateY(-50%)",
-            width: 46,
-            height: 68,
-            borderRadius: "0 14px 14px 0",
-            background: "rgba(22, 13, 6, 0.85)",
-            border: "1px solid rgba(212, 175, 55, 0.4)",
-            color: rPage >= _MUSHAF_PAGES ? "rgba(255,255,255,0.2)" : "#ffd700",
-            fontSize: 22,
-            cursor: rPage >= _MUSHAF_PAGES ? "default" : "pointer",
+            zIndex: 20,
+            pointerEvents: "none",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.8)",
-            zIndex: 20,
+            justifyContent: "space-between",
           }}
-          title="Page Suivante (Gauche)"
         >
-          ◀
-        </button>
+          <EditableUiSlot
+            elementId="quran3dPageArrows"
+            inline={false}
+            style={{ width: "100%" }}
+          >
+            <div
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                pointerEvents: "none",
+              }}
+            >
+              <button
+                data-testid="q3d-next-btn"
+                onClick={turnNext}
+                disabled={rPage >= _MUSHAF_PAGES}
+                style={{
+                  width: 46,
+                  height: 68,
+                  borderRadius: "0 14px 14px 0",
+                  background: "rgba(22, 13, 6, 0.85)",
+                  border: "1px solid rgba(212, 175, 55, 0.4)",
+                  color: rPage >= _MUSHAF_PAGES ? "rgba(255,255,255,0.2)" : "#ffd700",
+                  fontSize: 22,
+                  cursor: rPage >= _MUSHAF_PAGES ? "default" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.8)",
+                  pointerEvents: "auto",
+                }}
+                title="Page Suivante (Gauche)"
+              >
+                ◀
+              </button>
+
+              <button
+                data-testid="q3d-prev-btn"
+                onClick={turnPrev}
+                disabled={spread <= 1}
+                style={{
+                  width: 46,
+                  height: 68,
+                  borderRadius: "14px 0 0 14px",
+                  background: "rgba(22, 13, 6, 0.85)",
+                  border: "1px solid rgba(212, 175, 55, 0.4)",
+                  color: spread <= 1 ? "rgba(255,255,255,0.2)" : "#ffd700",
+                  fontSize: 22,
+                  cursor: spread <= 1 ? "default" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.8)",
+                  pointerEvents: "auto",
+                }}
+                title="Page Précédente (Droite)"
+              >
+                ▶
+              </button>
+            </div>
+          </EditableUiSlot>
+        </div>
+
+        {/* Directional Camera Translation Mini-Pad (active in Caméra / Pan mode) */}
+        {interactionMode === "pan" && (
+          <div
+            data-testid="q3d-pan-pad"
+            style={{
+              position: "absolute",
+              bottom: 50,
+              right: 16,
+              zIndex: 25,
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 30px)",
+              gridTemplateRows: "repeat(3, 30px)",
+              gap: 3,
+              padding: 6,
+              borderRadius: 12,
+              background: "rgba(12, 7, 3, 0.88)",
+              border: "1px solid rgba(56, 189, 248, 0.45)",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.7)",
+            }}
+          >
+            <span />
+            <button
+              type="button"
+              data-testid="q3d-pan-up"
+              onClick={() => handlePanStep(0, 1)}
+              title="Monter la caméra"
+              style={{
+                background: "rgba(56,189,248,0.18)",
+                border: "1px solid rgba(56,189,248,0.4)",
+                color: "#7dd3fc",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              ▲
+            </button>
+            <span />
+            <button
+              type="button"
+              data-testid="q3d-pan-left"
+              onClick={() => handlePanStep(-1, 0)}
+              title="Déplacer la caméra à gauche"
+              style={{
+                background: "rgba(56,189,248,0.18)",
+                border: "1px solid rgba(56,189,248,0.4)",
+                color: "#7dd3fc",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              ◀
+            </button>
+            <button
+              type="button"
+              data-testid="q3d-pan-center"
+              onClick={reset3DView}
+              title="Recentrer la caméra"
+              style={{
+                background: "rgba(212,175,55,0.22)",
+                border: "1px solid rgba(212,175,55,0.5)",
+                color: "#ffd700",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              ⌖
+            </button>
+            <button
+              type="button"
+              data-testid="q3d-pan-right"
+              onClick={() => handlePanStep(1, 0)}
+              title="Déplacer la caméra à droite"
+              style={{
+                background: "rgba(56,189,248,0.18)",
+                border: "1px solid rgba(56,189,248,0.4)",
+                color: "#7dd3fc",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              ▶
+            </button>
+            <span />
+            <button
+              type="button"
+              data-testid="q3d-pan-down"
+              onClick={() => handlePanStep(0, -1)}
+              title="Descendre la caméra"
+              style={{
+                background: "rgba(56,189,248,0.18)",
+                border: "1px solid rgba(56,189,248,0.4)",
+                color: "#7dd3fc",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              ▼
+            </button>
+            <span />
+          </div>
+        )}
 
         {/* Interaction Hint Bar */}
         <div
@@ -2421,130 +2978,148 @@ export function QuranBook3DPage({
             bottom: 12,
             left: "50%",
             transform: "translateX(-50%)",
-            background: "rgba(12, 7, 3, 0.88)",
-            border: "1px solid rgba(212, 175, 55, 0.28)",
-            borderRadius: 20,
-            padding: "5px 18px",
-            fontSize: 11,
-            color: "#c9a84c",
+            zIndex: 22,
             pointerEvents: "none",
-            letterSpacing: 0.5,
-            whiteSpace: "nowrap",
             maxWidth: "90%",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
           }}
         >
-          {viewMode === "3d" && !webglFailed
-            ? "🖐️ Glissez pour incliner • Molette / Pincement pour zoomer • Touchez un verset"
-            : "📖 Mushaf de Médine • Touchez un verset pour l'écouter et voir sa traduction"}
+          <EditableUiSlot elementId="quran3dHintBar" inline={true}>
+            <div
+              data-testid="q3d-hint-bar"
+              style={{
+                background: "rgba(12, 7, 3, 0.88)",
+                border: "1px solid rgba(212, 175, 55, 0.28)",
+                borderRadius: 20,
+                padding: "5px 18px",
+                fontSize: 11,
+                color: "#c9a84c",
+                pointerEvents: "none",
+                letterSpacing: 0.5,
+                whiteSpace: "nowrap",
+                maxWidth: "100%",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {viewMode === "3d" && !webglFailed
+                ? "🖐️ Glissez pour incliner • Clic droit / mode ✋ pour déplacer la caméra • Molette/Pincement pour zoomer"
+                : "📖 Mushaf de Médine • Touchez un verset pour l'écouter et voir sa traduction"}
+            </div>
+          </EditableUiSlot>
         </div>
       </main>
 
       {/* ── Bottom Audio & Scrubber Bar ─────────────────────────────── */}
-      <footer
-        style={{
-          width: "100%",
-          maxWidth: 1080,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 10,
-          padding: "8px 16px",
-          background: "rgba(18, 10, 4, 0.95)",
-          border: "1px solid rgba(212, 175, 55, 0.35)",
-          borderRadius: 14,
-          zIndex: 40,
-        }}
+      <EditableUiSlot
+        elementId="quran3dAudioFooter"
+        inline={false}
+        style={{ width: "100%", maxWidth: 1080 }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            data-testid="q3d-play-btn"
-            onClick={togglePlayCurrentPage}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, #d4af37 0%, #8b6d28 100%)",
-              border: "none",
-              color: "#0a0603",
-              fontSize: 18,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: "bold",
-              boxShadow: "0 4px 14px rgba(212,175,55,0.45)",
-            }}
-            title={isPlaying ? "Mettre en pause" : "Écouter la page"}
-          >
-            {isPlaying ? "⏸" : "▶"}
-          </button>
+        <footer
+          data-testid="q3d-audio-footer"
+          style={{
+            width: "100%",
+            maxWidth: 1080,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 10,
+            padding: "8px 16px",
+            background: "rgba(18, 10, 4, 0.95)",
+            border: "1px solid rgba(212, 175, 55, 0.35)",
+            borderRadius: 14,
+            zIndex: 40,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              data-testid="q3d-play-btn"
+              onClick={togglePlayCurrentPage}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #d4af37 0%, #8b6d28 100%)",
+                border: "none",
+                color: "#0a0603",
+                fontSize: 18,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: "bold",
+                boxShadow: "0 4px 14px rgba(212,175,55,0.45)",
+              }}
+              title={isPlaying ? "Mettre en pause" : "Écouter la page"}
+            >
+              {isPlaying ? "⏸" : "▶"}
+            </button>
 
-          <select
-            value={reciterKey}
-            onChange={(e) => setReciterKey(e.target.value)}
-            style={{
-              background: "rgba(255,255,255,0.08)",
-              border: "1px solid rgba(212,175,55,0.35)",
-              borderRadius: 8,
-              color: "#ebd8b0",
-              padding: "6px 8px",
-              fontSize: 12,
-              fontFamily: "inherit",
-              cursor: "pointer",
-            }}
-          >
-            {GLOBAL_RECITERS.map((r) => (
-              <option key={r.key} value={r.key} style={{ background: "#1a1208", color: "#ebd8b0" }}>
-                🎙️ {r.name}
-              </option>
-            ))}
-          </select>
-        </div>
+            <select
+              value={reciterKey}
+              onChange={(e) => setReciterKey(e.target.value)}
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(212,175,55,0.35)",
+                borderRadius: 8,
+                color: "#ebd8b0",
+                padding: "6px 8px",
+                fontSize: 12,
+                fontFamily: "inherit",
+                cursor: "pointer",
+              }}
+            >
+              {GLOBAL_RECITERS.map((r) => (
+                <option key={r.key} value={r.key} style={{ background: "#1a1208", color: "#ebd8b0" }}>
+                  🎙️ {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        {/* Page Scrubber */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 220, maxWidth: 420 }}>
-          <span style={{ fontSize: 11, color: "#a89060" }}>1</span>
-          <input
-            type="range"
-            min={1}
-            max={604}
-            value={rPage}
-            onChange={(e) => jumpToPage(e.target.value)}
-            style={{
-              flex: 1,
-              accentColor: "#d4af37",
-              cursor: "pointer",
-            }}
-          />
-          <span style={{ fontSize: 11, color: "#a89060" }}>604</span>
-        </div>
+          {/* Page Scrubber */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 220, maxWidth: 420 }}>
+            <span style={{ fontSize: 11, color: "#a89060" }}>1</span>
+            <input
+              type="range"
+              min={1}
+              max={604}
+              value={rPage}
+              onChange={(e) => jumpToPage(e.target.value)}
+              style={{
+                flex: 1,
+                accentColor: "#d4af37",
+                cursor: "pointer",
+              }}
+            />
+            <span style={{ fontSize: 11, color: "#a89060" }}>604</span>
+          </div>
 
-        {/* Direct Page Input */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 12, color: "#d4af37" }}>Page :</span>
-          <input
-            type="number"
-            min={1}
-            max={604}
-            value={rPage}
-            onChange={(e) => jumpToPage(e.target.value)}
-            style={{
-              width: 58,
-              padding: "4px 6px",
-              background: "rgba(255,255,255,0.08)",
-              border: "1px solid rgba(212,175,55,0.35)",
-              borderRadius: 6,
-              color: "#ffd700",
-              textAlign: "center",
-              fontSize: 13,
-              fontWeight: "bold",
-            }}
-          />
-        </div>
-      </footer>
+          {/* Direct Page Input */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#d4af37" }}>Page :</span>
+            <input
+              type="number"
+              min={1}
+              max={604}
+              value={rPage}
+              onChange={(e) => jumpToPage(e.target.value)}
+              style={{
+                width: 58,
+                padding: "4px 6px",
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(212,175,55,0.35)",
+                borderRadius: 6,
+                color: "#ffd700",
+                textAlign: "center",
+                fontSize: 13,
+                fontWeight: "bold",
+              }}
+            />
+          </div>
+        </footer>
+      </EditableUiSlot>
 
       {/* ── Selected Ayah Interactive Sheet ─────────────────────────── */}
       {selectedAyah && (
@@ -3006,11 +3581,32 @@ export function QuranBook3DPage({
                   cursor: "pointer",
                 }}
               >
-                <span style={{ color: "#ebd8b0" }}>✨ Particules Dorées & Ambiance</span>
+                <span style={{ color: "#ebd8b0" }}>✨ Particules Dorées Texturées</span>
                 <input
+                  data-testid="q3d-toggle-dust"
                   type="checkbox"
                   checked={showDust}
                   onChange={(e) => setShowDust(e.target.checked)}
+                />
+              </label>
+
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 14px",
+                  background: "rgba(255,255,255,0.05)",
+                  borderRadius: 10,
+                  cursor: "pointer",
+                }}
+              >
+                <span style={{ color: "#ebd8b0" }}>🌟 Lueur & Halo Sacré (Glow)</span>
+                <input
+                  data-testid="q3d-toggle-glow"
+                  type="checkbox"
+                  checked={showGlow}
+                  onChange={(e) => setShowGlow(e.target.checked)}
                 />
               </label>
 
@@ -3027,7 +3623,7 @@ export function QuranBook3DPage({
                   cursor: "pointer",
                 }}
               >
-                🔄 Réinitialiser l&apos;Angle & la Vue
+                🔄 Réinitialiser Angle, Caméra &amp; Zoom
               </button>
             </div>
           </div>

@@ -198,10 +198,10 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     const camera = mockRendererState.cameras[0];
     expect(camera).toBeTruthy();
 
-    // Flush initial animation frame
+    // Flush initial animation frame cleanly (renderFrame re-schedules while glow/dust active)
     act(() => {
-      while (rafQueue.length > 0) {
-        const fn = rafQueue.shift();
+      const pending = rafQueue.splice(0, rafQueue.length);
+      for (const fn of pending) {
         fn(performance.now() + 16);
       }
     });

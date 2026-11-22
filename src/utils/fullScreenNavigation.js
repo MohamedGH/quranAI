@@ -4,6 +4,9 @@
  * layout responsiveness calculations, and transitioning back to normal reading mode.
  */
 
+import { buildQuranRoute } from "./routeManager.js";
+import { isPriority3DProfile, QURAN_READING_TIERS } from "./uxProfileManager.js";
+
 /**
  * Resolves the state transition when exiting FullScreen mode to normal reading mode.
  * Disables the automatic fullScreenSelectedAyat option if active so the user is not
@@ -25,6 +28,7 @@ export function resolveExitToNormalModeState({
     shouldUpdateReduxOption: Boolean(fullScreenSelectedAyat),
     nextExplicitFullScreen: false,
     nextOpenAyatNum: openAyatNum, // Kept so normal reading mode focuses this verse
+    nextTier: QURAN_READING_TIERS.LIST,
     message: "Mode normal rétabli",
   };
 }
@@ -44,8 +48,59 @@ export function resolveCloseFullScreenState({
     shouldUpdateReduxOption: Boolean(fullScreenSelectedAyat),
     nextExplicitFullScreen: false,
     nextOpenAyatNum: null,
+    nextTier: QURAN_READING_TIERS.LIST,
     message: "Fermeture du plein écran",
   };
+}
+
+/**
+ * Purely resolves the step-down transition when exiting the 3D Quran view.
+ * For Child & Novice (beginner), stepping out of 3D prioritizes Fullscreen verse view (Tier 2).
+ * For Standard & Expert, stepping out of 3D returns to normal Surah/Ayat list view.
+ *
+ * @param {Object} params
+ * @param {string} params.uxMode
+ * @param {Object|null} params.selectedAyah
+ * @param {Object} params.lastAyatBySurah
+ * @returns {Object} stepDownTarget
+ */
+export function resolveBook3DStepDownNavigation({
+  uxMode = "standard",
+  selectedAyah = null,
+  lastAyatBySurah = {},
+} = {}) {
+  const isSimplifiedPriority = isPriority3DProfile(uxMode);
+  const rawSurah = Number(selectedAyah?.surahNum);
+  const hasExplicitSurah = Number.isFinite(rawSurah) && rawSurah >= 1 && rawSurah <= 114;
+  const surahNum = hasExplicitSurah ? rawSurah : 1;
+  const rawAyat = Number(selectedAyah?.ayahNum);
+  const fallbackAyat = Number(lastAyatBySurah?.[surahNum]) || 1;
+  const ayatNum = Number.isFinite(rawAyat) && rawAyat >= 1 ? rawAyat : fallbackAyat;
+
+  if (isSimplifiedPriority) {
+    return Object.freeze({
+      nextTier: QURAN_READING_TIERS.FULLSCREEN,
+      enableFullscreen: true,
+      surahNum,
+      ayatNum,
+      targetRoute: buildQuranRoute({
+        activePage: "quran",
+        surahNum,
+        ayatNum,
+        view: "fullscreen",
+      }),
+    });
+  }
+
+  return Object.freeze({
+    nextTier: QURAN_READING_TIERS.LIST,
+    enableFullscreen: false,
+    surahNum: hasExplicitSurah ? surahNum : null,
+    ayatNum: hasExplicitSurah ? ayatNum : null,
+    targetRoute: hasExplicitSurah
+      ? buildQuranRoute({ activePage: "quran", surahNum, ayatNum })
+      : "/quran",
+  });
 }
 
 /**

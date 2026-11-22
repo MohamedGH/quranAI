@@ -7,10 +7,27 @@ import {
   setAllElementsVisibility,
   applyPreset,
 } from "./utils/uiVisibilityManager.js";
+import {
+  QURAN_READING_TIERS,
+  isPriority3DProfile,
+  resolveInitialQuranReadingTier,
+  resolveStepDownQuranTier,
+} from "./utils/uxProfileManager.js";
 
 // ─── Helpers localStorage ────────────────────────────────────────────────────
 const load = (key, fallback) => safeGetItem(key, fallback);
 const save = (key, value) => safeSetItem(key, value);
+
+const initUxMode = load("quran_uxMode", "standard");
+const initValidatedLetters = load("quran_validatedLetters", []);
+const initIsUnlockedForChild =
+  initUxMode !== "child" ||
+  (Array.isArray(initValidatedLetters) && initValidatedLetters.length >= 28);
+const initQuranReadingTier = resolveInitialQuranReadingTier({
+  uxMode: initUxMode,
+  isQuranUnlocked: initIsUnlockedForChild,
+  allow3D: true,
+});
 
 // ─── Slice : navigation / UI ─────────────────────────────────────────────────
 const uiSlice = createSlice({
@@ -76,6 +93,7 @@ const uiSlice = createSlice({
     },
     showUiVisibilityModal: false,
     uiEditMode:          false,
+    quranReadingTier:    initQuranReadingTier,
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -312,6 +330,14 @@ const uiSlice = createSlice({
         save("quran_showBeginnerGuides", false);
         save("quran_fullScreenSelectedAyat", false);
       }
+      const unlocked =
+        mode !== "child" ||
+        (Array.isArray(s.validatedLetters) && s.validatedLetters.length >= 28);
+      s.quranReadingTier = resolveInitialQuranReadingTier({
+        uxMode: mode,
+        isQuranUnlocked: unlocked,
+        allow3D: true,
+      });
     },
     setShowUxModeModal: (s, a) => {
       s.showUxModeModal = Boolean(a.payload);
@@ -347,6 +373,7 @@ const uiSlice = createSlice({
         save("quran_validatedLetters", s.validatedLetters);
         if (s.validatedLetters.length >= 28 && s.uxMode === "child") {
           s.showChildCelebrationModal = true;
+          s.quranReadingTier = QURAN_READING_TIERS.BOOK3D;
         }
       }
     },
@@ -355,6 +382,9 @@ const uiSlice = createSlice({
       if (!Array.isArray(s.validatedLetters)) return;
       s.validatedLetters = s.validatedLetters.filter((l) => l !== letter);
       save("quran_validatedLetters", s.validatedLetters);
+      if (s.validatedLetters.length < 28 && s.uxMode === "child") {
+        s.quranReadingTier = QURAN_READING_TIERS.LOCKED;
+      }
     },
     toggleValidateLetter: (s, a) => {
       const letter = String(a.payload || "").trim();
@@ -362,10 +392,14 @@ const uiSlice = createSlice({
       if (!Array.isArray(s.validatedLetters)) s.validatedLetters = [];
       if (s.validatedLetters.includes(letter)) {
         s.validatedLetters = s.validatedLetters.filter((l) => l !== letter);
+        if (s.validatedLetters.length < 28 && s.uxMode === "child") {
+          s.quranReadingTier = QURAN_READING_TIERS.LOCKED;
+        }
       } else {
         s.validatedLetters.push(letter);
         if (s.validatedLetters.length >= 28 && s.uxMode === "child") {
           s.showChildCelebrationModal = true;
+          s.quranReadingTier = QURAN_READING_TIERS.BOOK3D;
         }
       }
       save("quran_validatedLetters", s.validatedLetters);
@@ -378,11 +412,15 @@ const uiSlice = createSlice({
       save("quran_validatedLetters", s.validatedLetters);
       if (s.uxMode === "child") {
         s.showChildCelebrationModal = true;
+        s.quranReadingTier = QURAN_READING_TIERS.BOOK3D;
       }
     },
     resetValidatedLetters: (s) => {
       s.validatedLetters = [];
       save("quran_validatedLetters", []);
+      if (s.uxMode === "child") {
+        s.quranReadingTier = QURAN_READING_TIERS.LOCKED;
+      }
     },
     setChildWizardSeen: (s, a) => {
       s.childWizardSeen = Boolean(a.payload);
@@ -475,6 +513,43 @@ const uiSlice = createSlice({
     },
     toggleUiEditMode: (s) => {
       s.uiEditMode = !s.uiEditMode;
+    },
+    setQuranReadingTier: (s, a) => {
+      const valid = [
+        QURAN_READING_TIERS.BOOK3D,
+        QURAN_READING_TIERS.FULLSCREEN,
+        QURAN_READING_TIERS.LIST,
+        QURAN_READING_TIERS.LOCKED,
+      ];
+      s.quranReadingTier = valid.includes(a.payload) ? a.payload : QURAN_READING_TIERS.LIST;
+    },
+    stepDownQuranReadingTier: (s) => {
+      const next = resolveStepDownQuranTier({
+        currentTier: s.quranReadingTier,
+        uxMode: s.uxMode,
+      });
+      s.quranReadingTier = next;
+      if (next === QURAN_READING_TIERS.FULLSCREEN) {
+        s.fullScreenSelectedAyat = true;
+        save("quran_fullScreenSelectedAyat", true);
+      } else if (next === QURAN_READING_TIERS.LIST) {
+        s.fullScreenSelectedAyat = false;
+        save("quran_fullScreenSelectedAyat", false);
+      }
+    },
+    resetQuranPriorityTier: (s) => {
+      const unlocked =
+        s.uxMode !== "child" ||
+        (Array.isArray(s.validatedLetters) && s.validatedLetters.length >= 28);
+      s.quranReadingTier = resolveInitialQuranReadingTier({
+        uxMode: s.uxMode,
+        isQuranUnlocked: unlocked,
+        allow3D: true,
+      });
+      if (isPriority3DProfile(s.uxMode)) {
+        s.fullScreenSelectedAyat = true;
+        save("quran_fullScreenSelectedAyat", true);
+      }
     },
   },
   extraReducers: (builder) => {
@@ -1224,6 +1299,7 @@ const rawSel = {
   isUiElementVisible:  (s, id) => (s?.ui?.uiElementsVisibility ? s.ui.uiElementsVisibility[id] !== false : true),
   showUiVisibilityModal:(s) => Boolean(s.ui.showUiVisibilityModal),
   uiEditMode:          (s) => Boolean(s.ui.uiEditMode),
+  quranReadingTier:    (s) => s.ui.quranReadingTier || QURAN_READING_TIERS.LIST,
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

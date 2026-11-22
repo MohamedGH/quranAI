@@ -22,7 +22,18 @@ import { UxLevelWizardModal } from "./components/common/UxLevelWizardModal.jsx";
 import { ChildUnlockQuranCelebrationModal } from "./components/common/ChildUnlockQuranCelebrationModal.jsx";
 import { PlayerAudioOptionsModal } from "./components/common/PlayerAudioOptionsModal.jsx";
 import { BeginnerGuideBanner } from "./components/common/BeginnerGuideBanner.jsx";
-import { getUxProfile, getUxModeClassName, getAppRootClassNames, isSimplifiedUxMode, getNavigationTabs, getPlayerConfig, getSidebarConfig } from "./utils/uxProfileManager.js";
+import {
+  getUxProfile,
+  getUxModeClassName,
+  getAppRootClassNames,
+  isSimplifiedUxMode,
+  getNavigationTabs,
+  getPlayerConfig,
+  getSidebarConfig,
+  isPriority3DProfile,
+  resolveQuranEntryNavigation,
+  QURAN_READING_TIERS,
+} from "./utils/uxProfileManager.js";
 import { NotificationToast } from "./components/common/NotificationToast.jsx";
 import { initNotificationScheduler } from "./utils/scheduledNotifications.js";
 import { OfflineLoader } from "./components/common/OfflineLoader.jsx";
@@ -163,6 +174,7 @@ function AppInner({ currentUser, onSignOut }) {
   const uiElementsVisibility = useSelector(sel.uiElementsVisibility);
   const showUiVisibilityModal = useSelector(sel.showUiVisibilityModal);
   const uiEditMode      = useSelector(sel.uiEditMode);
+  const quranReadingTier = useSelector(sel.quranReadingTier || ((s) => s?.ui?.quranReadingTier || QURAN_READING_TIERS.LIST));
   const currentUxProfile = useMemo(() => getUxProfile(uxMode), [uxMode]);
   const navTabs          = useMemo(() => getNavigationTabs(uxMode, isQuranUnlocked), [uxMode, isQuranUnlocked]);
   const playerConfig     = useMemo(() => getPlayerConfig(uxMode), [uxMode]);
@@ -223,10 +235,12 @@ function AppInner({ currentUser, onSignOut }) {
   const parsedRoute     = useMemo(() => parseQuranRoute(location.pathname, location.search), [location.pathname, location.search]);
   const urlSegs         = location.pathname.replace(/^\//, '').split('/');
   const activePage      = parsedRoute.activePage || urlSegs[0] || 'quran';
-  const urlSurahNum     = parsedRoute.surahNum ?? parseInt(urlSegs[1]);
-  const urlAyatNum      = parsedRoute.ayatNum ?? parseInt(urlSegs[2]);
+  const isBookRoute     = Boolean(parsedRoute.isBook3D || parsedRoute.isBook2D);
+  const allow3D         = isElementVisible(uiElementsVisibility, "quran3dAccess");
+  const urlSurahNum     = isBookRoute ? NaN : (parsedRoute.surahNum ?? parseInt(urlSegs[1]));
+  const urlAyatNum      = isBookRoute ? NaN : (parsedRoute.ayatNum ?? parseInt(urlSegs[2]));
 
-  // ── Sync URL ux, compact, uiPreset & uiEdit params → Redux ──
+  // ── Sync URL ux, compact, uiPreset, uiEdit & view params → Redux ──
   useEffect(() => {
     if (parsedRoute.uxMode) {
       dispatch(uiActions.setUxMode(parsedRoute.uxMode));
@@ -240,7 +254,19 @@ function AppInner({ currentUser, onSignOut }) {
     if (typeof parsedRoute.uiEditMode === "boolean") {
       dispatch(uiActions.setUiEditMode(parsedRoute.uiEditMode));
     }
-  }, [parsedRoute.uxMode, parsedRoute.compactMode, parsedRoute.uiPreset, parsedRoute.uiEditMode, dispatch]);
+    if (parsedRoute.isBook3D) {
+      dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.BOOK3D));
+    } else if (parsedRoute.view === QURAN_READING_TIERS.FULLSCREEN) {
+      dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.FULLSCREEN));
+      dispatch(uiActions.setFullScreenSelectedAyat(true));
+    } else if (parsedRoute.view === QURAN_READING_TIERS.LIST) {
+      dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.LIST));
+      dispatch(uiActions.setFullScreenSelectedAyat(false));
+      setExplicitFullScreen(false);
+    } else if (parsedRoute.view === QURAN_READING_TIERS.BOOK3D) {
+      dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.BOOK3D));
+    }
+  }, [parsedRoute.uxMode, parsedRoute.compactMode, parsedRoute.uiPreset, parsedRoute.uiEditMode, parsedRoute.isBook3D, parsedRoute.view, dispatch]);
 
   // ── Child Mode First Connection: Launch Wizard & direct to letters (/prononciation) ──
   useEffect(() => {
@@ -259,13 +285,17 @@ function AppInner({ currentUser, onSignOut }) {
 
   // ── Sync URL → Redux (selectedSurah, openAyatNum) ──
   useEffect(() => {
-    if (isNaN(urlSurahNum) || surahs.length === 0) return;
+    if (isBookRoute || isNaN(urlSurahNum) || surahs.length === 0) return;
     const s = surahs.find(x => x.number === urlSurahNum);
     if (s && s.number !== selectedSurah?.number) {
       setSelectedSurah(s);
     } else if (s && s.number === selectedSurah?.number) {
       // Same surah — back navigation: restore openAyatNum from URL or lastAyatBySurah
-      const targetAyat = !isNaN(urlAyatNum) ? urlAyatNum : (lastAyatBySurah[urlSurahNum] ?? (fullScreenSelectedAyat ? 1 : null));
+      const targetAyat = !isNaN(urlAyatNum)
+        ? urlAyatNum
+        : parsedRoute.view === QURAN_READING_TIERS.LIST
+        ? null
+        : (lastAyatBySurah[urlSurahNum] ?? (fullScreenSelectedAyat ? 1 : null));
       if (targetAyat != null) {
         setOpenAyatNum(targetAyat);
         const tryScroll = (attempts = 0) => {
@@ -283,21 +313,43 @@ function AppInner({ currentUser, onSignOut }) {
       const el = ayatRefs.current[urlAyatNum];
       if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
     }, 400);
-  }, [urlSurahNum, urlAyatNum, surahs.length, activePage]);
+  }, [isBookRoute, urlSurahNum, urlAyatNum, surahs.length, activePage, parsedRoute.view]);
 
   // ── Sync Redux → URL (selectedSurah) ──
   useEffect(() => {
-    if (!selectedSurah) return;
+    if (activePage !== 'quran' || isBookRoute || !selectedSurah) return;
+    if (
+      isPriority3DProfile(uxMode) &&
+      quranReadingTier === QURAN_READING_TIERS.BOOK3D &&
+      isQuranUnlocked &&
+      allow3D &&
+      isNaN(urlSurahNum)
+    ) {
+      return;
+    }
     const target = `/quran/${selectedSurah.number}`;
-    if (!location.pathname.startsWith(target)) navigate(target, { replace: true });
-  }, [selectedSurah?.number]);
+    if (!location.pathname.startsWith(target)) {
+      navigate(`${target}${location.search || ""}`, { replace: true });
+    }
+  }, [selectedSurah?.number, activePage, isBookRoute, uxMode, quranReadingTier, isQuranUnlocked, allow3D, urlSurahNum, location.pathname, location.search]);
 
   // ── Sync Redux → URL (openAyatNum) ──
   useEffect(() => {
-    if (!selectedSurah || openAyatNum == null) return;
+    if (activePage !== 'quran' || isBookRoute || !selectedSurah || openAyatNum == null) return;
+    if (
+      isPriority3DProfile(uxMode) &&
+      quranReadingTier === QURAN_READING_TIERS.BOOK3D &&
+      isQuranUnlocked &&
+      allow3D &&
+      isNaN(urlSurahNum)
+    ) {
+      return;
+    }
     const target = `/quran/${selectedSurah.number}/${openAyatNum}`;
-    if (location.pathname !== target) navigate(target, { replace: true });
-  }, [openAyatNum, selectedSurah?.number]);
+    if (location.pathname !== target) {
+      navigate(`${target}${location.search || ""}`, { replace: true });
+    }
+  }, [openAyatNum, selectedSurah?.number, activePage, isBookRoute, uxMode, quranReadingTier, isQuranUnlocked, allow3D, urlSurahNum, location.pathname, location.search]);
 
   // ── Sync Route → Redux (silenceRevise & silenceMode) ──
   useEffect(() => {
@@ -482,24 +534,57 @@ function AppInner({ currentUser, onSignOut }) {
     return () => { cancelled = true; };
   }, [recitatorId]);
 
-  // Default to Surah 1 for child and beginner modes if no surah is selected on /quran
+  // Priority 1 -> 2 -> 3 for Child & Beginner:
+  // 1) Coran 3D (/quran/book3d) on bare /quran or UX switch to child/beginner
+  // 2) Fullscreen Verset if 3D is unavailable or after stepping out of 3D
+  // 3) Liste Ayats after exiting Fullscreen
+  const prevUxModeRef = useRef(uxMode);
   useEffect(() => {
-    if ((isChild || isBeginner) && !selectedSurah && surahs && surahs.length > 0 && activePage === 'quran' && isNaN(urlSurahNum)) {
+    const prevUx = prevUxModeRef.current;
+    prevUxModeRef.current = uxMode;
+
+    if (isBookRoute || activePage !== 'quran' || !isPriority3DProfile(uxMode) || !isQuranUnlocked) {
+      return;
+    }
+
+    const enteredPriorityProfile = !isPriority3DProfile(prevUx) && isPriority3DProfile(uxMode);
+    const isBareQuranEntry = isNaN(urlSurahNum) && !parsedRoute.view;
+
+    if ((isBareQuranEntry || enteredPriorityProfile) && parsedRoute.view !== QURAN_READING_TIERS.LIST && parsedRoute.view !== QURAN_READING_TIERS.FULLSCREEN) {
+      const target = resolveQuranEntryNavigation({
+        uxMode,
+        isQuranUnlocked,
+        currentTier: quranReadingTier,
+        allow3D,
+      });
+      if (target.tier === QURAN_READING_TIERS.BOOK3D) {
+        navigate(target.route, { replace: true });
+        return;
+      }
+      if (target.tier === QURAN_READING_TIERS.FULLSCREEN && !fullScreenSelectedAyat) {
+        dispatch(uiActions.setFullScreenSelectedAyat(true));
+      }
+    }
+
+    if (!selectedSurah && surahs && surahs.length > 0) {
       const s1 = surahs[0];
       setSelectedSurah(s1);
-      setOpenAyatNum(1);
+      if (quranReadingTier !== QURAN_READING_TIERS.LIST && parsedRoute.view !== QURAN_READING_TIERS.LIST) {
+        setOpenAyatNum(1);
+      }
     }
-  }, [isChild, isBeginner, selectedSurah, surahs, activePage, urlSurahNum]);
+  }, [uxMode, isQuranUnlocked, activePage, isBookRoute, urlSurahNum, parsedRoute.view, quranReadingTier, allow3D, selectedSurah, surahs, fullScreenSelectedAyat, dispatch]);
 
-  // When fullScreenSelectedAyat is active (default in child/beginner), auto-open Ayat 1 or last read verse
+  // When fullScreenSelectedAyat is active (Priority 2 in child/beginner), auto-open Ayat 1 or last read verse
   useEffect(() => {
+    if (isBookRoute || quranReadingTier === QURAN_READING_TIERS.LIST || parsedRoute.view === QURAN_READING_TIERS.LIST) return;
     if (fullScreenSelectedAyat && selectedSurah && openAyatNum == null && ayats && ayats.length > 0) {
       const defaultAyat = (!isNaN(urlAyatNum) && urlAyatNum >= 1 && urlAyatNum <= ayats.length)
         ? urlAyatNum
         : (lastAyatBySurah[selectedSurah.number] || 1);
       setOpenAyatNum(defaultAyat);
     }
-  }, [fullScreenSelectedAyat, selectedSurah?.number, openAyatNum, ayats?.length, urlAyatNum, lastAyatBySurah]);
+  }, [isBookRoute, quranReadingTier, parsedRoute.view, fullScreenSelectedAyat, selectedSurah?.number, openAyatNum, ayats?.length, urlAyatNum, lastAyatBySurah]);
 
   // Warm the same cache for every other reciter in the background (staggered, one at a time)
   // so the picker panel can show everyone's real bitrate without waiting for each to be selected.
@@ -2463,7 +2548,25 @@ function AppInner({ currentUser, onSignOut }) {
             </button>
 
             <EditableUiSlot elementId="headerLogo" inline={true}>
-              <div className="header-logo" onClick={() => setActivePage('quran')} title="Accueil Coran">
+              <div
+                className="header-logo"
+                onClick={() => {
+                  if (isPriority3DProfile(uxMode) && isQuranUnlocked) {
+                    const entry = resolveQuranEntryNavigation({
+                      uxMode,
+                      isQuranUnlocked,
+                      currentTier: quranReadingTier,
+                      allow3D,
+                      surahNum: selectedSurah?.number || null,
+                      ayatNum: openAyatNum || null,
+                    });
+                    navigate(entry.route);
+                    return;
+                  }
+                  setActivePage('quran');
+                }}
+                title="Accueil Coran"
+              >
                 <span>QUR<span className="logo-highlight">ÂN</span></span>
                 <span className="header-subtitle">STUDY</span>
               </div>
@@ -2477,7 +2580,21 @@ function AppInner({ currentUser, onSignOut }) {
                 <button
                   key={id}
                   className={`header-nav-btn${activePage === id ? ` active-${id}` : ""}`}
-                  onClick={() => setActivePage(id)}
+                  onClick={() => {
+                    if (id === 'quran' && isPriority3DProfile(uxMode) && isQuranUnlocked) {
+                      const entry = resolveQuranEntryNavigation({
+                        uxMode,
+                        isQuranUnlocked,
+                        currentTier: quranReadingTier,
+                        allow3D,
+                        surahNum: selectedSurah?.number || null,
+                        ayatNum: openAyatNum || null,
+                      });
+                      navigate(entry.route);
+                      return;
+                    }
+                    setActivePage(id);
+                  }}
                   title={title || label}
                 >
                   <span className="nav-icon">{icon}</span>
@@ -2529,14 +2646,17 @@ function AppInner({ currentUser, onSignOut }) {
             {/* Toggleable Coran 3D Quick Launcher */}
             <EditableUiSlot
               elementId="quran3dAccess"
-              condition={uxMode !== 'child'}
+              condition={uxMode !== 'child' || isQuranUnlocked}
               inline={true}
             >
               <button
                 id="header-book3d-btn"
                 type="button"
                 className="header-ui-edit-btn"
-                onClick={() => navigate('/quran/book3d')}
+                onClick={() => {
+                  dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.BOOK3D));
+                  navigate('/quran/book3d');
+                }}
                 title="Ouvrir le Saint Coran 3D (Mushaf WebGL)"
                 aria-label="Ouvrir le Coran 3D"
               >
@@ -2824,7 +2944,24 @@ function AppInner({ currentUser, onSignOut }) {
                 : filteredSurahs.map((s, surahIdx) => (
                   <div key={s.number}
                     className={`surah-item${selectedSurah?.number === s.number ? " active surah-active" : ""}${(surahStats[s.number]?.learned >= s.numberOfAyahs && s.numberOfAyahs > 0) ? " fully-learned" : ""}`}
-                    onClick={() => { setSelectedSurah(s); setSidebarOpen(false); if (activePage !== 'quran') setActivePage('quran'); }}>
+                    onClick={() => {
+                      setSelectedSurah(s);
+                      setSidebarOpen(false);
+                      if (isBookRoute) {
+                        const nextTier = isPriority3DProfile(uxMode)
+                          ? QURAN_READING_TIERS.FULLSCREEN
+                          : QURAN_READING_TIERS.LIST;
+                        dispatch(uiActions.setQuranReadingTier(nextTier));
+                        if (isPriority3DProfile(uxMode)) {
+                          dispatch(uiActions.setFullScreenSelectedAyat(true));
+                          navigate(buildQuranRoute({ activePage: "quran", surahNum: s.number, ayatNum: 1, view: "fullscreen" }));
+                          return;
+                        }
+                      }
+                      if (isBookRoute || activePage !== 'quran') {
+                        navigate(`/quran/${s.number}`);
+                      }
+                    }}>
                     <EditableUiSlot
                       elementId="sidebarSurahNumbers"
                       inline={true}
@@ -3047,9 +3184,12 @@ function AppInner({ currentUser, onSignOut }) {
             } />
             <Route path="/book" element={<Navigate to="/quran/book" replace />} />
             <Route path="/quran/book3d" element={
-              <AnimatedPage pageKey="quran-book3d">
-                <Suspense fallback={<div className="loading"><div className="loading-ring" /><span>CHARGEMENT DU LIVRE 3D...</span></div>}>
-                  <QuranBook3DPage
+              isChild && !isQuranUnlocked ? (
+                <Navigate to="/quran" replace />
+              ) : (
+                <AnimatedPage pageKey="quran-book3d">
+                  <Suspense fallback={<div className="loading"><div className="loading-ring" /><span>CHARGEMENT DU LIVRE 3D...</span></div>}>
+                    <QuranBook3DPage
                     surahs={surahs}
                     learnData={learnData}
                     setLData={setLData}
@@ -3072,8 +3212,9 @@ function AppInner({ currentUser, onSignOut }) {
                     toggleGhunnah={toggleGhunnah}
                     toggleTajweedTone={toggleTajweedTone}
                   />
-                </Suspense>
-              </AnimatedPage>
+                  </Suspense>
+                </AnimatedPage>
+              )
             } />
             <Route path="/book3d" element={<Navigate to="/quran/book3d" replace />} />
             <Route path="/quran/:surahNum?/:ayatNum?" element={(
@@ -3168,7 +3309,10 @@ function AppInner({ currentUser, onSignOut }) {
                   <EditableUiSlot elementId="quran3dAccess" inline={true}>
                     <button
                       id="btn-empty-open-book3d"
-                      onClick={() => navigate('/quran/book3d')}
+                      onClick={() => {
+                        dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.BOOK3D));
+                        navigate('/quran/book3d');
+                      }}
                       style={{ fontSize:9, letterSpacing:1.5, padding:'7px 16px',
                         fontFamily:"'Cinzel',serif", background:'rgba(201,168,76,.14)',
                         border:'1px solid rgba(201,168,76,.5)', color:'var(--gold)',
@@ -3224,7 +3368,12 @@ function AppInner({ currentUser, onSignOut }) {
                   showTajweedTone={showTajweedTone}
                   toggleTajweedTone={toggleTajweedTone}
                   fullScreenSelectedAyat={fullScreenSelectedAyat}
-                  toggleFullScreen={() => dispatch(uiActions.toggleFullScreenSelectedAyat())}
+                  toggleFullScreen={() => {
+                    dispatch(uiActions.setQuranReadingTier(
+                      fullScreenSelectedAyat ? QURAN_READING_TIERS.LIST : QURAN_READING_TIERS.FULLSCREEN
+                    ));
+                    dispatch(uiActions.toggleFullScreenSelectedAyat());
+                  }}
                   announceNum={announceNum}
                   toggleAnnounceNum={toggleAnnounceNum}
                   spellCheck={spellCheck}
@@ -4986,30 +5135,62 @@ function AppInner({ currentUser, onSignOut }) {
           };
 
           const handleExitToNormalMode = () => {
+            dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.LIST));
             if (fullScreenSelectedAyat) {
               dispatch(uiActions.setFullScreenSelectedAyat(false));
             }
             setExplicitFullScreen(false);
+            if (parsedRoute.view === QURAN_READING_TIERS.FULLSCREEN && selectedSurah) {
+              navigate(
+                buildQuranRoute({
+                  activePage: "quran",
+                  surahNum: selectedSurah.number,
+                  ayatNum: openAyatNum,
+                  view: isPriority3DProfile(uxMode) ? QURAN_READING_TIERS.LIST : null,
+                }),
+                { replace: true }
+              );
+            }
             const targetAyat = openAyatNum;
             if (targetAyat != null) {
               requestAnimationFrame(() => {
                 ayatRefs.current[targetAyat]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
               });
             }
-            showToast("Mode de lecture normal rétabli", "info");
+            showToast(isPriority3DProfile(uxMode) ? "Liste des versets affichée" : "Mode de lecture normal rétabli", "info");
           };
 
           return (
             <AyatFullScreenModal
               isOpen={true}
               onClose={() => {
+                dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.LIST));
                 if (fullScreenSelectedAyat) {
                   dispatch(uiActions.setFullScreenSelectedAyat(false));
                 }
                 setOpenAyatNum(null);
                 setExplicitFullScreen(false);
+                if (parsedRoute.view === QURAN_READING_TIERS.FULLSCREEN && selectedSurah) {
+                  navigate(
+                    buildQuranRoute({
+                      activePage: "quran",
+                      surahNum: selectedSurah.number,
+                      view: isPriority3DProfile(uxMode) ? QURAN_READING_TIERS.LIST : null,
+                    }),
+                    { replace: true }
+                  );
+                }
               }}
               onExitToNormalMode={handleExitToNormalMode}
+              onOpenBook3D={
+                allow3D
+                  ? () => {
+                      dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.BOOK3D));
+                      setExplicitFullScreen(false);
+                      navigate("/quran/book3d");
+                    }
+                  : undefined
+              }
               ayat={currentAyat}
               selectedSurah={selectedSurah}
               ayats={ayats}

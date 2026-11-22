@@ -94,12 +94,14 @@ export function AyatFullScreenModal({
   setAideMemoireClickMode,
   spellCheck,
   wbwWords,
+  onOpenBook3D,
 }) {
   // Detect mobile screen width
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 640 : false));
   const uxMode = useSelector(sel.uxMode || ((s) => s?.ui?.uxMode || "standard"));
   const isChild = uxMode === "child";
   const isBeginner = uxMode === "beginner";
+  const isPriorityListLabels = isChild || isBeginner;
 
   useEffect(() => {
     const handleResize = () => {
@@ -350,7 +352,7 @@ export function AyatFullScreenModal({
 
   // Scroll to top when ayat changes
   useEffect(() => {
-    if (scrollContainerRef.current) {
+    if (scrollContainerRef.current && typeof scrollContainerRef.current.scrollTo === 'function') {
       scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [ayat?.numberInSurah]);
@@ -896,7 +898,11 @@ export function AyatFullScreenModal({
           <button
             id="btn-fs-return-normal"
             onClick={onExitToNormalMode || onClose}
-            title="Revenir au mode normal du Coran (Échap)"
+            title={
+              isPriorityListLabels
+                ? "Passer à la liste des versets (Échap)"
+                : "Revenir au mode normal du Coran (Échap)"
+            }
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -918,7 +924,11 @@ export function AyatFullScreenModal({
             }}
           >
             <span style={{ fontSize: 13, lineHeight: 1 }}>←</span>
-            <span>{isMobile ? "Normal" : "MODE NORMAL"}</span>
+            <span>
+              {isPriorityListLabels
+                ? (isMobile ? "Liste" : "LISTE AYATS")
+                : (isMobile ? "Normal" : "MODE NORMAL")}
+            </span>
           </button>
 
           {/* Center: Surah Title Badge */}
@@ -968,6 +978,34 @@ export function AyatFullScreenModal({
 
           {/* Right Action Buttons */}
           <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+            {typeof onOpenBook3D === "function" && (
+              <button
+                id="btn-fs-open-book3d"
+                type="button"
+                onClick={onOpenBook3D}
+                title="Revenir au Saint Coran 3D (Priorité 1)"
+                aria-label="Ouvrir le Coran 3D"
+                style={{
+                  height: isMobile ? 34 : 32,
+                  padding: "0 8px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(212,175,55,0.45)",
+                  background: "rgba(212,175,55,0.14)",
+                  color: "var(--gold2)",
+                  fontSize: 11,
+                  fontFamily: "'Cinzel',serif",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  flexShrink: 0,
+                }}
+              >
+                <span>🧊</span>
+                <span className="hide-mobile">3D</span>
+              </button>
+            )}
             {/* Tajweed Toggle Button */}
             <button
               id={isMobile ? "btn-fs-mobile-tajweed" : "btn-fs-tajweed"}
@@ -3093,7 +3131,11 @@ export function AyatFullScreenModal({
             }}
           >
             <span style={{ fontSize: 11 }}>←</span>
-            <span>{isMobile ? "Normal" : "MODE NORMAL"}</span>
+            <span>
+              {isPriorityListLabels
+                ? (isMobile ? "Liste" : "LISTE AYATS")
+                : (isMobile ? "Normal" : "MODE NORMAL")}
+            </span>
           </button>
         </div>
       </footer>
@@ -3104,7 +3146,7 @@ export function AyatFullScreenModal({
           id="btn-fs-floating-back-normal"
           onClick={onExitToNormalMode || onClose}
           className="fs-floating-back-btn"
-          title="Retour au mode de lecture normal"
+          title={isPriorityListLabels ? "Passer à la liste des versets" : "Retour au mode de lecture normal"}
           style={{
             position: "fixed",
             bottom: "calc(64px + env(safe-area-inset-bottom, 0px))",
@@ -3129,7 +3171,7 @@ export function AyatFullScreenModal({
           }}
         >
           <span style={{ fontSize: 13, lineHeight: 1 }}>←</span>
-          <span>Mode Normal</span>
+          <span>{isPriorityListLabels ? "Liste Ayats" : "Mode Normal"}</span>
         </button>
       )}
 

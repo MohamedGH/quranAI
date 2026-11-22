@@ -19,7 +19,8 @@ import { MakharijAnatomyDiagram } from "../common/MakharijAnatomyDiagram.jsx";
 import { MakharijSimilarLettersDiagrams } from "../common/MakharijSimilarLettersDiagrams.jsx";
 import { GlossaryTermTooltip, GlossaryAutoText } from "../common/GlossaryTermTooltip.jsx";
 import { buildGlossaryRoute, buildQuranRoute } from "../../utils/routeManager.js";
-import { getSimplifiedLayoutConfig } from "../../utils/uxProfileManager.js";
+import { getSimplifiedLayoutConfig, resolveQuranEntryNavigation } from "../../utils/uxProfileManager.js";
+import { isElementVisible } from "../../utils/uiVisibilityManager.js";
 import { HeavyLettersGuide } from "../common/HeavyLettersGuide.jsx";
 import { ChildUnlockQuranCelebrationModal } from "../common/ChildUnlockQuranCelebrationModal.jsx";
 import { EditableUiSlot } from "../common/EditableUiSlot.jsx";
@@ -29,10 +30,25 @@ export function PrononciationPage() {
   const navigate = useNavigate();
   const uxMode = useSelector(sel.uxMode);
   const compactMode = useSelector(sel.compactMode);
+  const uiElementsVisibility = useSelector(sel.uiElementsVisibility);
   const layoutCfg = getSimplifiedLayoutConfig(uxMode);
   const isChild = layoutCfg.isChild;
   const isSimplified = layoutCfg.isSimplified;
   const validatedLetters = useSelector(sel.validatedLetters);
+  const handleGoToUnlockedQuran = () => {
+    const allow3D = isElementVisible(uiElementsVisibility, "quran3dAccess");
+    const target = resolveQuranEntryNavigation({
+      uxMode,
+      isQuranUnlocked: true,
+      allow3D,
+    });
+    dispatch(uiActions.resetQuranPriorityTier());
+    dispatch(uiActions.setActivePage("quran"));
+    if (target.shouldEnableFullscreen) {
+      dispatch(uiActions.setFullScreenSelectedAyat(true));
+    }
+    navigate(target.route);
+  };
   const validatedCount = useSelector(sel.validatedLettersCount);
   const allLettersValidated = useSelector(sel.allLettersValidated);
   const questBannerState = useSelector(sel.childQuestBannerState);
@@ -259,10 +275,7 @@ export function PrononciationPage() {
                     <button
                       type="button"
                       id="btn-quest-go-quran"
-                      onClick={() => {
-                        dispatch(uiActions.setActivePage("quran"));
-                        navigate(buildQuranRoute({ activePage: "quran" }));
-                      }}
+                      onClick={handleGoToUnlockedQuran}
                       style={{
                         minHeight: 34,
                         padding: "4px 10px",
@@ -344,10 +357,7 @@ export function PrononciationPage() {
                       <button
                         type="button"
                         id="btn-quest-go-quran"
-                        onClick={() => {
-                          dispatch(uiActions.setActivePage("quran"));
-                          navigate(buildQuranRoute({ activePage: "quran" }));
-                        }}
+                        onClick={handleGoToUnlockedQuran}
                         style={{
                           minHeight: 36,
                           padding: "6px 12px",

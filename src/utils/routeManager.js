@@ -84,6 +84,11 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
           : null;
       const glossaryCategory = activePage === "glossaire" ? params.get("cat") || null : null;
 
+      const isBook3D = segs[0] === "book3d" || (segs[0] === "quran" && segs[1] === "book3d");
+      const isBook2D = segs[0] === "book" || (segs[0] === "quran" && segs[1] === "book");
+      const viewParam = params.get("view");
+      const view = ["book3d", "fullscreen", "list"].includes(viewParam) ? viewParam : null;
+
       return Object.freeze({
         activePage,
         surahNum,
@@ -102,6 +107,9 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
         uiEditMode,
         glossaryTermId,
         glossaryCategory,
+        isBook3D,
+        isBook2D,
+        view,
       });
     },
     Object.freeze({
@@ -122,6 +130,9 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       uiEditMode: null,
       glossaryTermId: null,
       glossaryCategory: null,
+      isBook3D: false,
+      isBook2D: false,
+      view: null,
     }),
     { code: ERROR_CODES.ROUTE_PARSE_ERROR, pathname, search }
   ).value;
@@ -164,6 +175,7 @@ export const buildQuranRoute = ({
   uiEditMode = null,
   glossaryTermId = null,
   glossaryCategory = null,
+  view = null,
 } = {}) => {
   const query = new URLSearchParams();
   const effectiveUx = uxMode || ux;
@@ -187,6 +199,11 @@ export const buildQuranRoute = ({
       uxMode: effectiveUx,
       compactMode: effectiveCompact === true ? true : null,
     });
+  }
+
+  if (activePage === "book3d" || activePage === "quran/book3d") {
+    const qs = query.toString();
+    return qs ? `/quran/book3d?${qs}` : "/quran/book3d";
   }
 
   if (activePage && activePage !== "quran") {
@@ -220,6 +237,9 @@ export const buildQuranRoute = ({
   }
   if (silenceMode && (silenceMode === "skip" || silenceMode === "mute")) {
     query.set("silenceMode", silenceMode);
+  }
+  if (view && ["book3d", "fullscreen", "list"].includes(view)) {
+    query.set("view", view);
   }
 
   const qs = query.toString();

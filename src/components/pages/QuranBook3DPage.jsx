@@ -51,6 +51,8 @@ import {
 } from "../../utils/quranBookEngine.js";
 import { withErrorRecovery, ERROR_CODES } from "../../utils/errorManager.js";
 import { EditableUiSlot } from "../common/EditableUiSlot.jsx";
+import { isPriority3DProfile } from "../../utils/uxProfileManager.js";
+import { resolveBook3DStepDownNavigation } from "../../utils/fullScreenNavigation.js";
 
 const _MUSHAF_PAGES = MUSHAF_TOTAL_PAGES;
 
@@ -701,6 +703,9 @@ export function QuranBook3DPage({
   const reduxShowIdgham = useSelector(sel.showIdgham);
   const reduxShowTajweedTone = useSelector(sel.showTajweedTone);
   const uiEditMode = useSelector(sel.uiEditMode);
+  const uxMode = useSelector(sel.uxMode);
+  const lastAyatBySurah = useSelector(sel.lastAyatBySurah);
+  const isSimplifiedPriority = isPriority3DProfile(uxMode);
 
   const surahs = propSurahs || reduxSurahs || [];
   const learnData = propLearnData || reduxLearnData || {};
@@ -2426,7 +2431,23 @@ export function QuranBook3DPage({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button
-            onClick={() => navigate("/quran")}
+            data-testid="q3d-back-btn"
+            onClick={() => {
+              const step = resolveBook3DStepDownNavigation({
+                uxMode,
+                selectedAyah,
+                lastAyatBySurah,
+              });
+              dispatch(uiActions.setQuranReadingTier(step.nextTier));
+              dispatch(uiActions.setFullScreenSelectedAyat(step.enableFullscreen));
+              dispatch(uiActions.setActivePage("quran"));
+              navigate(step.targetRoute);
+            }}
+            title={
+              isSimplifiedPriority
+                ? "Passer au mode Plein Écran du verset (Priorité 2)"
+                : "Revenir à la liste des sourates"
+            }
             style={{
               background: "rgba(212, 175, 55, 0.12)",
               border: "1px solid rgba(212, 175, 55, 0.4)",
@@ -2441,8 +2462,8 @@ export function QuranBook3DPage({
               gap: 5,
             }}
           >
-            <span>←</span>
-            <span>SOURATES</span>
+            <span>{isSimplifiedPriority ? "⛶" : "←"}</span>
+            <span>{isSimplifiedPriority ? "PLEIN ÉCRAN" : "SOURATES"}</span>
           </button>
 
           <EditableUiSlot elementId="quran3dIndexBtn" inline={true}>
@@ -3322,7 +3343,18 @@ export function QuranBook3DPage({
               </button>
 
               <button
-                onClick={() => navigate(`/quran/${selectedAyah.surahNum}/${selectedAyah.ayahNum}`)}
+                data-testid="q3d-open-verse-btn"
+                onClick={() => {
+                  const step = resolveBook3DStepDownNavigation({
+                    uxMode,
+                    selectedAyah,
+                    lastAyatBySurah,
+                  });
+                  dispatch(uiActions.setQuranReadingTier(step.nextTier));
+                  dispatch(uiActions.setFullScreenSelectedAyat(step.enableFullscreen));
+                  dispatch(uiActions.setActivePage("quran"));
+                  navigate(step.targetRoute);
+                }}
                 style={{
                   background: "rgba(255,255,255,0.08)",
                   border: "1px solid rgba(212,175,55,0.4)",
@@ -3333,7 +3365,7 @@ export function QuranBook3DPage({
                   cursor: "pointer",
                 }}
               >
-                Ouvrir dans le Coran ➔
+                {isSimplifiedPriority ? "Ouvrir en Plein Écran ➔" : "Ouvrir dans le Coran ➔"}
               </button>
             </div>
           </div>

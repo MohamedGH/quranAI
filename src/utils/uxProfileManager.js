@@ -1,5 +1,6 @@
 // ─── Pure Functional UX Profile Manager ───────────────────────────────────────
 import { ERROR_CODES, createAppError, trySync } from "./errorManager.js";
+import { buildQuranRoute } from "./routeManager.js";
 
 export const UX_MODES = Object.freeze({
   BEGINNER: "beginner",
@@ -7,6 +8,25 @@ export const UX_MODES = Object.freeze({
   EXPERT: "expert",
   CHILD: "child",
 });
+
+export const QURAN_READING_TIERS = Object.freeze({
+  BOOK3D: "book3d",
+  FULLSCREEN: "fullscreen",
+  LIST: "list",
+  LOCKED: "locked",
+});
+
+export const QURAN_PRIORITY_ORDER_SIMPLIFIED = Object.freeze([
+  QURAN_READING_TIERS.BOOK3D,
+  QURAN_READING_TIERS.FULLSCREEN,
+  QURAN_READING_TIERS.LIST,
+]);
+
+export const QURAN_PRIORITY_ORDER_STANDARD = Object.freeze([
+  QURAN_READING_TIERS.LIST,
+  QURAN_READING_TIERS.FULLSCREEN,
+  QURAN_READING_TIERS.BOOK3D,
+]);
 
 export const UX_PROFILES = Object.freeze({
   [UX_MODES.BEGINNER]: Object.freeze({
@@ -54,6 +74,8 @@ export const UX_PROFILES = Object.freeze({
       announceNum: false,
       spellCheck: true,
       fullScreenSelectedAyat: true,
+      defaultQuranTier: QURAN_READING_TIERS.BOOK3D,
+      readingPriorityOrder: QURAN_PRIORITY_ORDER_SIMPLIFIED,
     }),
   }),
 
@@ -197,6 +219,8 @@ export const UX_PROFILES = Object.freeze({
       announceNum: false,
       spellCheck: true,
       fullScreenSelectedAyat: true,
+      defaultQuranTier: QURAN_READING_TIERS.BOOK3D,
+      readingPriorityOrder: QURAN_PRIORITY_ORDER_SIMPLIFIED,
     }),
   }),
 });
@@ -250,6 +274,125 @@ export const applyUxProfileToSettings = (currentSettings = {}, targetMode = UX_M
  */
 export const isSimplifiedUxMode = (mode) =>
   mode === UX_MODES.BEGINNER || mode === UX_MODES.CHILD;
+
+/**
+ * Pure predicate: Child and Beginner (Novice) open Quran in 3D first,
+ * then Fullscreen verse view, then Ayat list.
+ */
+export const isPriority3DProfile = (mode) =>
+  mode === UX_MODES.BEGINNER || mode === UX_MODES.CHILD;
+
+/**
+ * Pure getter returning the ordered Quran view priority chain for a profile.
+ */
+export const getQuranReadingPriorityOrder = (uxMode = UX_MODES.STANDARD) =>
+  isPriority3DProfile(sanitizeUxMode(uxMode))
+    ? QURAN_PRIORITY_ORDER_SIMPLIFIED
+    : QURAN_PRIORITY_ORDER_STANDARD;
+
+/**
+ * Resolves the initial Quran reading tier when entering or switching to a UX mode.
+ */
+export const resolveInitialQuranReadingTier = ({
+  uxMode = UX_MODES.STANDARD,
+  isQuranUnlocked = true,
+  allow3D = true,
+} = {}) => {
+  const mode = sanitizeUxMode(uxMode);
+  if (!isPriority3DProfile(mode)) return QURAN_READING_TIERS.LIST;
+  if (mode === UX_MODES.CHILD && !isQuranUnlocked) return QURAN_READING_TIERS.LOCKED;
+  return allow3D ? QURAN_READING_TIERS.BOOK3D : QURAN_READING_TIERS.FULLSCREEN;
+};
+
+/**
+ * Steps down along the priority cascade when the user closes/exits the current tier:
+ * For Child & Novice: Coran 3D -> Fullscreen -> Liste Ayat.
+ */
+export const resolveStepDownQuranTier = ({
+  currentTier = QURAN_READING_TIERS.BOOK3D,
+  uxMode = UX_MODES.STANDARD,
+} = {}) => {
+  const mode = sanitizeUxMode(uxMode);
+  if (!isPriority3DProfile(mode)) return QURAN_READING_TIERS.LIST;
+  if (currentTier === QURAN_READING_TIERS.BOOK3D) return QURAN_READING_TIERS.FULLSCREEN;
+  if (currentTier === QURAN_READING_TIERS.FULLSCREEN) return QURAN_READING_TIERS.LIST;
+  return QURAN_READING_TIERS.LIST;
+};
+
+/**
+ * Pure route + UI state resolver for opening/navigating the Quran according to UX priority.
+ */
+export const resolveQuranEntryNavigation = ({
+  uxMode = UX_MODES.STANDARD,
+  isQuranUnlocked = true,
+  currentTier = null,
+  allow3D = true,
+  surahNum = null,
+  ayatNum = null,
+  explicitView = null,
+} = {}) => {
+  const mode = sanitizeUxMode(uxMode);
+
+  if (mode === UX_MODES.CHILD && !isQuranUnlocked) {
+    return Object.freeze({
+      tier: QURAN_READING_TIERS.LOCKED,
+      route: "/quran",
+      shouldEnableFullscreen: false,
+      shouldDisableFullscreen: false,
+    });
+  }
+
+  const validTiers = [
+    QURAN_READING_TIERS.BOOK3D,
+    QURAN_READING_TIERS.FULLSCREEN,
+    QURAN_READING_TIERS.LIST,
+  ];
+
+  let targetTier = validTiers.includes(explicitView)
+    ? explicitView
+    : validTiers.includes(currentTier)
+    ? currentTier
+    : resolveInitialQuranReadingTier({ uxMode: mode, isQuranUnlocked, allow3D });
+
+  if (targetTier === QURAN_READING_TIERS.BOOK3D && !allow3D) {
+    targetTier = isPriority3DProfile(mode)
+      ? QURAN_READING_TIERS.FULLSCREEN
+      : QURAN_READING_TIERS.LIST;
+  }
+
+  if (explicitView === QURAN_READING_TIERS.BOOK3D || (targetTier === QURAN_READING_TIERS.BOOK3D && surahNum == null)) {
+    return Object.freeze({
+      tier: QURAN_READING_TIERS.BOOK3D,
+      route: buildQuranRoute({ activePage: "quran/book3d" }),
+      shouldEnableFullscreen: false,
+      shouldDisableFullscreen: false,
+    });
+  }
+
+  if (targetTier === QURAN_READING_TIERS.FULLSCREEN) {
+    const sn = surahNum || 1;
+    const an = ayatNum || 1;
+    return Object.freeze({
+      tier: QURAN_READING_TIERS.FULLSCREEN,
+      route: buildQuranRoute({ activePage: "quran", surahNum: sn, ayatNum: an, view: "fullscreen" }),
+      shouldEnableFullscreen: true,
+      shouldDisableFullscreen: false,
+    });
+  }
+
+  const sn = surahNum || 1;
+  return Object.freeze({
+    tier: QURAN_READING_TIERS.LIST,
+    route: buildQuranRoute({
+      activePage: "quran",
+      surahNum: sn,
+      ayatNum: ayatNum || null,
+      view: isPriority3DProfile(mode) ? "list" : null,
+    }),
+    shouldEnableFullscreen: false,
+    shouldDisableFullscreen: true,
+  });
+};
 
 /**
  * Pure functional layout configuration simplifying UI density in Child & Beginner modes.

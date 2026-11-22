@@ -2,12 +2,16 @@ import React from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { sel, uiActions } from "../../store.js";
 import { useNavigate } from "react-router-dom";
+import { resolveQuranEntryNavigation } from "../../utils/uxProfileManager.js";
+import { isElementVisible } from "../../utils/uiVisibilityManager.js";
 
 export function ChildUnlockQuranCelebrationModal() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const isOpen = useSelector(sel.showChildCelebrationModal);
   const validatedCount = useSelector(sel.validatedLettersCount);
+  const uxMode = useSelector(sel.uxMode);
+  const uiElementsVisibility = useSelector(sel.uiElementsVisibility);
 
   if (!isOpen) return null;
 
@@ -16,9 +20,19 @@ export function ChildUnlockQuranCelebrationModal() {
   };
 
   const handleOpenQuran = () => {
+    const allow3D = isElementVisible(uiElementsVisibility, "quran3dAccess");
+    const target = resolveQuranEntryNavigation({
+      uxMode,
+      isQuranUnlocked: true,
+      allow3D,
+    });
     dispatch(uiActions.setShowChildCelebrationModal(false));
+    dispatch(uiActions.resetQuranPriorityTier());
     dispatch(uiActions.setActivePage("quran"));
-    navigate("/quran");
+    if (target.shouldEnableFullscreen) {
+      dispatch(uiActions.setFullScreenSelectedAyat(true));
+    }
+    navigate(target.route);
   };
 
   return (

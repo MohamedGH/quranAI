@@ -39,6 +39,7 @@ import {
   evalCoverBottomWorldY,
   evalFlipPivotState,
   evalFlipSheetPoint,
+  evalBook3DOpenState,
   detectSoftwareWebGL,
   buildPageRenderCacheKey,
   createPageCanvasCache,
@@ -1026,7 +1027,10 @@ describe("CSS Quran & 3D Quran Engine + Component Fixes", () => {
       expect(pose.posZ).toBe(BOOK3D_ZOOM.defaultDesktopDist);
     });
 
-    it("generates varied golden particle field attributes & procedural radial glow CanvasTextures with sRGB + fallback safety", () => {
+    it("generates finer, smaller golden particle field attributes from Mushaf surface & procedural radial glow CanvasTextures with sRGB + fallback safety", () => {
+      expect(BOOK3D_PARTICLES.baseSize).toBeLessThanOrEqual(8);
+      expect(BOOK3D_PARTICLES.maxSize).toBeLessThanOrEqual(20);
+
       const field = generateParticleFieldData(BOOK3D_PARTICLES.hardwareCount);
       expect(field.count).toBe(BOOK3D_PARTICLES.hardwareCount);
       expect(field.positions).toBeInstanceOf(Float32Array);
@@ -1034,6 +1038,25 @@ describe("CSS Quran & 3D Quran Engine + Component Fixes", () => {
       expect(field.colors.length).toBe(BOOK3D_PARTICLES.hardwareCount * 3);
       expect(field.scales.length).toBe(BOOK3D_PARTICLES.hardwareCount);
       expect(field.phases.length).toBe(BOOK3D_PARTICLES.hardwareCount);
+      expect(field.delays).toBeInstanceOf(Float32Array);
+      expect(field.delays.length).toBe(BOOK3D_PARTICLES.hardwareCount);
+      expect(field.speeds).toBeInstanceOf(Float32Array);
+      expect(field.speeds.length).toBe(BOOK3D_PARTICLES.hardwareCount);
+
+      for (let i = 0; i < field.count; i++) {
+        const x = field.positions[i * 3];
+        const y = field.positions[i * 3 + 1];
+        const z = field.positions[i * 3 + 2];
+        expect(Math.abs(x)).toBeLessThanOrEqual(1.35);
+        expect(y).toBeGreaterThanOrEqual(0.04);
+        expect(y).toBeLessThanOrEqual(0.25);
+        expect(Math.abs(z)).toBeLessThanOrEqual(0.95);
+        expect(field.scales[i]).toBeGreaterThanOrEqual(BOOK3D_PARTICLES.minScale);
+        expect(field.scales[i]).toBeLessThanOrEqual(BOOK3D_PARTICLES.maxScale);
+        expect(field.delays[i]).toBeGreaterThanOrEqual(0);
+        expect(field.delays[i]).toBeLessThanOrEqual(BOOK3D_PARTICLES.spawnWindowSec);
+        expect(field.speeds[i]).toBeGreaterThan(0);
+      }
 
       // Procedural particle star/orb glow texture
       const richCtx = makeRichDrawCtx();
@@ -1098,6 +1121,32 @@ describe("CSS Quran & 3D Quran Engine + Component Fixes", () => {
       fireEvent.keyDown(window, { key: "w" });
 
       expect(stage.style.transform).toContain(`translate3d(${-BOOK3D_PAN.step2D}px, ${BOOK3D_PAN.step2D}px, 0)`);
+    });
+
+    it("gates 3D particle emission and wing folding cleanly via evalBook3DOpenState", () => {
+      const closed = evalBook3DOpenState(0);
+      expect(closed.progress).toBe(0);
+      expect(closed.particleEmissionFactor).toBe(0);
+      expect(closed.auraFactor).toBe(0);
+      expect(closed.wingOffsetX).toBeGreaterThan(BOOK3D_SPEC.wingOffsetX);
+      expect(closed.rightWingRotZ).toBeGreaterThan(1.2);
+      expect(closed.leftWingRotZ).toBeCloseTo(-closed.rightWingRotZ, 6);
+
+      const early = evalBook3DOpenState(0.15);
+      expect(early.particleEmissionFactor).toBe(0);
+
+      const mid = evalBook3DOpenState(0.55);
+      expect(mid.particleEmissionFactor).toBeGreaterThan(0);
+      expect(mid.particleEmissionFactor).toBeLessThan(1);
+      expect(mid.auraFactor).toBeGreaterThan(0);
+
+      const open = evalBook3DOpenState(1);
+      expect(open.progress).toBe(1);
+      expect(open.wingOffsetX).toBe(BOOK3D_SPEC.wingOffsetX);
+      expect(open.rightWingRotZ).toBe(BOOK3D_SPEC.wingTilt);
+      expect(open.leftWingRotZ).toBe(-BOOK3D_SPEC.wingTilt);
+      expect(open.particleEmissionFactor).toBe(1);
+      expect(open.auraFactor).toBe(1);
     });
   });
 });

@@ -94,10 +94,52 @@ export const BOOK3D_PAN = Object.freeze({
 export const BOOK3D_PARTICLES = Object.freeze({
   hardwareCount: 72,
   softwareCount: 24,
-  baseSize: 18.0,
-  defaultGlowStrength: 1.25,
-  auraOpacity: 0.28,
+  baseSize: 6.0,
+  maxSize: 16.0,
+  minScale: 0.45,
+  maxScale: 1.05,
+  defaultGlowStrength: 1.15,
+  auraOpacity: 0.24,
+  openDurationSec: 0.95,
+  spawnWindowSec: 1.8,
+  maxRise: 2.35,
 });
+
+/**
+ * Pure 3D Mushaf open/close wing kinematics and particle emission envelope.
+ * - At openProgress = 0 (closed): wings fold cleanly upward around spine with zero overlap
+ *   and particleEmissionFactor = 0 (particles do not start until the Quran opens).
+ * - At openProgress = 1 (open): wings settle onto exact BOOK3D_SPEC V-cradle angles and
+ *   particleEmissionFactor = 1.
+ */
+export const evalBook3DOpenState = (openProgress = 1) => {
+  const raw = Number(openProgress);
+  const p = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 1;
+  const ease = 1 - Math.pow(1 - p, 3);
+
+  const closedRotZ = Math.PI / 2 - 0.06;
+  const rightWingRotZ = closedRotZ * (1 - ease) + BOOK3D_SPEC.wingTilt * ease;
+  const leftWingRotZ = -rightWingRotZ;
+  const wingOffsetX = BOOK3D_SPEC.wingOffsetX + (1 - ease) * 0.115;
+
+  const smoothRange = (edge0, edge1, x) => {
+    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+  };
+
+  const particleEmissionFactor = smoothRange(0.18, 0.88, p);
+  const auraFactor = smoothRange(0.12, 0.92, p);
+
+  return Object.freeze({
+    progress: p,
+    ease,
+    wingOffsetX,
+    rightWingRotZ,
+    leftWingRotZ,
+    particleEmissionFactor,
+    auraFactor,
+  });
+};
 
 /**
  * Pure presentation descriptor for the CSS Quran book.
@@ -299,7 +341,8 @@ export const computeCameraPose = ({
 
 /**
  * Pure deterministic/varied particle field builder for glowing spiritual dust.
- * Returns typed arrays ready for BufferGeometry + ShaderMaterial / Points.
+ * Particles originate right above the opened Mushaf pages with staggered spawn
+ * delays so they start emerging cleanly when the 3D Quran opens.
  */
 export const generateParticleFieldData = (count = BOOK3D_PARTICLES.hardwareCount) => {
   const n = Math.max(1, Math.min(256, Math.round(Number(count) || BOOK3D_PARTICLES.hardwareCount)));
@@ -307,6 +350,8 @@ export const generateParticleFieldData = (count = BOOK3D_PARTICLES.hardwareCount
   const colors = new Float32Array(n * 3);
   const scales = new Float32Array(n);
   const phases = new Float32Array(n);
+  const delays = new Float32Array(n);
+  const speeds = new Float32Array(n);
 
   const palette = [
     [1.0, 0.87, 0.35], // radiant gold
@@ -315,28 +360,31 @@ export const generateParticleFieldData = (count = BOOK3D_PARTICLES.hardwareCount
     [0.83, 0.69, 0.22], // antique bronze-gold
   ];
 
-  // Deterministic golden-ratio quasi-random scatter + organic variation
+  const scaleSpan = BOOK3D_PARTICLES.maxScale - BOOK3D_PARTICLES.minScale;
   const phi = 1.61803398875;
   for (let i = 0; i < n; i++) {
-    const t = (i + 0.5) / n;
-    const h1 = ((i * phi) % 1);
-    const h2 = (((i * 0.7548776662) + 0.37) % 1);
-    const h3 = (((i * 0.5698402909) + 0.19) % 1);
+    const t = i / Math.max(1, n - 1);
+    const h1 = (i * phi) % 1;
+    const h2 = (i * 0.7548776662 + 0.37) % 1;
+    const h3 = (i * 0.5698402909 + 0.19) % 1;
 
-    positions[i * 3] = (h1 - 0.5) * 6.8;
-    positions[i * 3 + 1] = t * 3.8 - 0.8;
-    positions[i * 3 + 2] = (h2 - 0.5) * 4.8;
+    // Originate directly above the open Mushaf spread pages
+    positions[i * 3] = (h1 - 0.5) * 2.55;
+    positions[i * 3 + 1] = 0.05 + h3 * 0.16;
+    positions[i * 3 + 2] = (h2 - 0.5) * 1.76;
 
     const col = palette[i % palette.length];
     colors[i * 3] = col[0];
     colors[i * 3 + 1] = col[1];
     colors[i * 3 + 2] = col[2];
 
-    scales[i] = 0.65 + h3 * 1.15;
+    scales[i] = BOOK3D_PARTICLES.minScale + h3 * scaleSpan;
     phases[i] = (h1 + h2) * Math.PI * 2;
+    delays[i] = t * BOOK3D_PARTICLES.spawnWindowSec;
+    speeds[i] = 0.24 + h3 * 0.2;
   }
 
-  return Object.freeze({ count: n, positions, colors, scales, phases });
+  return Object.freeze({ count: n, positions, colors, scales, phases, delays, speeds });
 };
 
 /**

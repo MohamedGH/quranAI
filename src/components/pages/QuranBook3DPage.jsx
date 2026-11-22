@@ -25,6 +25,7 @@ import {
   BOOK3D_ZOOM,
   BOOK3D_PAN,
   BOOK3D_PARTICLES,
+  evalBook3DOpenState,
   evalStaticPageLocalY,
   evalFlipPivotState,
   evalFlipSheetPoint,
@@ -578,25 +579,25 @@ export function createParticleGlowTexture(size = 64) {
   if (typeof ctx.createRadialGradient === "function") {
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
     grad.addColorStop(0.0, "rgba(255, 255, 255, 1)");
-    grad.addColorStop(0.18, "rgba(255, 244, 195, 0.95)");
-    grad.addColorStop(0.42, "rgba(255, 215, 90, 0.48)");
-    grad.addColorStop(0.72, "rgba(212, 175, 55, 0.14)");
+    grad.addColorStop(0.16, "rgba(255, 245, 200, 0.92)");
+    grad.addColorStop(0.36, "rgba(255, 215, 90, 0.42)");
+    grad.addColorStop(0.65, "rgba(212, 175, 55, 0.1)");
     grad.addColorStop(1.0, "rgba(212, 175, 55, 0)");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, s, s);
   } else {
     ctx.fillStyle = "rgba(255, 232, 145, 0.85)";
     ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.65, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Delicate 4-point celestial starflare core
+  // Delicate compact 4-point celestial starflare core
   if (typeof ctx.ellipse === "function") {
     ctx.save();
-    ctx.fillStyle = "rgba(255, 252, 230, 0.72)";
-    const armLen = r * 0.78;
-    const armThick = Math.max(1.2, s * 0.04);
+    ctx.fillStyle = "rgba(255, 252, 230, 0.78)";
+    const armLen = r * 0.62;
+    const armThick = Math.max(1.0, s * 0.032);
     ctx.beginPath();
     ctx.ellipse(cx, cy, armLen, armThick, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -733,6 +734,7 @@ export function QuranBook3DPage({
   const [showStand, setShowStand] = useState(true);
   const [showDust, setShowDust] = useState(true);
   const [showGlow, setShowGlow] = useState(true);
+  const [bookOpen, setBookOpen] = useState(true);
   const [interactionMode, setInteractionMode] = useState("orbit"); // "orbit" | "pan"
   const [pan2d, setPan2d] = useState({ x: 0, y: 0 });
   const [bookmark, setBookmark] = useState(() => {
@@ -766,6 +768,8 @@ export function QuranBook3DPage({
   const standGroupRef = useRef(null);
   const rightPageMeshRef = useRef(null);
   const leftPageMeshRef = useRef(null);
+  const rightWingRef = useRef(null);
+  const leftWingRef = useRef(null);
   const flipPivotRef = useRef(null);
   const flipRightFaceMeshRef = useRef(null);
   const flipLeftFaceMeshRef = useRef(null);
@@ -774,6 +778,8 @@ export function QuranBook3DPage({
   const showStandRef = useRef(showStand);
   const showDustRef = useRef(showDust);
   const showGlowRef = useRef(showGlow);
+  const bookOpenRef = useRef(bookOpen);
+  const openAnimRef = useRef({ progress: 0, particleTime: 0 });
   const isSoftwareGlRef = useRef(false);
   const requestRenderRef = useRef(() => {});
 
@@ -1053,7 +1059,7 @@ export function QuranBook3DPage({
     rimLight.position.set(-3, 2, -3);
     scene.add(rimLight);
 
-    // ── Textured Glowing Spiritual Dust Particles (Procedural CanvasTexture + Custom Glow Shader) ──
+    // ── Textured Glowing Spiritual Dust Particles (Small motes spawning as the 3D Quran opens) ──
     const dustCount = isSwGl ? BOOK3D_PARTICLES.softwareCount : BOOK3D_PARTICLES.hardwareCount;
     const particleField = generateParticleFieldData(dustCount);
     const dustGeo = new THREE.BufferGeometry();
@@ -1061,14 +1067,23 @@ export function QuranBook3DPage({
     dustGeo.setAttribute("aColor", new THREE.BufferAttribute(particleField.colors, 3));
     dustGeo.setAttribute("aScale", new THREE.BufferAttribute(particleField.scales, 1));
     dustGeo.setAttribute("aPhase", new THREE.BufferAttribute(particleField.phases, 1));
+    dustGeo.setAttribute("aDelay", new THREE.BufferAttribute(particleField.delays, 1));
+    dustGeo.setAttribute("aSpeed", new THREE.BufferAttribute(particleField.speeds, 1));
+
+    openAnimRef.current = { progress: 0, particleTime: 0 };
+    const initialOpenState = evalBook3DOpenState(0);
 
     const particleGlowTex = createParticleGlowTexture(64);
     const dustMat = new THREE.ShaderMaterial({
       uniforms: {
         uMap: { value: particleGlowTex },
         uTime: { value: 0 },
+        uParticleTime: { value: 0 },
+        uEmitFactor: { value: initialOpenState.particleEmissionFactor },
+        uMaxRise: { value: BOOK3D_PARTICLES.maxRise },
         uPixelRatio: { value: renderer.getPixelRatio() },
         uBaseSize: { value: BOOK3D_PARTICLES.baseSize },
+        uMaxSize: { value: BOOK3D_PARTICLES.maxSize },
         uGlowStrength: {
           value: showGlowRef.current ? BOOK3D_PARTICLES.defaultGlowStrength : 0.45,
         },
@@ -1076,21 +1091,41 @@ export function QuranBook3DPage({
       vertexShader: `
         attribute float aScale;
         attribute float aPhase;
+        attribute float aDelay;
+        attribute float aSpeed;
         attribute vec3 aColor;
         uniform float uTime;
+        uniform float uParticleTime;
+        uniform float uEmitFactor;
+        uniform float uMaxRise;
         uniform float uPixelRatio;
         uniform float uBaseSize;
+        uniform float uMaxSize;
         varying vec3 vColor;
         varying float vTwinkle;
+        varying float vAlpha;
 
         void main() {
           vColor = aColor;
-          vTwinkle = 0.65 + 0.35 * sin(uTime * 1.9 + aPhase);
+          vTwinkle = 0.72 + 0.28 * sin(uTime * 2.1 + aPhase);
+          float localT = uParticleTime - aDelay;
+          float active = step(0.001, localT) * step(0.005, uEmitFactor);
+          float life = fract(max(0.0, localT) * aSpeed * 0.35);
+          float fadeEnv = smoothstep(0.0, 0.14, life) * (1.0 - smoothstep(0.72, 1.0, life));
+          vAlpha = active * uEmitFactor * fadeEnv * (0.55 + 0.35 * vTwinkle);
+
           vec3 p = position;
-          p.x += sin(uTime * 0.45 + aPhase) * 0.14;
-          p.z += cos(uTime * 0.38 + aPhase * 1.3) * 0.14;
+          p.y += life * uMaxRise;
+          p.x += sin(uTime * 0.55 + aPhase) * 0.13 * (0.25 + life);
+          p.z += cos(uTime * 0.48 + aPhase * 1.3) * 0.13 * (0.25 + life);
+
           vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
-          gl_PointSize = uBaseSize * aScale * uPixelRatio * (4.8 / max(1.4, -mvPosition.z)) * (0.85 + 0.25 * vTwinkle);
+          float distScale = 4.4 / max(1.6, -mvPosition.z);
+          float ptSize = min(
+            uMaxSize * uPixelRatio,
+            uBaseSize * aScale * uPixelRatio * distScale * (0.85 + 0.15 * vTwinkle)
+          );
+          gl_PointSize = ptSize * step(0.005, vAlpha);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -1099,13 +1134,15 @@ export function QuranBook3DPage({
         uniform float uGlowStrength;
         varying vec3 vColor;
         varying float vTwinkle;
+        varying float vAlpha;
 
         void main() {
+          if (vAlpha < 0.005) discard;
           vec4 tex = texture2D(uMap, gl_PointCoord);
           if (tex.a < 0.01) discard;
           vec3 glowColor = mix(vColor, vec3(1.0, 0.98, 0.88), tex.a * 0.42);
-          float alpha = tex.a * (0.52 + 0.38 * vTwinkle);
-          gl_FragColor = vec4(glowColor * (0.85 + uGlowStrength * 0.52) * vTwinkle, alpha);
+          float alpha = tex.a * vAlpha;
+          gl_FragColor = vec4(glowColor * (0.85 + uGlowStrength * 0.48) * vTwinkle, alpha);
         }
       `,
       transparent: true,
@@ -1123,7 +1160,7 @@ export function QuranBook3DPage({
       map: auraTex,
       color: 0xffd275,
       transparent: true,
-      opacity: BOOK3D_PARTICLES.auraOpacity,
+      opacity: BOOK3D_PARTICLES.auraOpacity * initialOpenState.auraFactor,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
@@ -1233,14 +1270,16 @@ export function QuranBook3DPage({
     const stackGeo = new THREE.BoxGeometry(stackWidth, stackHeight, stackDepth);
 
     const rightWing = new THREE.Group();
-    rightWing.position.set(wingOffsetX, wingBaseY, 0);
-    rightWing.rotation.z = wingTilt; // slopes gently UP outward (+X)
+    rightWing.position.set(initialOpenState.wingOffsetX, wingBaseY, 0);
+    rightWing.rotation.z = initialOpenState.rightWingRotZ;
     bookGroup.add(rightWing);
+    rightWingRef.current = rightWing;
 
     const leftWing = new THREE.Group();
-    leftWing.position.set(-wingOffsetX, wingBaseY, 0);
-    leftWing.rotation.z = -wingTilt; // slopes gently UP outward (-X)
+    leftWing.position.set(-initialOpenState.wingOffsetX, wingBaseY, 0);
+    leftWing.rotation.z = initialOpenState.leftWingRotZ;
     bookGroup.add(leftWing);
+    leftWingRef.current = leftWing;
 
     const rightCover = new THREE.Mesh(coverBoardGeo, coverMat);
     rightCover.position.set(coverWidth / 2, -coverThickness / 2, 0);
@@ -1420,7 +1459,6 @@ export function QuranBook3DPage({
     let rafId = 0;
     let isDisposed = false;
     let lastTimeMs = performance.now();
-    let frameCount = 0;
 
     const applyFlipGeometryFrame = (progress, direction) => {
       const fState = evalFlipPivotState(progress, direction);
@@ -1453,7 +1491,6 @@ export function QuranBook3DPage({
       rafId = 0;
       const dt = Math.min(0.05, Math.max(0.001, (nowMs - lastTimeMs) / 1000));
       lastTimeMs = nowMs;
-      frameCount += 1;
 
       const rotDx = targetRotationRef.current.x - currentRotationRef.current.x;
       const rotDy = targetRotationRef.current.y - currentRotationRef.current.y;
@@ -1491,6 +1528,26 @@ export function QuranBook3DPage({
         camera.lookAt(_cameraLookAtTarget);
       }
 
+      // Smooth 3D Mushaf open/close transition (particles start only as the Quran opens)
+      const targetOpen = bookOpenRef.current ? 1 : 0;
+      const openAnim = openAnimRef.current;
+      const openDiff = targetOpen - openAnim.progress;
+      const openMoving = Math.abs(openDiff) > 0.001;
+      if (openMoving) {
+        const step = dt / BOOK3D_PARTICLES.openDurationSec;
+        openAnim.progress =
+          openDiff > 0
+            ? Math.min(1, openAnim.progress + step)
+            : Math.max(0, openAnim.progress - step);
+      } else {
+        openAnim.progress = targetOpen;
+      }
+      const openState = evalBook3DOpenState(openAnim.progress);
+      rightWing.position.x = openState.wingOffsetX;
+      rightWing.rotation.z = openState.rightWingRotZ;
+      leftWing.position.x = -openState.wingOffsetX;
+      leftWing.rotation.z = openState.leftWingRotZ;
+
       // Sync stand, dust & glow halo visibility cleanly
       if (standGroup.visible !== showStandRef.current) {
         standGroup.visible = showStandRef.current;
@@ -1504,30 +1561,28 @@ export function QuranBook3DPage({
         auraSprite.visible = glowActive;
       }
 
-      // Animate glowing particle shimmer & gentle rising drift on hardware GPU
-      if (dustActive) {
+      // Particles only emit & advance once the 3D Quran opens; closing resets them to 0
+      if (openState.particleEmissionFactor <= 0.001 && !bookOpenRef.current) {
+        openAnim.particleTime = 0;
+      } else if (dustActive && openState.particleEmissionFactor > 0.001) {
+        openAnim.particleTime += dt;
         dustMat.uniforms.uTime.value += dt;
-        dustMat.uniforms.uGlowStrength.value = showGlowRef.current
-          ? BOOK3D_PARTICLES.defaultGlowStrength
-          : 0.45;
-        if (frameCount % 2 === 0) {
-          const posArr = dustGeo.attributes.position.array;
-          const liftStep = dt * 0.24;
-          for (let i = 1; i < posArr.length; i += 3) {
-            posArr[i] += liftStep;
-            if (posArr[i] > 3.1) posArr[i] = -0.8;
-          }
-          dustGeo.attributes.position.needsUpdate = true;
-        }
       }
+      dustMat.uniforms.uParticleTime.value = openAnim.particleTime;
+      dustMat.uniforms.uEmitFactor.value = openState.particleEmissionFactor;
+      dustMat.uniforms.uGlowStrength.value = showGlowRef.current
+        ? BOOK3D_PARTICLES.defaultGlowStrength
+        : 0.45;
+
       if (glowActive) {
+        auraMat.opacity = BOOK3D_PARTICLES.auraOpacity * openState.auraFactor;
         const pulse = 1 + Math.sin(dustMat.uniforms.uTime.value * 1.1) * 0.04;
         auraSprite.scale.set(5.4 * pulse, 3.6 * pulse, 1);
       }
 
       // Delta-timed 3D Page Flip Physics
       const fAnim = flipAnimRef.current;
-      if (fAnim.active) {
+      if (fAnim.active && openAnim.progress >= 0.98) {
         fAnim.progress += dt / BOOK3D_SPEC.flipDurationSec;
         const p = Math.min(1.0, fAnim.progress);
 
@@ -1556,8 +1611,17 @@ export function QuranBook3DPage({
         console.warn("Render loop error:", renderErr);
       }
 
-      // Continue ticking while animating, orbiting, zooming, panning, or dust active on GPU
-      if (fAnim.active || orbitMoving || zoomMoving || panMoving || dustActive || glowActive) {
+      // Continue ticking while opening, flipping, orbiting, zooming, panning, or dust active on GPU
+      const emittingParticles = dustActive && openState.particleEmissionFactor > 0.001;
+      if (
+        openMoving ||
+        fAnim.active ||
+        orbitMoving ||
+        zoomMoving ||
+        panMoving ||
+        emittingParticles ||
+        (glowActive && openState.auraFactor > 0.001)
+      ) {
         rafId = requestAnimationFrame(renderFrame);
       }
     };
@@ -1655,6 +1719,14 @@ export function QuranBook3DPage({
     }
     requestRenderRef.current();
   }, [showGlow]);
+
+  useEffect(() => {
+    bookOpenRef.current = bookOpen;
+    if (bookOpen && openAnimRef.current.progress <= 0.18) {
+      openAnimRef.current.particleTime = 0;
+    }
+    requestRenderRef.current();
+  }, [bookOpen]);
 
   // ── 3D & 2D Page Turns (RTL Arabic: Next lifts Left -> Right; Prev lifts Right -> Left) ──
   const turnNext = useCallback(() => {
@@ -1995,6 +2067,10 @@ export function QuranBook3DPage({
   const handleClickOnCanvas = (e) => {
     // Ignore drags or pinch gestures so orbiting/zooming/panning never accidentally triggers verse sheet
     if (dragDistRef.current > 8) return;
+    if (!bookOpenRef.current) {
+      setBookOpen(true);
+      return;
+    }
     if (!containerRef.current || !cameraRef.current || !sceneRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();
@@ -3601,12 +3677,32 @@ export function QuranBook3DPage({
                   cursor: "pointer",
                 }}
               >
-                <span style={{ color: "#ebd8b0" }}>🌟 Lueur & Halo Sacré (Glow)</span>
+                <span style={{ color: "#ebd8b0" }}>🌟 Lueur &amp; Halo Sacré (Glow)</span>
                 <input
                   data-testid="q3d-toggle-glow"
                   type="checkbox"
                   checked={showGlow}
                   onChange={(e) => setShowGlow(e.target.checked)}
+                />
+              </label>
+
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 14px",
+                  background: "rgba(255,255,255,0.05)",
+                  borderRadius: 10,
+                  cursor: "pointer",
+                }}
+              >
+                <span style={{ color: "#ebd8b0" }}>📖 Coran 3D Ouvert</span>
+                <input
+                  data-testid="q3d-toggle-book-open"
+                  type="checkbox"
+                  checked={bookOpen}
+                  onChange={(e) => setBookOpen(e.target.checked)}
                 />
               </label>
 

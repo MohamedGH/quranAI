@@ -93,7 +93,7 @@ vi.mock("three", async (importOriginal) => {
 import * as THREE from "three";
 import { store, uiActions } from "../src/store.js";
 import * as reciterAudio from "../src/utils/reciterAudio.js";
-import { BOOK3D_ZOOM } from "../src/utils/quranBookEngine.js";
+import { BOOK3D_ZOOM, BOOK3D_PARTICLES } from "../src/utils/quranBookEngine.js";
 import { QuranBook3DPage } from "../src/components/pages/QuranBook3DPage.jsx";
 
 describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric Aura", () => {
@@ -187,6 +187,10 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     expect(dustShader.transparent).toBe(true);
     expect(dustShader.uniforms.uMap.value).toBeInstanceOf(THREE.CanvasTexture);
     expect(dustShader.uniforms.uMap.value.colorSpace).toBe(THREE.SRGBColorSpace);
+    expect(dustShader.uniforms.uBaseSize.value).toBe(BOOK3D_PARTICLES.baseSize);
+    expect(dustShader.uniforms.uBaseSize.value).toBeLessThanOrEqual(8);
+    expect(dustShader.uniforms.uEmitFactor.value).toBe(0);
+    expect(dustShader.uniforms.uParticleTime.value).toBe(0);
 
     expect(mockRendererState.sprites.length).toBe(1);
     const auraSprite = mockRendererState.sprites[0];
@@ -198,14 +202,28 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     const camera = mockRendererState.cameras[0];
     expect(camera).toBeTruthy();
 
-    // Flush initial animation frame cleanly (renderFrame re-schedules while glow/dust active)
+    // Flush initial animation frame -> still early in opening, so particles remain un-emitted at first
+    let simNow = performance.now() + 16;
     act(() => {
       const pending = rafQueue.splice(0, rafQueue.length);
       for (const fn of pending) {
-        fn(performance.now() + 16);
+        fn(simNow);
       }
     });
     expect(mockRendererState.renderSpy).toHaveBeenCalled();
+    expect(dustShader.uniforms.uEmitFactor.value).toBe(0);
+    expect(dustShader.uniforms.uParticleTime.value).toBe(0);
+
+    // Advance 3D Quran opening across ~14 frames (+50ms each) -> particles start emitting as cover unfolds
+    act(() => {
+      for (let i = 0; i < 14 && rafQueue.length > 0; i++) {
+        simNow += 50;
+        const fn = rafQueue.shift();
+        fn(simNow);
+      }
+    });
+    expect(dustShader.uniforms.uEmitFactor.value).toBeGreaterThan(0.5);
+    expect(dustShader.uniforms.uParticleTime.value).toBeGreaterThan(0);
 
     // Toggle to Camera Translation mode (✋ CAMÉRA) -> cursor switches & directional pad renders
     const panToggle = document.querySelector('[data-testid="q3d-pan-toggle"]');
@@ -243,8 +261,9 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
 
     act(() => {
       for (let i = 0; i < 6 && rafQueue.length > 0; i++) {
+        simNow += 32;
         const fn = rafQueue.shift();
-        fn(performance.now() + (i + 10) * 32);
+        fn(simNow);
       }
     });
     expect(camera.position.x).toBeGreaterThan(0.05);
@@ -261,6 +280,35 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     fireEvent.click(glowCheckbox);
     expect(glowCheckbox.checked).toBe(false);
     expect(auraSprite.visible).toBe(false);
+
+    // Toggle 3D Quran closed -> particles reset to 0; reopen -> particles restart emitting
+    const openCheckbox = document.querySelector('[data-testid="q3d-toggle-book-open"]');
+    expect(openCheckbox.checked).toBe(true);
+    fireEvent.click(openCheckbox);
+    expect(openCheckbox.checked).toBe(false);
+
+    act(() => {
+      for (let i = 0; i < 24 && rafQueue.length > 0; i++) {
+        simNow += 50;
+        const fn = rafQueue.shift();
+        fn(simNow);
+      }
+    });
+    expect(dustShader.uniforms.uEmitFactor.value).toBe(0);
+    expect(dustShader.uniforms.uParticleTime.value).toBe(0);
+
+    // Reopen 3D Quran -> particles start emerging again
+    fireEvent.click(openCheckbox);
+    expect(openCheckbox.checked).toBe(true);
+    act(() => {
+      for (let i = 0; i < 16 && rafQueue.length > 0; i++) {
+        simNow += 50;
+        const fn = rafQueue.shift();
+        fn(simNow);
+      }
+    });
+    expect(dustShader.uniforms.uEmitFactor.value).toBeGreaterThan(0.5);
+    expect(dustShader.uniforms.uParticleTime.value).toBeGreaterThan(0);
 
     // Unmount -> verifies full shader & renderer disposal with zero leaks
     unmount();

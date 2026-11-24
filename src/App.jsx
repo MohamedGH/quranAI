@@ -92,6 +92,12 @@ import { ERROR_CODES, withErrorRecovery } from "./utils/errorManager.js";
 import { safePlayAudio, safePauseAudio, safeLoadAudio, playWhenAudioReady, isAudioAbortError } from "./utils/safeAudioPlayer.js";
 import { parseQuranRoute, buildQuranRoute } from "./utils/routeManager.js";
 import {
+  resolveMenuSurahSelection,
+  resolveFullScreenAyatSelection,
+  evaluateUrlToReduxSync,
+  resolveReduxToUrlSync,
+} from "./utils/fullScreenNavigation.js";
+import {
   clampHizbNumber,
   getHizbForSurahAyah,
   getHizbBounds,
@@ -102,7 +108,26 @@ import {
   getHizbsForSurah,
   buildCrossSurahHizbAyats,
   fetchCrossSurahHizbAyats,
+  ayahsBelongToSurah,
 } from "./utils/hizbUtils.js";
+import {
+  clampQuarterHizbNumber,
+  getQuarterHizbForSurahAyah,
+  getQuarterFractionMeta,
+  getQuarterHizbBounds,
+  getQuarterHizbSegments,
+  getSurahsForQuarterHizb,
+  getQuarterHizbsForSurah,
+  buildCrossSurahQuarterHizbAyats,
+  fetchCrossSurahQuarterHizbAyats,
+} from "./utils/quarterHizbUtils.js";
+import {
+  STUDY_RECENCY_TIER_LIST,
+  STUDY_RECENCY_FILTERS,
+  getStudyRecencyInfo,
+  matchesStudyRecencyFilter,
+  computeStudyRecencySummary,
+} from "./utils/studyRecency.js";
 import {
   API, AUDIO_CDN_ROOT, RECITATORS, TRANS_EDITIONS, TRANS_LABELS,
   fetchSurahs, fetchSurahTranslation, fetchSurahWbw, fetchAyats, fetchSurahSimple, fetchSurahDefault,
@@ -239,6 +264,9 @@ function AppInner({ currentUser, onSignOut }) {
   const allow3D         = isElementVisible(uiElementsVisibility, "quran3dAccess");
   const urlSurahNum     = isBookRoute ? NaN : (parsedRoute.surahNum ?? parseInt(urlSegs[1]));
   const urlAyatNum      = isBookRoute ? NaN : (parsedRoute.ayatNum ?? parseInt(urlSegs[2]));
+  const pendingNavTargetRef = useRef(null);
+  const pendingExplicitAyatRef = useRef(null);
+  const prevPlayingAyatRef = useRef(null);
 
   // ── Sync URL ux, compact, uiPreset, uiEdit & view params → Redux ──
   useEffect(() => {
@@ -285,71 +313,75 @@ function AppInner({ currentUser, onSignOut }) {
 
   // ── Sync URL → Redux (selectedSurah, openAyatNum) ──
   useEffect(() => {
-    if (isBookRoute || isNaN(urlSurahNum) || surahs.length === 0) return;
+    const syncGuard = evaluateUrlToReduxSync({
+      locationPath: location.pathname,
+      pendingNavTarget: pendingNavTargetRef.current,
+    });
+    if (syncGuard.clearPending) {
+      pendingNavTargetRef.current = null;
+    }
+    if (syncGuard.skip) return;
+    if (activePage !== 'quran' || isBookRoute || isNaN(urlSurahNum) || surahs.length === 0) return;
+
     const s = surahs.find(x => x.number === urlSurahNum);
-    if (s && s.number !== selectedSurah?.number) {
+    if (!s) return;
+
+    const currentState = store.getState();
+    const curSelected = sel.selectedSurah(currentState);
+    const curOpenAyat = sel.openAyatNum(currentState);
+
+    if (s.number !== curSelected?.number) {
+      if (!isNaN(urlAyatNum)) {
+        pendingExplicitAyatRef.current = { surahNum: s.number, ayatNum: urlAyatNum };
+      }
       setSelectedSurah(s);
-    } else if (s && s.number === selectedSurah?.number) {
-      // Same surah — back navigation: restore openAyatNum from URL or lastAyatBySurah
+      if (!isNaN(urlAyatNum)) {
+        setOpenAyatNum(urlAyatNum);
+      }
+    } else {
+      // External / browser-history navigation within the same surah
       const targetAyat = !isNaN(urlAyatNum)
         ? urlAyatNum
         : parsedRoute.view === QURAN_READING_TIERS.LIST
         ? null
         : (lastAyatBySurah[urlSurahNum] ?? (fullScreenSelectedAyat ? 1 : null));
       if (targetAyat != null) {
-        setOpenAyatNum(targetAyat);
+        if (curOpenAyat !== targetAyat) {
+          pendingExplicitAyatRef.current = { surahNum: s.number, ayatNum: targetAyat };
+          setOpenAyatNum(targetAyat);
+        }
         const tryScroll = (attempts = 0) => {
           const el = ayatRefs.current[targetAyat];
           if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
           else if (attempts < 20) requestAnimationFrame(() => tryScroll(attempts + 1));
         };
         requestAnimationFrame(() => tryScroll());
-      } else {
+      } else if (curOpenAyat != null) {
         setOpenAyatNum(null);
       }
     }
-    if (!isNaN(urlAyatNum) && s?.number !== selectedSurah?.number) setTimeout(() => {
-      setOpenAyatNum(urlAyatNum);
-      const el = ayatRefs.current[urlAyatNum];
-      if (el) el.scrollIntoView({ behavior: 'instant', block: 'center' });
-    }, 400);
-  }, [isBookRoute, urlSurahNum, urlAyatNum, surahs.length, activePage, parsedRoute.view]);
+  }, [location.pathname, isBookRoute, urlSurahNum, urlAyatNum, surahs.length, activePage, parsedRoute.view]);
 
-  // ── Sync Redux → URL (selectedSurah) ──
+  // ── Sync Redux → URL (selectedSurah & openAyatNum) ──
   useEffect(() => {
-    if (activePage !== 'quran' || isBookRoute || !selectedSurah) return;
-    if (
-      isPriority3DProfile(uxMode) &&
-      quranReadingTier === QURAN_READING_TIERS.BOOK3D &&
-      isQuranUnlocked &&
-      allow3D &&
-      isNaN(urlSurahNum)
-    ) {
-      return;
-    }
-    const target = `/quran/${selectedSurah.number}`;
-    if (!location.pathname.startsWith(target)) {
-      navigate(`${target}${location.search || ""}`, { replace: true });
-    }
-  }, [selectedSurah?.number, activePage, isBookRoute, uxMode, quranReadingTier, isQuranUnlocked, allow3D, urlSurahNum, location.pathname, location.search]);
-
-  // ── Sync Redux → URL (openAyatNum) ──
-  useEffect(() => {
-    if (activePage !== 'quran' || isBookRoute || !selectedSurah || openAyatNum == null) return;
-    if (
-      isPriority3DProfile(uxMode) &&
-      quranReadingTier === QURAN_READING_TIERS.BOOK3D &&
-      isQuranUnlocked &&
-      allow3D &&
-      isNaN(urlSurahNum)
-    ) {
-      return;
-    }
-    const target = `/quran/${selectedSurah.number}/${openAyatNum}`;
-    if (location.pathname !== target) {
-      navigate(`${target}${location.search || ""}`, { replace: true });
-    }
-  }, [openAyatNum, selectedSurah?.number, activePage, isBookRoute, uxMode, quranReadingTier, isQuranUnlocked, allow3D, urlSurahNum, location.pathname, location.search]);
+    const syncTarget = resolveReduxToUrlSync({
+      activePage,
+      isBookRoute,
+      selectedSurah,
+      openAyatNum,
+      uxMode,
+      quranReadingTier,
+      isQuranUnlocked,
+      allow3D,
+      urlSurahNum,
+      urlAyatNum,
+      pendingNavTarget: pendingNavTargetRef.current,
+      currentRouteParams: parsedRoute,
+    });
+    if (!syncTarget) return;
+    pendingNavTargetRef.current = { path: syncTarget.targetPath, expiresAt: Date.now() + 1000 };
+    navigate(syncTarget.targetRoute, { replace: true });
+  }, [openAyatNum, selectedSurah?.number, activePage, isBookRoute, uxMode, quranReadingTier, isQuranUnlocked, allow3D, urlSurahNum, urlAyatNum, parsedRoute, navigate]);
 
   // ── Sync Route → Redux (silenceRevise & silenceMode) ──
   useEffect(() => {
@@ -577,14 +609,18 @@ function AppInner({ currentUser, onSignOut }) {
 
   // When fullScreenSelectedAyat is active (Priority 2 in child/beginner), auto-open Ayat 1 or last read verse
   useEffect(() => {
-    if (isBookRoute || quranReadingTier === QURAN_READING_TIERS.LIST || parsedRoute.view === QURAN_READING_TIERS.LIST) return;
+    if (activePage !== 'quran' || isBookRoute || quranReadingTier === QURAN_READING_TIERS.LIST || parsedRoute.view === QURAN_READING_TIERS.LIST) return;
     if (fullScreenSelectedAyat && selectedSurah && openAyatNum == null && ayats && ayats.length > 0) {
-      const defaultAyat = (!isNaN(urlAyatNum) && urlAyatNum >= 1 && urlAyatNum <= ayats.length)
-        ? urlAyatNum
-        : (lastAyatBySurah[selectedSurah.number] || 1);
+      const pending = pendingExplicitAyatRef.current?.surahNum === selectedSurah.number
+        ? pendingExplicitAyatRef.current.ayatNum
+        : null;
+      const defaultAyat = pending
+        ?? ((!isNaN(urlAyatNum) && urlAyatNum >= 1 && urlAyatNum <= ayats.length)
+          ? urlAyatNum
+          : (lastAyatBySurah[selectedSurah.number] || 1));
       setOpenAyatNum(defaultAyat);
     }
-  }, [isBookRoute, quranReadingTier, parsedRoute.view, fullScreenSelectedAyat, selectedSurah?.number, openAyatNum, ayats?.length, urlAyatNum, lastAyatBySurah]);
+  }, [activePage, isBookRoute, quranReadingTier, parsedRoute.view, fullScreenSelectedAyat, selectedSurah?.number, openAyatNum, ayats?.length, urlAyatNum, lastAyatBySurah]);
 
   // Warm the same cache for every other reciter in the background (staggered, one at a time)
   // so the picker panel can show everyone's real bitrate without waiting for each to be selected.
@@ -701,19 +737,26 @@ function AppInner({ currentUser, onSignOut }) {
 
   const [renderLimit, setRenderLimit] = useState(30);
   const preserveHizbRef = useRef(null);
+  const preserveQuarterHizbRef = useRef(null);
   const prevMainAyatIdxRef = useRef(0);
-  const pageMode        = useSelector(sel.pageMode);
-  const hizbMode        = useSelector(sel.hizbMode);
-  const juzMode         = useSelector(sel.juzMode);
-  const activePageCoran = useSelector(sel.activePageCoran);
-  const activeHizbCoran = useSelector(sel.activeHizbCoran);
-  const activeJuzCoran  = useSelector(sel.activeJuzCoran);
-  const setPageMode        = useCallback((v) => dispatch(uiActions.setPageMode(typeof v === 'function' ? v(store.getState().ui.pageMode) : v)), [dispatch]);
-  const setHizbMode        = useCallback((v) => dispatch(uiActions.setHizbMode(typeof v === 'function' ? v(store.getState().ui.hizbMode) : v)), [dispatch]);
-  const setJuzMode         = useCallback((v) => dispatch(uiActions.setJuzMode(typeof v === 'function' ? v(store.getState().ui.juzMode) : v)), [dispatch]);
-  const setactivePageCoran = useCallback((v) => dispatch(uiActions.setActivePageCoran(typeof v === 'function' ? v(store.getState().ui.activePageCoran) : v)), [dispatch]);
-  const setActiveHizbCoran = useCallback((v) => dispatch(uiActions.setActiveHizbCoran(typeof v === 'function' ? v(store.getState().ui.activeHizbCoran) : v)), [dispatch]);
-  const setActiveJuzCoran  = useCallback((v) => dispatch(uiActions.setActiveJuzCoran(typeof v === 'function' ? v(store.getState().ui.activeJuzCoran) : v)), [dispatch]);
+  const pageMode               = useSelector(sel.pageMode);
+  const hizbMode               = useSelector(sel.hizbMode);
+  const quarterHizbMode        = useSelector(sel.quarterHizbMode);
+  const juzMode                = useSelector(sel.juzMode);
+  const activePageCoran        = useSelector(sel.activePageCoran);
+  const activeHizbCoran        = useSelector(sel.activeHizbCoran);
+  const activeQuarterHizbCoran = useSelector(sel.activeQuarterHizbCoran);
+  const activeJuzCoran         = useSelector(sel.activeJuzCoran);
+  const showStudyRecency       = useSelector(sel.showStudyRecency);
+  const studyRecencyFilter     = useSelector(sel.studyRecencyFilter);
+  const setPageMode               = useCallback((v) => dispatch(uiActions.setPageMode(typeof v === 'function' ? v(store.getState().ui.pageMode) : v)), [dispatch]);
+  const setHizbMode               = useCallback((v) => dispatch(uiActions.setHizbMode(typeof v === 'function' ? v(store.getState().ui.hizbMode) : v)), [dispatch]);
+  const setQuarterHizbMode        = useCallback((v) => dispatch(uiActions.setQuarterHizbMode(typeof v === 'function' ? v(store.getState().ui.quarterHizbMode) : v)), [dispatch]);
+  const setJuzMode                = useCallback((v) => dispatch(uiActions.setJuzMode(typeof v === 'function' ? v(store.getState().ui.juzMode) : v)), [dispatch]);
+  const setactivePageCoran        = useCallback((v) => dispatch(uiActions.setActivePageCoran(typeof v === 'function' ? v(store.getState().ui.activePageCoran) : v)), [dispatch]);
+  const setActiveHizbCoran        = useCallback((v) => dispatch(uiActions.setActiveHizbCoran(typeof v === 'function' ? v(store.getState().ui.activeHizbCoran) : v)), [dispatch]);
+  const setActiveQuarterHizbCoran = useCallback((v) => dispatch(uiActions.setActiveQuarterHizbCoran(typeof v === 'function' ? v(store.getState().ui.activeQuarterHizbCoran) : v)), [dispatch]);
+  const setActiveJuzCoran         = useCallback((v) => dispatch(uiActions.setActiveJuzCoran(typeof v === 'function' ? v(store.getState().ui.activeJuzCoran) : v)), [dispatch]);
   const [crossPlayingAyat, setCrossPlayingAyat] = useState(null);
   const currentMainAyat = crossPlayingAyat || ayats[mainAyatIdx];
   const [surahMeta,   setSurahMeta]   = useState(null); // { hizb, juz, page, wordCount }
@@ -727,7 +770,30 @@ function AppInner({ currentUser, onSignOut }) {
     const sn = a.surahNumber ?? a.surah?.number ?? selectedSurah?.number;
     return sn ? getHizbForSurahAyah(sn, a.numberInSurah) : null;
   }, [selectedSurah?.number]);
+  const getAyatQuarterHizb = useCallback((a) => {
+    if (!a) return null;
+    if (a.hizbQuarter != null) return clampQuarterHizbNumber(a.hizbQuarter);
+    const sn = a.surahNumber ?? a.surah?.number ?? selectedSurah?.number;
+    return sn ? getQuarterHizbForSurahAyah(sn, a.numberInSurah) : null;
+  }, [selectedSurah?.number]);
   const getAyatJuz  = useCallback((a) => a?.juz ?? null, []);
+
+  // Sync URL mode/quarter/hizb deep links
+  useEffect(() => {
+    if (parsedRoute.mode === "quarter") {
+      dispatch(uiActions.setQuarterHizbMode(true));
+      if (parsedRoute.quarter != null) {
+        preserveQuarterHizbRef.current = parsedRoute.quarter;
+        dispatch(uiActions.setActiveQuarterHizbCoran(parsedRoute.quarter));
+      }
+    } else if (parsedRoute.mode === "hizb") {
+      dispatch(uiActions.setHizbMode(true));
+      if (parsedRoute.hizb != null) {
+        preserveHizbRef.current = parsedRoute.hizb;
+        dispatch(uiActions.setActiveHizbCoran(parsedRoute.hizb));
+      }
+    }
+  }, [parsedRoute.mode, parsedRoute.quarter, parsedRoute.hizb, dispatch]);
   const [showSurahInfo, setShowSurahInfo] = useState(false);
   const [showAyatJump, setShowAyatJump] = useState(false);
   const [surahTextCache, setSurahTextCache] = useState({}); // surahNum → { numberInSurah: text } — feeds mastery calc
@@ -869,9 +935,10 @@ function AppInner({ currentUser, onSignOut }) {
     let cancelled = false;
     if (missingSurahs.length > 0) {
       dispatch(quranActions.setLoadingCrossHizb(true));
+      const validPrimaryAyats = ayahsBelongToSurah(ayats, selectedSurah?.number) ? ayats : [];
       fetchCrossSurahHizbAyats(resolvedActiveHizb, {
         primarySurahNum: selectedSurah?.number,
-        primaryAyats: ayats,
+        primaryAyats: validPrimaryAyats,
         existingMap: crossSurahAyatsBySurah,
         fetchSurahFn: fetchAyats,
         onError: (appErr) => dispatch(errorActions.reportError(appErr)),
@@ -917,9 +984,10 @@ function AppInner({ currentUser, onSignOut }) {
   // Memoized combined cross-surah verses for the active Hizb
   const currentHizbCrossAyats = useMemo(() => {
     if (!hizbMode || !resolvedActiveHizb) return [];
+    const validPrimary = selectedSurah && ayahsBelongToSurah(ayats, selectedSurah.number);
     const combinedMap = {
       ...crossSurahAyatsBySurah,
-      ...(selectedSurah && Array.isArray(ayats) && ayats.length > 0 ? { [selectedSurah.number]: ayats } : {}),
+      ...(validPrimary ? { [selectedSurah.number]: ayats } : {}),
     };
     return buildCrossSurahHizbAyats(resolvedActiveHizb, combinedMap, selectedSurah?.number);
   }, [hizbMode, resolvedActiveHizb, crossSurahAyatsBySurah, selectedSurah, ayats]);
@@ -960,6 +1028,123 @@ function AppInner({ currentUser, onSignOut }) {
     });
   }, [activeHizbCoran, hizbMode, currentHizbCrossAyats, ayats, getAyatHizb]);
 
+  // quarterHizbMode: load all Surahs that belong to the active Quarter-of-Hizb when it crosses multiple Surahs
+  const resolvedActiveQuarterHizb = useMemo(() => {
+    if (!selectedSurah) return activeQuarterHizbCoran ?? null;
+    return (
+      activeQuarterHizbCoran ??
+      getAyatQuarterHizb(ayats?.[mainAyatIdx]) ??
+      getAyatQuarterHizb(ayats?.[0]) ??
+      getQuarterHizbsForSurah(selectedSurah.number)[0] ??
+      1
+    );
+  }, [activeQuarterHizbCoran, ayats, mainAyatIdx, selectedSurah, getAyatQuarterHizb]);
+
+  useEffect(() => {
+    if (!quarterHizbMode || !resolvedActiveQuarterHizb) return;
+    const segments = getQuarterHizbSegments(resolvedActiveQuarterHizb);
+    if (segments.length === 0) return;
+
+    const missingSurahs = segments
+      .map(s => s.surahNum)
+      .filter(sn => sn !== selectedSurah?.number && (!crossSurahAyatsBySurah[sn] || crossSurahAyatsBySurah[sn].length === 0));
+
+    let cancelled = false;
+    if (missingSurahs.length > 0) {
+      dispatch(quranActions.setLoadingCrossHizb(true));
+      const validPrimaryAyats = ayahsBelongToSurah(ayats, selectedSurah?.number) ? ayats : [];
+      fetchCrossSurahQuarterHizbAyats(resolvedActiveQuarterHizb, {
+        primarySurahNum: selectedSurah?.number,
+        primaryAyats: validPrimaryAyats,
+        existingMap: crossSurahAyatsBySurah,
+        fetchSurahFn: fetchAyats,
+        onError: (appErr) => dispatch(errorActions.reportError(appErr)),
+      }).then(({ surahMap }) => {
+        if (cancelled) return;
+        dispatch(quranActions.setCrossSurahAyatsBatch(surahMap));
+        dispatch(quranActions.setLoadingCrossHizb(false));
+      }).catch(() => {
+        if (!cancelled) dispatch(quranActions.setLoadingCrossHizb(false));
+      });
+    }
+
+    // Also load translations and timestamps for other surahs in this cross-surah Quarter
+    const otherSurahNums = segments.map(s => s.surahNum).filter(sn => sn !== selectedSurah?.number);
+    if (translationLang && otherSurahNums.length > 0) {
+      otherSurahNums.forEach(sn => {
+        const key = `${translationLang}:${sn}`;
+        if (!translations[key]) {
+          fetchSurahTranslation(sn, translationLang).then(data => {
+            if (!cancelled) setTranslations(p => ({ ...p, [key]: data }));
+          }).catch(() => {});
+        }
+        if (!wbwTranslations[key]) {
+          fetchSurahWbw(sn, translationLang).then(data => {
+            if (!cancelled) setWbwTranslations(p => ({ ...p, [key]: data }));
+          }).catch(() => {});
+        }
+      });
+    }
+    if (sel.enableTimestamps(store.getState()) && otherSurahNums.length > 0) {
+      otherSurahNums.forEach(sn => {
+        loadTimestampsForSurah(sn, recitatorId).then(parsed => {
+          if (!cancelled && parsed && Object.keys(parsed).length > 0) {
+            updateTimestamps(parsed);
+          }
+        }).catch(() => {});
+      });
+    }
+
+    return () => { cancelled = true; };
+  }, [quarterHizbMode, resolvedActiveQuarterHizb, selectedSurah?.number, ayats, crossSurahAyatsBySurah, translationLang, recitatorId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Memoized combined cross-surah verses for the active Quarter-of-Hizb
+  const currentQuarterCrossAyats = useMemo(() => {
+    if (!quarterHizbMode || !resolvedActiveQuarterHizb) return [];
+    const validPrimary = selectedSurah && ayahsBelongToSurah(ayats, selectedSurah.number);
+    const combinedMap = {
+      ...crossSurahAyatsBySurah,
+      ...(validPrimary ? { [selectedSurah.number]: ayats } : {}),
+    };
+    return buildCrossSurahQuarterHizbAyats(resolvedActiveQuarterHizb, combinedMap, selectedSurah?.number);
+  }, [quarterHizbMode, resolvedActiveQuarterHizb, crossSurahAyatsBySurah, selectedSurah, ayats]);
+
+  // quarterHizbMode: auto-change quarter when mainAyatIdx moves to a different quarter, then scroll to ayat
+  useEffect(() => {
+    if (!quarterHizbMode || !autoPageFollow || !ayats || ayats.length === 0) return;
+    if (prevMainAyatIdxRef.current === mainAyatIdx && activeQuarterHizbCoran != null) return;
+    prevMainAyatIdxRef.current = mainAyatIdx;
+    const curAyat = ayats[mainAyatIdx];
+    const targetQuarter = getAyatQuarterHizb(curAyat);
+    if (!targetQuarter) return;
+    const curQuarter = activeQuarterHizbCoran ?? getAyatQuarterHizb(ayats[0]);
+    if (targetQuarter !== curQuarter) {
+      setActiveQuarterHizbCoran(targetQuarter);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          ayatRefs.current[curAyat.numberInSurah]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      });
+    }
+  }, [mainAyatIdx, quarterHizbMode, autoPageFollow, ayats, getAyatQuarterHizb, setActiveQuarterHizbCoran]);
+
+  // quarterHizbMode: when quarter changes manually, scroll to first ayat of that quarter
+  useEffect(() => {
+    if (!quarterHizbMode || !activeQuarterHizbCoran) return;
+    const firstCross = currentQuarterCrossAyats[0];
+    const firstLocal = ayats?.find(a => getAyatQuarterHizb(a) === activeQuarterHizbCoran);
+    const targetKey = firstCross
+      ? `${firstCross.surahNumber}:${firstCross.numberInSurah}`
+      : firstLocal?.numberInSurah;
+    if (!targetKey) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = ayatRefs.current[targetKey] || (firstLocal ? ayatRefs.current[firstLocal.numberInSurah] : null);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  }, [activeQuarterHizbCoran, quarterHizbMode, currentQuarterCrossAyats, ayats, getAyatQuarterHizb]);
+
   // juzMode: auto-change juz when mainAyatIdx moves to a different juz, then scroll to ayat
   useEffect(() => {
     if (!juzMode || !autoPageFollow || !ayats || ayats.length === 0) return;
@@ -996,7 +1181,7 @@ function AppInner({ currentUser, onSignOut }) {
 
   // Infinite scroll pagination — progressively load ayats on demand instead of loading 286 verses at once
   const handleAyatScroll = useCallback((e) => {
-    if (pageMode || hizbMode || juzMode || !ayats || ayats.length === 0) return;
+    if (pageMode || hizbMode || quarterHizbMode || juzMode || !ayats || ayats.length === 0) return;
     const el = e.currentTarget;
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 650) {
       setRenderLimit(prev => {
@@ -1004,15 +1189,15 @@ function AppInner({ currentUser, onSignOut }) {
         return Math.min(prev + 35, ayats.length);
       });
     }
-  }, [pageMode, hizbMode, juzMode, ayats]);
+  }, [pageMode, hizbMode, quarterHizbMode, juzMode, ayats]);
 
   // Keep renderLimit ahead of current active ayat during playback
   useEffect(() => {
-    if (pageMode || hizbMode || juzMode || !ayats || ayats.length === 0) return;
+    if (pageMode || hizbMode || quarterHizbMode || juzMode || !ayats || ayats.length === 0) return;
     if (mainAyatIdx >= 0 && mainAyatIdx + 10 >= renderLimit) {
       setRenderLimit(prev => Math.min(Math.max(prev, mainAyatIdx + 30), ayats.length));
     }
-  }, [mainAyatIdx, pageMode, hizbMode, juzMode, ayats, renderLimit]);
+  }, [mainAyatIdx, pageMode, hizbMode, quarterHizbMode, juzMode, ayats, renderLimit]);
 
   // ── AUDIO PERSISTANCE APK / VEILLE MOBILE ────────────────────────
   // Stratégie multi-couches pour WebView Android :
@@ -1242,6 +1427,19 @@ function AppInner({ currentUser, onSignOut }) {
         return;
       }
     }
+    if (quarterHizbMode && getAyatQuarterHizb(targetAyat) != null) {
+      const targetQuarter = getAyatQuarterHizb(targetAyat);
+      const curQuarter = activeQuarterHizbCoran ?? getAyatQuarterHizb(ayats[0]);
+      if (targetQuarter !== curQuarter) {
+        setActiveQuarterHizbCoran(targetQuarter);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            ayatRefs.current[targetAyat.numberInSurah]?.scrollIntoView({ behavior: "smooth", block: "center" });
+          });
+        });
+        return;
+      }
+    }
     if (juzMode && getAyatJuz(targetAyat) != null) {
       const targetJuz = getAyatJuz(targetAyat);
       const curJuz = activeJuzCoran ?? getAyatJuz(ayats[0]);
@@ -1256,7 +1454,7 @@ function AppInner({ currentUser, onSignOut }) {
       }
     }
     if (changed) ayatRefs.current[ayats[i]?.numberInSurah]?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [ayats, mainAyatIdx, pageMode, activePageCoran, hizbMode, activeHizbCoran, getAyatHizb, juzMode, activeJuzCoran, getAyatJuz]);
+  }, [ayats, mainAyatIdx, pageMode, activePageCoran, hizbMode, activeHizbCoran, getAyatHizb, quarterHizbMode, activeQuarterHizbCoran, getAyatQuarterHizb, juzMode, activeJuzCoran, getAyatJuz]);
 
   const handleFastBackward = useCallback(() => {
     if (mainAudioRef.current) {
@@ -1540,10 +1738,19 @@ function AppInner({ currentUser, onSignOut }) {
 
   useEffect(() => {
     if (!selectedSurah) return;
+    let cancelled = false;
+    const targetSurahNum = selectedSurah.number;
     const targetPreservedHizb = preserveHizbRef.current ?? store.getState().ui.activeHizbCoran;
     const keepHizb = store.getState().ui.hizbMode && targetPreservedHizb != null &&
-      getHizbsForSurah(selectedSurah.number).includes(targetPreservedHizb);
-    setOpenAyatNum(null); setPlayingAyatNum(null); setCrossPlayingAyat(null);
+      getHizbsForSurah(targetSurahNum).includes(targetPreservedHizb);
+    const targetPreservedQuarter = preserveQuarterHizbRef.current ?? store.getState().ui.activeQuarterHizbCoran;
+    const keepQuarter = store.getState().ui.quarterHizbMode && targetPreservedQuarter != null &&
+      getQuarterHizbsForSurah(targetSurahNum).includes(targetPreservedQuarter);
+    const hasPendingForThisSurah = pendingExplicitAyatRef.current?.surahNum === targetSurahNum;
+    if (!hasPendingForThisSurah) {
+      setOpenAyatNum(null);
+    }
+    setPlayingAyatNum(null); setCrossPlayingAyat(null);
     setactivePageCoran(null);
     if (keepHizb && preserveHizbRef.current != null) {
       setActiveHizbCoran(preserveHizbRef.current);
@@ -1551,21 +1758,41 @@ function AppInner({ currentUser, onSignOut }) {
       setActiveHizbCoran(null);
     }
     preserveHizbRef.current = null;
+    if (keepQuarter && preserveQuarterHizbRef.current != null) {
+      setActiveQuarterHizbCoran(preserveQuarterHizbRef.current);
+    } else if (!keepQuarter) {
+      setActiveQuarterHizbCoran(null);
+    }
+    preserveQuarterHizbRef.current = null;
     setActiveJuzCoran(null);
     setIsMainPlaying(false); setMainCurrentMs(0);
     setLoopActive(false); setLoopCount(0);
     // Only show spinner if data isn't already in memory cache
-    if (quranMemCache[`alafasy:${selectedSurah.number}`] == null) setLoadingAyats(true);
-    fetchAyats(selectedSurah.number).then(d => {
+    if (quranMemCache[`alafasy:${targetSurahNum}`] == null) setLoadingAyats(true);
+    fetchAyats(targetSurahNum).then(d => {
+      if (cancelled) return;
       const ayahList = (d.ayahs || []).map(a => {
         if (a.numberInSurah === 1 && a.text) {
-          const cleaned = stripBasmalaFromAyah(a.text, selectedSurah.number, a.numberInSurah);
+          const cleaned = stripBasmalaFromAyah(a.text, targetSurahNum, a.numberInSurah);
           return cleaned !== a.text ? { ...a, text: cleaned } : a;
         }
         return a;
       });
-      dispatch(quranActions.setCrossSurahAyats({ surahNum: selectedSurah.number, ayahs: ayahList }));
-      const savedAyatNum = pendingSwipeScrollRef.current ?? lastAyatBySurah[selectedSurah.number] ?? null;
+      dispatch(quranActions.setCrossSurahAyats({ surahNum: targetSurahNum, ayahs: ayahList }));
+      const liveState = store.getState();
+      const liveOpenAyat = sel.openAyatNum(liveState);
+      const pendingTarget = pendingExplicitAyatRef.current?.surahNum === targetSurahNum
+        ? pendingExplicitAyatRef.current.ayatNum
+        : null;
+      pendingExplicitAyatRef.current = null;
+      const liveOpenValid = liveOpenAyat != null && liveOpenAyat >= 1 && liveOpenAyat <= ayahList.length
+        ? liveOpenAyat
+        : null;
+      const savedAyatNum = pendingSwipeScrollRef.current
+        ?? liveOpenValid
+        ?? pendingTarget
+        ?? lastAyatBySurah[targetSurahNum]
+        ?? null;
       const restoredIdx = savedAyatNum != null
         ? Math.max(0, ayahList.findIndex(a => a.numberInSurah === savedAyatNum))
         : 0;
@@ -1577,16 +1804,20 @@ function AppInner({ currentUser, onSignOut }) {
       prevMainAyatIdxRef.current = restoredIdx;
       setactivePageCoran(null); // reset; will be derived from mainAyatIdx
       if (!keepHizb) setActiveHizbCoran(null);
+      if (!keepQuarter) setActiveQuarterHizbCoran(null);
       setActiveJuzCoran(null);
       if (savedAyatNum != null) {
-        setOpenAyatNum(savedAyatNum);
+        if (liveOpenAyat !== savedAyatNum) {
+          setOpenAyatNum(savedAyatNum);
+        }
         const activeAyatObj = ayahList.find(a => a.numberInSurah === savedAyatNum);
         if (pageMode && activeAyatObj?.page != null) setactivePageCoran(activeAyatObj.page);
         if (hizbMode && activeAyatObj && getAyatHizb(activeAyatObj) != null) setActiveHizbCoran(getAyatHizb(activeAyatObj));
+        if (quarterHizbMode && activeAyatObj && getAyatQuarterHizb(activeAyatObj) != null) setActiveQuarterHizbCoran(getAyatQuarterHizb(activeAyatObj));
         if (juzMode && activeAyatObj && getAyatJuz(activeAyatObj) != null) setActiveJuzCoran(getAyatJuz(activeAyatObj));
       }
       // Restore loop
-      const savedLoop = loopBySurah[selectedSurah.number];
+      const savedLoop = loopBySurah[targetSurahNum];
       if (savedLoop) {
         setLoopActive(savedLoop.active ?? false);
         setLoopStart(Math.min(savedLoop.start ?? 0, ayahList.length - 1));
@@ -1619,9 +1850,9 @@ function AppInner({ currentUser, onSignOut }) {
       if (sel.enableTimestamps(store.getState())) {
         const gen = ++tsLoadGenRef.current;
         setTimeout(() => {
-          if (gen !== tsLoadGenRef.current) return; // surah changed before we ran
-          loadTimestampsForSurah(selectedSurah.number, recitatorId).then(parsed => {
-            if (gen !== tsLoadGenRef.current) return; // surah changed while loading
+          if (cancelled || gen !== tsLoadGenRef.current) return; // surah changed before we ran
+          loadTimestampsForSurah(targetSurahNum, recitatorId).then(parsed => {
+            if (cancelled || gen !== tsLoadGenRef.current) return; // surah changed while loading
             if (parsed && Object.keys(parsed).length > 0) {
               updateTimestamps(parsed);
             }
@@ -1629,6 +1860,7 @@ function AppInner({ currentUser, onSignOut }) {
         }, 0);
       }
     });
+    return () => { cancelled = true; };
   }, [selectedSurah]);
 
   useEffect(() => {
@@ -1721,14 +1953,16 @@ function AppInner({ currentUser, onSignOut }) {
     }
   }, [mainAyatIdx, isMainPlaying]);
 
-  // Auto-follow playing ayat when in fullscreen focus mode
+  // Auto-follow playing ayat when in fullscreen focus mode (only when playingAyatNum advances)
   useEffect(() => {
+    const prevPlaying = prevPlayingAyatRef.current;
+    prevPlayingAyatRef.current = playingAyatNum;
     if ((fullScreenSelectedAyat || explicitFullScreen) && openAyatNum != null && isMainPlaying && playingAyatNum != null) {
-      if (playingAyatNum !== openAyatNum) {
+      if (playingAyatNum !== prevPlaying && playingAyatNum !== openAyatNum) {
         setOpenAyatNum(playingAyatNum);
       }
     }
-  }, [fullScreenSelectedAyat, explicitFullScreen, openAyatNum, isMainPlaying, playingAyatNum]);
+  }, [fullScreenSelectedAyat, explicitFullScreen, isMainPlaying, playingAyatNum]);
 
   useEffect(() => {
     if (openAyatNum && submenuMode === "lecture" && selectedSurah) {
@@ -1769,8 +2003,9 @@ function AppInner({ currentUser, onSignOut }) {
     setOpenAyatNum(n);
     if (pageMode && target.page != null) setactivePageCoran(target.page);
     if (hizbMode && getAyatHizb(target) != null) setActiveHizbCoran(getAyatHizb(target));
+    if (quarterHizbMode && getAyatQuarterHizb(target) != null) setActiveQuarterHizbCoran(getAyatQuarterHizb(target));
     if (juzMode && getAyatJuz(target) != null) setActiveJuzCoran(getAyatJuz(target));
-    setTimeout(() => { ayatRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, (pageMode || hizbMode || juzMode) ? 250 : 50);
+    setTimeout(() => { ayatRefs.current[n]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, (pageMode || hizbMode || quarterHizbMode || juzMode) ? 250 : 50);
   };
 
   // ── Swipe navigation entre sourates avec conservation du même numéro de verset ──
@@ -1871,6 +2106,7 @@ function AppInner({ currentUser, onSignOut }) {
 
     const targetAyat = navResult.targetAyatNum;
     pendingSwipeScrollRef.current = targetAyat;
+    pendingExplicitAyatRef.current = { surahNum: navResult.targetSurahNum, ayatNum: targetAyat };
 
     // Mise à jour de l'état Redux
     if (typeof quranActions?.setLastAyat === 'function') {
@@ -1887,7 +2123,12 @@ function AppInner({ currentUser, onSignOut }) {
       activePage: 'quran',
       surahNum: navResult.targetSurahNum,
       ayatNum: targetAyat,
+      view: parsedRoute.view,
     });
+    pendingNavTargetRef.current = {
+      path: `/quran/${navResult.targetSurahNum}/${targetAyat}`,
+      expiresAt: Date.now() + 1000,
+    };
     navigate(newRoute);
 
     // Scroll doux vers le même numéro de verset
@@ -2945,21 +3186,32 @@ function AppInner({ currentUser, onSignOut }) {
                   <div key={s.number}
                     className={`surah-item${selectedSurah?.number === s.number ? " active surah-active" : ""}${(surahStats[s.number]?.learned >= s.numberOfAyahs && s.numberOfAyahs > 0) ? " fully-learned" : ""}`}
                     onClick={() => {
-                      setSelectedSurah(s);
+                      const selPlan = resolveMenuSurahSelection({
+                        surah: s,
+                        isBookRoute,
+                        isFullscreenActive: fullScreenSelectedAyat || explicitFullScreen,
+                        uxMode,
+                        lastAyatBySurah,
+                        currentRouteParams: parsedRoute,
+                      });
                       setSidebarOpen(false);
-                      if (isBookRoute) {
-                        const nextTier = isPriority3DProfile(uxMode)
-                          ? QURAN_READING_TIERS.FULLSCREEN
-                          : QURAN_READING_TIERS.LIST;
-                        dispatch(uiActions.setQuranReadingTier(nextTier));
-                        if (isPriority3DProfile(uxMode)) {
-                          dispatch(uiActions.setFullScreenSelectedAyat(true));
-                          navigate(buildQuranRoute({ activePage: "quran", surahNum: s.number, ayatNum: 1, view: "fullscreen" }));
-                          return;
-                        }
+                      if (selPlan.shouldEnterFullscreen) {
+                        pendingExplicitAyatRef.current = { surahNum: selPlan.surahNum, ayatNum: selPlan.targetAyat };
+                        pendingNavTargetRef.current = { path: selPlan.targetPath, expiresAt: Date.now() + 1000 };
+                        setSelectedSurah(s);
+                        setOpenAyatNum(selPlan.targetAyat);
+                        dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.FULLSCREEN));
+                        dispatch(uiActions.setFullScreenSelectedAyat(true));
+                        setExplicitFullScreen(true);
+                        navigate(selPlan.targetRoute);
+                        return;
                       }
+                      pendingExplicitAyatRef.current = null;
+                      pendingNavTargetRef.current = { path: selPlan.targetPath, expiresAt: Date.now() + 1000 };
+                      setSelectedSurah(s);
                       if (isBookRoute || activePage !== 'quran') {
-                        navigate(`/quran/${s.number}`);
+                        dispatch(uiActions.setQuranReadingTier(selPlan.nextTier));
+                        navigate(selPlan.targetRoute);
                       }
                     }}>
                     <EditableUiSlot
@@ -3339,12 +3591,18 @@ function AppInner({ currentUser, onSignOut }) {
                   setHizbMode={setHizbMode}
                   activeHizbCoran={activeHizbCoran}
                   setActiveHizbCoran={setActiveHizbCoran}
+                  quarterHizbMode={quarterHizbMode}
+                  setQuarterHizbMode={setQuarterHizbMode}
+                  activeQuarterHizbCoran={activeQuarterHizbCoran}
+                  setActiveQuarterHizbCoran={setActiveQuarterHizbCoran}
                   juzMode={juzMode}
                   setJuzMode={setJuzMode}
                   activeJuzCoran={activeJuzCoran}
                   setActiveJuzCoran={setActiveJuzCoran}
                   currentHizbCrossAyats={currentHizbCrossAyats}
                   resolvedActiveHizb={resolvedActiveHizb}
+                  currentQuarterCrossAyats={currentQuarterCrossAyats}
+                  resolvedActiveQuarterHizb={resolvedActiveQuarterHizb}
                   mainAyatIdx={mainAyatIdx}
                   learnData={learnData}
                   lkey={lkey}
@@ -3746,6 +4004,245 @@ function AppInner({ currentUser, onSignOut }) {
                   );
                 })()}
 
+                {/* ── Quarter-of-Hizb (Quart de Hizb 1..240) mode navigator bar ── */}
+                {quarterHizbMode && ayats && ayats.length > 0 && (() => {
+                  const surahQuarters = [...new Set(ayats.map(a => getAyatQuarterHizb(a)).filter(Boolean))].sort((a,b)=>a-b);
+                  const curQuarter = resolvedActiveQuarterHizb ?? surahQuarters[0] ?? 1;
+                  const quarterMeta = getQuarterFractionMeta(curQuarter);
+                  const quarterBounds = getQuarterHizbBounds(curQuarter);
+                  const quarterSegments = getQuarterHizbSegments(curQuarter);
+                  const isMultiSurah = quarterSegments.length > 1;
+                  const quarterAyats = currentQuarterCrossAyats.length > 0
+                    ? currentQuarterCrossAyats
+                    : ayats.filter(a => getAyatQuarterHizb(a) === curQuarter);
+                  const curQuarterJuz = quarterBounds?.juz ?? quarterAyats[0]?.juz ?? Math.ceil(curQuarter / 8);
+                  const quarterMastery = computeDisplayedPartMastery(quarterAyats, learnData, selectedSurah.number);
+                  const currentAyatPage = ayats[mainAyatIdx]?.page ?? quarterAyats[0]?.page;
+                  const goToQuarter = (targetQ) => {
+                    const clamped = clampQuarterHizbNumber(targetQ);
+                    if (!clamped) return;
+                    setCrossPlayingAyat(null);
+                    const bounds = getQuarterHizbBounds(clamped);
+                    const surahsInQ = bounds ? getSurahsForQuarterHizb(clamped) : [];
+
+                    if (selectedSurah && !surahsInQ.includes(selectedSurah.number) && bounds?.startSurah) {
+                      const targetSurahObj = surahs.find(s => s.number === bounds.startSurah);
+                      if (targetSurahObj) {
+                        preserveQuarterHizbRef.current = clamped;
+                        setActiveQuarterHizbCoran(clamped);
+                        setSelectedSurah(targetSurahObj);
+                        return;
+                      }
+                    }
+
+                    setActiveQuarterHizbCoran(clamped);
+                    if (ayats && ayats.length > 0) {
+                      const firstAyatInSurah = ayats.find(a => getAyatQuarterHizb(a) === clamped);
+                      if (firstAyatInSurah) {
+                        const idx = ayats.indexOf(firstAyatInSurah);
+                        if (idx >= 0) {
+                          setMainAyatIdx(idx);
+                          prevMainAyatIdxRef.current = idx;
+                        }
+                        requestAnimationFrame(() => {
+                          requestAnimationFrame(() => {
+                            ayatRefs.current[firstAyatInSurah.numberInSurah]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          });
+                        });
+                      }
+                    }
+                  };
+                  return (
+                    <div style={{ position:'sticky', top:0, zIndex:10, background:'var(--surface2)', borderBottom:'1px solid var(--border)' }}>
+                      <div className="part-navigator-bar" style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                        padding:'5px 10px', gap:6, flexWrap:'nowrap', whiteSpace:'nowrap', overflowX:'auto', WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
+                        <div className="page-nav-group-left" style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
+                          <button onClick={() => goToQuarter(surahQuarters[0] ?? 1)} disabled={curQuarter <= 1}
+                            title="Premier Quart de Hizb de la sourate"
+                            className="page-nav-btn"
+                            style={{ fontSize:10, padding:'3px 6px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: curQuarter > 1 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: curQuarter > 1 ? 'pointer' : 'default', lineHeight:1 }}>⏮</button>
+                          <button onClick={() => goToQuarter(curQuarter - 1)} disabled={curQuarter <= 1}
+                            className="page-nav-btn"
+                            style={{ fontSize:8, letterSpacing:0.8, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: curQuarter > 1 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: curQuarter > 1 ? 'pointer' : 'default', whiteSpace:'nowrap' }}>← {curQuarter > 1 ? curQuarter - 1 : ''}</button>
+                        </div>
+                        <div className="page-nav-group-center" style={{ display:'flex', alignItems:'center', gap:5, flexWrap:'nowrap', whiteSpace:'nowrap', justifyContent:'center', minWidth:0, flexShrink:1 }}>
+                          <span style={{ fontSize:7, letterSpacing:1.5, color:'#38bdf8', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0 }}>QUART</span>
+                          <input type="number" min={1} max={240} value={curQuarter ?? ''}
+                            onChange={e => { const v=parseInt(e.target.value, 10); if(v >= 1 && v <= 240) goToQuarter(v); }}
+                            className="page-nav-input"
+                            style={{ width:44, textAlign:'center', background:'var(--surface3)',
+                              border:'1px solid #38bdf8', borderRadius:5, padding:'2px 4px',
+                              color:'#38bdf8', fontSize:12, fontFamily:"'Cinzel',serif", outline:'none', flexShrink:0 }} />
+                          <span style={{ fontSize:7, color:'var(--text3)', flexShrink:0 }}>/ 240</span>
+                          {quarterMeta && (
+                            <span
+                              title={`${quarterMeta.fullLabel} · ${quarterMeta.arabicLabel}`}
+                              className="page-nav-badge"
+                              style={{ fontSize:7.5, letterSpacing:0.7, padding:'2px 7px', borderRadius:10,
+                                background:'rgba(56,189,248,.14)', border:'1px solid rgba(56,189,248,.48)',
+                                color:'#7dd3fc', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+                              H.{quarterMeta.hizb} · {quarterMeta.symbol} · {quarterMeta.frenchLabel}
+                            </span>
+                          )}
+                          {/* Quarter Mastery Badge */}
+                          <span
+                            title={`Maîtrise du Quart ${curQuarter} : ${quarterMastery.masteryPct}% (${quarterMastery.learnedCount}/${quarterMastery.totalCount} versets appris)`}
+                            className="page-nav-badge"
+                            style={{
+                              fontSize:7.5, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
+                              background:'rgba(255,255,255,.04)',
+                              border:`1px solid ${masteryColor(quarterMastery.masteryPct)}`,
+                              color:masteryColor(quarterMastery.masteryPct),
+                              fontFamily:"'Cinzel',serif", fontWeight:700,
+                              display:'inline-flex', alignItems:'center', gap:3, flexShrink:0, whiteSpace:'nowrap',
+                            }}
+                          >
+                            <span>MAÎTRISE {quarterMastery.masteryPct}%</span>
+                            <span style={{ opacity:0.75, fontSize:6.5 }}>({quarterMastery.learnedCount}/{quarterMastery.totalCount})</span>
+                            {quarterMastery.isFullyLearned && <span>✓</span>}
+                          </span>
+                          {isMultiSurah && (
+                            <span
+                              className="page-nav-badge"
+                              style={{ fontSize:7, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
+                                background:'rgba(56,189,248,.16)', border:'1px solid rgba(56,189,248,.5)',
+                                color:'#38bdf8', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+                              ⇄ {quarterSegments.length} S.
+                            </span>
+                          )}
+                          {quarterBounds && (
+                            <span
+                              className="page-nav-badge"
+                              title={`Quart ${curQuarter} : ${quarterBounds.pageLabel} (${quarterBounds.totalPages} page${quarterBounds.totalPages > 1 ? 's' : ''} dans le Mushaf)${currentAyatPage ? ` · Verset actuel à la page ${currentAyatPage}` : ''}`}
+                              style={{
+                                fontSize:7.5, letterSpacing:0.8, padding:'2px 7px', borderRadius:10,
+                                background:'rgba(200,120,255,.14)', border:'1px solid rgba(200,120,255,.45)',
+                                color:'#c878ff', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap',
+                                display:'inline-flex', alignItems:'center', gap:4
+                              }}>
+                              <span>📖 {quarterBounds.pageShort}</span>
+                              {currentAyatPage && (
+                                <span style={{ opacity:0.75, fontSize:6.5 }}>
+                                  (p.{currentAyatPage})
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          {curQuarterJuz != null && (
+                            <span
+                              className="page-nav-badge"
+                              style={{ fontSize:7, letterSpacing:0.8, padding:'2px 6px', borderRadius:10,
+                                background:'rgba(86,212,188,.12)', border:'1px solid rgba(86,212,188,.4)',
+                                color:'#56d4bc', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0, whiteSpace:'nowrap' }}>
+                              J.{curQuarterJuz}
+                            </span>
+                          )}
+                          {/* Quarter loop button */}
+                          {(() => {
+                            const localQuarterAyats = ayats.filter(a => getAyatQuarterHizb(a) === curQuarter);
+                            const firstIdx  = localQuarterAyats.length ? ayats.indexOf(localQuarterAyats[0]) : -1;
+                            const lastIdx   = localQuarterAyats.length ? ayats.indexOf(localQuarterAyats[localQuarterAyats.length-1]) : -1;
+                            const isQuarterLoop = loopActive && loopStart === firstIdx && loopEnd === lastIdx;
+                            const toggleQuarterLoop = () => {
+                              if (isQuarterLoop) {
+                                setLoopActive(false);
+                              } else {
+                                if (firstIdx < 0) return;
+                                setLoopStart(firstIdx); setLoopEnd(lastIdx);
+                                setLoopStartInput(localQuarterAyats[0].numberInSurah);
+                                setLoopEndInput(localQuarterAyats[localQuarterAyats.length-1].numberInSurah);
+                                setLoopActive(true); setLoopCount(0);
+                                playMainAyat(firstIdx);
+                                setIsMainPlaying(true);
+                                playWhenReady();
+                              }
+                            };
+                            return (
+                              <button onClick={toggleQuarterLoop} title={isQuarterLoop ? 'Arrêter boucle quart de hizb' : 'Lire ce quart en boucle'}
+                                style={{ fontSize:11, padding:'2px 5px', borderRadius:5, cursor:'pointer', lineHeight:1, flexShrink:0,
+                                  background: isQuarterLoop ? 'rgba(56,189,248,.22)' : 'transparent',
+                                  border: `1px solid ${isQuarterLoop ? '#38bdf8' : 'rgba(255,255,255,.15)'}`,
+                                  color: isQuarterLoop ? '#38bdf8' : 'var(--text3)', transition:'all .2s' }}>
+                                {isQuarterLoop ? '⏹' : '🔁'}
+                              </button>
+                            );
+                          })()}
+                        </div>
+                        <div className="page-nav-group-right" style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
+                          <button onClick={() => goToQuarter(curQuarter + 1)} disabled={curQuarter >= 240}
+                            className="page-nav-btn"
+                            style={{ fontSize:8, letterSpacing:0.8, padding:'3px 7px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: curQuarter < 240 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: curQuarter < 240 ? 'pointer' : 'default', whiteSpace:'nowrap' }}>
+                            {curQuarter < 240 ? curQuarter + 1 : ''} →</button>
+                          <button onClick={() => goToQuarter(surahQuarters[surahQuarters.length-1] ?? 240)} disabled={curQuarter >= 240}
+                            title="Dernier Quart de Hizb de la sourate"
+                            className="page-nav-btn"
+                            style={{ fontSize:10, padding:'3px 6px', fontFamily:"'Cinzel',serif",
+                              background:'transparent', border:'1px solid var(--border2)',
+                              color: curQuarter < 240 ? 'var(--text2)' : 'var(--text3)', borderRadius:5,
+                              cursor: curQuarter < 240 ? 'pointer' : 'default', lineHeight:1 }}>⏭</button>
+                        </div>
+                      </div>
+                      {isMultiSurah && (
+                        <div className="hizb-cross-nav-strip" role="navigation" aria-label="Sourates du Quart de Hizb">
+                          <span style={{ fontSize:7.5, letterSpacing:1.2, color:'#38bdf8', fontFamily:"'Cinzel',serif", fontWeight:700, flexShrink:0 }}>
+                            ◔ SOURATES DU QUART {curQuarter} ({quarterMeta?.shortLabel}) :
+                          </span>
+                          {quarterSegments.map(seg => {
+                            const isCurrentSurah = seg.surahNum === selectedSurah.number;
+                            const segAyats = quarterAyats.filter(a => (a.surahNumber ?? a.surah?.number ?? selectedSurah.number) === seg.surahNum);
+                            const segMastery = computeDisplayedPartMastery(segAyats, learnData, seg.surahNum);
+                            const segStartPage = segAyats[0]?.page;
+                            const segEndPage = segAyats[segAyats.length - 1]?.page;
+                            const segPageLabel = (segStartPage && segEndPage)
+                              ? (segStartPage === segEndPage ? `p.${segStartPage}` : `p.${segStartPage}–${segEndPage}`)
+                              : null;
+                            return (
+                              <button
+                                key={seg.surahNum}
+                                type="button"
+                                className={`hizb-cross-nav-chip${isCurrentSurah ? ' active' : ''}`}
+                                onClick={() => {
+                                  const refKey = `${seg.surahNum}:${seg.fromAyah}`;
+                                  const el = ayatRefs.current[refKey] || (isCurrentSurah ? ayatRefs.current[seg.fromAyah] : null);
+                                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }}
+                                title={`Défiler vers S.${seg.surahNum} ${seg.surahEn} (v.${seg.fromAyah}–${seg.toAyah})${segPageLabel ? ` · ${segPageLabel}` : ''} · Maîtrise : ${segMastery.masteryPct}%`}
+                              >
+                                <span>S.{seg.surahNum} {seg.surahEn}</span>
+                                <span style={{ opacity: 0.75 }}>v.{seg.fromAyah}–{seg.toAyah}</span>
+                                {segPageLabel && (
+                                  <span style={{ fontSize: 7, color: '#c878ff', fontWeight: 600, opacity: 0.9 }}>
+                                    📖 {segPageLabel}
+                                  </span>
+                                )}
+                                <span style={{ color: masteryColor(segMastery.masteryPct), fontWeight: 700 }}>{segMastery.masteryPct}%</span>
+                                <span style={{ fontFamily:"'Amiri Quran',serif", fontSize:11, color:'var(--gold)' }}>{seg.surahAr}</span>
+                              </button>
+                            );
+                          })}
+                          {loadingCrossHizb && (
+                            <span style={{ fontSize:7.5, letterSpacing:1, color:'var(--teal2)', fontFamily:"'Cinzel',serif", flexShrink:0 }}>
+                              ⟳ CHARGEMENT DES AUTRES SOURATES...
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <div style={{ width:'100%', height:2, background:'rgba(255,255,255,.04)' }}>
+                        <div style={{ height:'100%', width:`${quarterMastery.masteryPct}%`, background:masteryColor(quarterMastery.masteryPct), transition:'width .35s ease' }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* ── Juz mode navigator bar ── */}
                 {juzMode && ayats && ayats.length > 0 && (() => {
                   const juzs = [...new Set(ayats.map(a => getAyatJuz(a)).filter(Boolean))].sort((a,b)=>a-b);
@@ -3912,6 +4409,73 @@ function AppInner({ currentUser, onSignOut }) {
                   </div>
                 )}
 
+                {/* ── Study Recency Color Legend & Filter Bar ── */}
+                {showStudyRecency && selectedSurah && ayats && ayats.length > 0 && !loadingAyats && (() => {
+                  const baseCurPage = pageMode ? (activePageCoran ?? ayats[mainAyatIdx]?.page) : null;
+                  const baseCurHizb = hizbMode ? resolvedActiveHizb : null;
+                  const baseCurQuarter = quarterHizbMode ? resolvedActiveQuarterHizb : null;
+                  const baseCurJuz = juzMode ? (activeJuzCoran ?? getAyatJuz(ayats[mainAyatIdx]) ?? getAyatJuz(ayats[0])) : null;
+                  const scopeAyats = baseCurPage
+                    ? ayats.filter(a => a.page === baseCurPage)
+                    : baseCurQuarter
+                    ? (currentQuarterCrossAyats.length > 0 ? currentQuarterCrossAyats : ayats.filter(a => getAyatQuarterHizb(a) === baseCurQuarter))
+                    : baseCurHizb
+                    ? (currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === baseCurHizb))
+                    : baseCurJuz
+                    ? ayats.filter(a => getAyatJuz(a) === baseCurJuz)
+                    : ayats;
+                  const summary = computeStudyRecencySummary(scopeAyats, learnData, selectedSurah.number);
+                  return (
+                    <div className="study-recency-legend-bar" role="region" aria-label="Ancienneté d'étude des versets">
+                      <span style={{ fontSize: 7.5, letterSpacing: 1, color: 'var(--text3)', fontFamily: "'Cinzel',serif", fontWeight: 700, flexShrink: 0 }}>
+                        🕒 ÉTUDE :
+                      </span>
+                      <button
+                        type="button"
+                        className={`study-recency-chip${studyRecencyFilter === 'all' ? ' active' : ''}`}
+                        onClick={() => dispatch(uiActions.setStudyRecencyFilter('all'))}
+                        style={studyRecencyFilter === 'all' ? { borderColor: 'var(--gold)', background: 'rgba(201,168,76,0.14)', color: 'var(--gold2)' } : undefined}
+                        title="Afficher tous les versets"
+                      >
+                        <span>Tous</span>
+                        <span style={{ opacity: 0.78 }}>({summary.total})</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`study-recency-chip${studyRecencyFilter === 'toReview' ? ' active' : ''}`}
+                        onClick={() => dispatch(uiActions.setStudyRecencyFilter(studyRecencyFilter === 'toReview' ? 'all' : 'toReview'))}
+                        style={studyRecencyFilter === 'toReview' ? { borderColor: '#fbbf24', background: 'rgba(251,191,36,0.16)', color: '#fcd34d' } : undefined}
+                        title="Filtrer les versets à rafraîchir (≥ 4 jours ou jamais étudiés)"
+                      >
+                        <span>À revoir</span>
+                        <span style={{ opacity: 0.85 }}>({summary.toReviewCount})</span>
+                      </button>
+                      {STUDY_RECENCY_TIER_LIST.map((tier) => {
+                        const isActive = studyRecencyFilter === tier.id;
+                        const count = summary[tier.id] || 0;
+                        return (
+                          <button
+                            key={tier.id}
+                            type="button"
+                            className={`study-recency-chip${isActive ? ' active' : ''}`}
+                            onClick={() => dispatch(uiActions.setStudyRecencyFilter(isActive ? 'all' : tier.id))}
+                            title={`${tier.label} — cliquer pour filtrer (${count} verset${count > 1 ? 's' : ''})`}
+                            style={isActive ? {
+                              borderColor: tier.hex,
+                              background: tier.rgbaBg,
+                              color: tier.textColor,
+                            } : undefined}
+                          >
+                            <span className="study-recency-dot" style={{ background: tier.hex }} />
+                            <span>{tier.rangeLabel}</span>
+                            <span style={{ opacity: 0.78 }}>({count})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
                 <div
                   ref={ayatScrollRef}
                   className="ayat-scroll"
@@ -3933,11 +4497,17 @@ function AppInner({ currentUser, onSignOut }) {
                   {loadingAyats
                     ? <div className="loading"><div className="loading-ring" /><span>CHARGEMENT</span></div>
                     : <>{tsVersion > -1 && (playStateVer >= 0) && (loopStateVer >= 0) && (() => {
-                      const curPage = pageMode ? (activePageCoran ?? ayats[mainAyatIdx]?.page) : null;
-                      const curHizb = hizbMode ? resolvedActiveHizb : null;
-                      const curJuz  = juzMode  ? (activeJuzCoran  ?? getAyatJuz(ayats[mainAyatIdx])  ?? getAyatJuz(ayats[0]))  : null;
+                      const studyNow   = Date.now();
+                      const curPage    = pageMode ? (activePageCoran ?? ayats[mainAyatIdx]?.page) : null;
+                      const curQuarter = quarterHizbMode ? resolvedActiveQuarterHizb : null;
+                      const curHizb    = hizbMode ? resolvedActiveHizb : null;
+                      const curJuz     = juzMode  ? (activeJuzCoran  ?? getAyatJuz(ayats[mainAyatIdx])  ?? getAyatJuz(ayats[0]))  : null;
                       let rawAyats = curPage
                         ? ayats.filter(a => a.page === curPage)
+                        : curQuarter
+                        ? (currentQuarterCrossAyats.length > 0
+                            ? currentQuarterCrossAyats
+                            : ayats.filter(a => getAyatQuarterHizb(a) === curQuarter))
                         : curHizb
                         ? (currentHizbCrossAyats.length > 0
                             ? currentHizbCrossAyats
@@ -3946,7 +4516,8 @@ function AppInner({ currentUser, onSignOut }) {
                         ? ayats.filter(a => getAyatJuz(a) === curJuz)
                         : ayats;
 
-                      const isFilterActive = masteryFilterActive || ayatFilterActive;
+                      const recencyFilterActive = studyRecencyFilter !== "all";
+                      const isFilterActive = masteryFilterActive || ayatFilterActive || recencyFilterActive;
                       if (ayatFilterActive && ayatFilterRange) {
                         const [fromA, toA] = ayatFilterRange;
                         rawAyats = rawAyats.filter(a => {
@@ -3966,9 +4537,29 @@ function AppInner({ currentUser, onSignOut }) {
                         });
                       }
 
-                      const visible = (curPage || curHizb || curJuz || isFilterActive)
+                      if (recencyFilterActive) {
+                        rawAyats = rawAyats.filter(a => {
+                          const snNum = Number(a.surahNumber ?? a.surah?.number ?? selectedSurah?.number ?? 1);
+                          const anNum = Number(a.numberInSurah);
+                          const rec = getStudyRecencyInfo(getLData(snNum, anNum), studyNow);
+                          return matchesStudyRecencyFilter(rec, studyRecencyFilter);
+                        });
+                      }
+
+                      const activeRecencyFilterMeta = STUDY_RECENCY_FILTERS.find(f => f.id === studyRecencyFilter);
+
+                      const visibleRaw = (curPage || curQuarter || curHizb || curJuz || isFilterActive)
                         ? rawAyats
                         : rawAyats.slice(0, renderLimit);
+                      const seenVisibleKeys = new Set();
+                      const visible = visibleRaw.filter((a) => {
+                        if (!a) return false;
+                        const sn = a.surahNumber ?? a.surah?.number ?? selectedSurah.number;
+                        const k = `${sn}:${a.numberInSurah ?? a.number}`;
+                        if (seenVisibleKeys.has(k)) return false;
+                        seenVisibleKeys.add(k);
+                        return true;
+                      });
 
                       return (
                         <>
@@ -3992,7 +4583,11 @@ function AppInner({ currentUser, onSignOut }) {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span>🎯</span>
                                 <span>
-                                  Filtre actif : {ayatFilterActive ? `Versets ${ayatFilterRange[0]} à ${ayatFilterRange[1]}` : ''}{ayatFilterActive && masteryFilterActive ? ' · ' : ''}{masteryFilterActive ? `Maîtrise ${masteryFilterRange[0]}% – ${masteryFilterRange[1]}%` : ''} · <strong style={{ color: 'var(--gold)' }}>{visible.length}</strong> verset{visible.length > 1 ? 's' : ''} affiché{visible.length > 1 ? 's' : ''}
+                                  Filtre actif : {[
+                                    ayatFilterActive ? `Versets ${ayatFilterRange[0]} à ${ayatFilterRange[1]}` : null,
+                                    masteryFilterActive ? `Maîtrise ${masteryFilterRange[0]}% – ${masteryFilterRange[1]}%` : null,
+                                    recencyFilterActive ? `Étude : ${activeRecencyFilterMeta?.label || studyRecencyFilter}` : null,
+                                  ].filter(Boolean).join(' · ')} · <strong style={{ color: 'var(--gold)' }}>{visible.length}</strong> verset{visible.length > 1 ? 's' : ''} affiché{visible.length > 1 ? 's' : ''}
                                 </span>
                               </div>
                               <button
@@ -4033,7 +4628,8 @@ function AppInner({ currentUser, onSignOut }) {
                               </div>
                               <div style={{ fontSize: 11, color: 'var(--text3)', maxWidth: 380, lineHeight: 1.5 }}>
                                 {ayatFilterActive && `Plage de versets : ${ayatFilterRange[0]} à ${ayatFilterRange[1]}. `}
-                                {masteryFilterActive && `Tranche de maîtrise : ${masteryFilterRange[0]}% à ${masteryFilterRange[1]}%.`}
+                                {masteryFilterActive && `Tranche de maîtrise : ${masteryFilterRange[0]}% à ${masteryFilterRange[1]}%. `}
+                                {recencyFilterActive && `Ancienneté d'étude : ${activeRecencyFilterMeta?.label || studyRecencyFilter}.`}
                               </div>
                               <button
                                 onClick={() => dispatch(uiActions.resetAllFilters())}
@@ -4062,8 +4658,10 @@ function AppInner({ currentUser, onSignOut }) {
                       const ayatCompositeKey = `${ayatSurahNum}:${ayat.numberInSurah}`;
                       const prevVisibleAyat = visIdx > 0 ? visible[visIdx - 1] : null;
                       const prevVisibleSurahNum = prevVisibleAyat ? (prevVisibleAyat.surahNumber ?? prevVisibleAyat.surah?.number ?? selectedSurah.number) : null;
-                      const showCrossSurahBanner = hizbMode && (ayat.isCrossSurahHizb || isOtherSurah) && (visIdx === 0 || prevVisibleSurahNum !== ayatSurahNum);
+                      const isCrossMode = hizbMode || quarterHizbMode;
+                      const showCrossSurahBanner = isCrossMode && (ayat.isCrossSurahHizb || ayat.isCrossSurahQuarterHizb || isOtherSurah) && (visIdx === 0 || prevVisibleSurahNum !== ayatSurahNum);
                       const ld        = getLData(ayatSurahNum, ayat.numberInSurah);
+                      const studyRecency = showStudyRecency ? getStudyRecencyInfo(ld, studyNow) : null;
                       const isOpen    = isOtherSurah
                         ? openCrossAyatKey === ayatCompositeKey
                         : openAyatNum === ayat.numberInSurah;
@@ -4075,28 +4673,38 @@ function AppInner({ currentUser, onSignOut }) {
                       const inLoop    = !isOtherSurah && loopActive && ayat.numberInSurah >= loopStartNum && ayat.numberInSurah <= loopEndNum;
                       const isSelecting = !isOtherSurah && partSelectAyat === ayat.numberInSurah;
                       const globalIdx = !isOtherSurah ? ayats.findIndex(a => a.numberInSurah === ayat.numberInSurah) : -1;
-                      const prevAyat  = hizbMode ? prevVisibleAyat : (globalIdx > 0 ? ayats[globalIdx - 1] : null);
-                      const nextAyat  = hizbMode ? (visIdx < visible.length - 1 ? visible[visIdx + 1] : null) : (globalIdx >= 0 && globalIdx < ayats.length - 1 ? ayats[globalIdx + 1] : null);
+                      const prevAyat  = isCrossMode ? prevVisibleAyat : (globalIdx > 0 ? ayats[globalIdx - 1] : null);
+                      const nextAyat  = isCrossMode ? (visIdx < visible.length - 1 ? visible[visIdx + 1] : null) : (globalIdx >= 0 && globalIdx < ayats.length - 1 ? ayats[globalIdx + 1] : null);
                       const ayatHizb  = getAyatHizb(ayat);
                       const prevHizb  = getAyatHizb(prevAyat);
                       const nextHizb  = getAyatHizb(nextAyat);
+                      const ayatQuarter = getAyatQuarterHizb(ayat);
+                      const prevQuarter = getAyatQuarterHizb(prevAyat);
+                      const nextQuarter = getAyatQuarterHizb(nextAyat);
                       const ayatJuz   = getAyatJuz(ayat);
                       const prevJuz   = getAyatJuz(prevAyat);
                       const nextJuz   = getAyatJuz(nextAyat);
-                      const rawPageStart = ayat.page != null && (!prevAyat || prevAyat.page !== ayat.page);
-                      const rawPageEnd   = ayat.page != null && (!nextAyat || nextAyat.page !== ayat.page);
-                      const rawHizbStart = ayatHizb != null && (!prevAyat || prevHizb !== ayatHizb);
-                      const rawHizbEnd   = ayatHizb != null && (!nextAyat || nextHizb !== ayatHizb);
-                      const rawJuzStart  = ayatJuz  != null && (!prevAyat || prevJuz  !== ayatJuz);
-                      const rawJuzEnd    = ayatJuz  != null && (!nextAyat || nextJuz  !== ayatJuz);
-                      const isPageStart = rawPageStart || ((hizbMode && rawHizbStart || juzMode && rawJuzStart) && ayat.page != null);
-                      const isPageEnd   = rawPageEnd   || ((hizbMode && rawHizbEnd   || juzMode && rawJuzEnd)   && ayat.page != null);
-                      const isHizbStart = rawHizbStart || ((pageMode && rawPageStart || juzMode && rawJuzStart) && ayatHizb != null);
-                      const isHizbEnd   = rawHizbEnd   || ((pageMode && rawPageEnd   || juzMode && rawJuzEnd)   && ayatHizb != null);
-                      const isJuzStart  = rawJuzStart  || ((pageMode && rawPageStart || hizbMode && rawHizbStart) && ayatJuz != null);
-                      const isJuzEnd    = rawJuzEnd    || ((pageMode && rawPageEnd   || hizbMode && rawHizbEnd)   && ayatJuz != null);
+                      const rawPageStart    = ayat.page != null && (!prevAyat || prevAyat.page !== ayat.page);
+                      const rawPageEnd      = ayat.page != null && (!nextAyat || nextAyat.page !== ayat.page);
+                      const rawHizbStart    = ayatHizb != null && (!prevAyat || prevHizb !== ayatHizb);
+                      const rawHizbEnd      = ayatHizb != null && (!nextAyat || nextHizb !== ayatHizb);
+                      const rawQuarterStart = ayatQuarter != null && (!prevAyat || prevQuarter !== ayatQuarter);
+                      const rawQuarterEnd   = ayatQuarter != null && (!nextAyat || nextQuarter !== ayatQuarter);
+                      const rawJuzStart     = ayatJuz  != null && (!prevAyat || prevJuz  !== ayatJuz);
+                      const rawJuzEnd       = ayatJuz  != null && (!nextAyat || nextJuz  !== ayatJuz);
+                      const isPageStart    = rawPageStart    || ((hizbMode && rawHizbStart || quarterHizbMode && rawQuarterStart || juzMode && rawJuzStart) && ayat.page != null);
+                      const isPageEnd      = rawPageEnd      || ((hizbMode && rawHizbEnd   || quarterHizbMode && rawQuarterEnd   || juzMode && rawJuzEnd)   && ayat.page != null);
+                      const isHizbStart    = rawHizbStart    || ((pageMode && rawPageStart || juzMode && rawJuzStart) && ayatHizb != null);
+                      const isHizbEnd      = rawHizbEnd      || ((pageMode && rawPageEnd   || juzMode && rawJuzEnd)   && ayatHizb != null);
+                      const isQuarterStart = rawQuarterStart || ((quarterHizbMode && visIdx === 0) && ayatQuarter != null);
+                      const isQuarterEnd   = rawQuarterEnd   || ((quarterHizbMode && visIdx === visible.length - 1) && ayatQuarter != null);
+                      const isJuzStart     = rawJuzStart     || ((pageMode && rawPageStart || hizbMode && rawHizbStart || quarterHizbMode && rawQuarterStart) && ayatJuz != null);
+                      const isJuzEnd       = rawJuzEnd       || ((pageMode && rawPageEnd   || hizbMode && rawHizbEnd   || quarterHizbMode && rawQuarterEnd)   && ayatJuz != null);
                       const hizbBoundsForPill = ayatHizb != null ? getHizbBounds(ayatHizb) : null;
                       const isHizbCrossSurah = hizbBoundsForPill ? hizbBoundsForPill.startSurah !== hizbBoundsForPill.endSurah : false;
+                      const quarterBoundsForPill = ayatQuarter != null ? getQuarterHizbBounds(ayatQuarter) : null;
+                      const quarterMetaForPill = ayatQuarter != null ? getQuarterFractionMeta(ayatQuarter) : null;
+                      const isQuarterCrossSurah = quarterBoundsForPill ? quarterBoundsForPill.startSurah !== quarterBoundsForPill.endSurah : false;
 
                       const playPartInline = (part, loop = false) => playPartInlineCommon(ayat, ts, part, loop);
 
@@ -4458,7 +5066,7 @@ function AppInner({ currentUser, onSignOut }) {
                       };
 
                       return (
-                        <React.Fragment key={ayat.number || ayatCompositeKey}>
+                        <React.Fragment key={ayat.numberInSurah != null ? ayatCompositeKey : (ayat.number ?? `${ayatCompositeKey}:${visIdx}`)}>
                           {showCrossSurahBanner && (() => {
                             const sInfo = SURAH_INFO[ayatSurahNum - 1] || {};
                             const sAr = ayat.surahName || sInfo.ar || '';
@@ -4492,7 +5100,11 @@ function AppInner({ currentUser, onSignOut }) {
                                       MAÎTRISE {segMastery.masteryPct}% ({segMastery.learnedCount}/{segMastery.totalCount})
                                     </span>
                                     {isOtherSurah && (
-                                      <span className="hizb-cross-other-badge">⇄ AUTRE SOURATE DU HIZB {ayatHizb}</span>
+                                      <span className="hizb-cross-other-badge">
+                                        {quarterHizbMode
+                                          ? `⇄ AUTRE SOURATE DU QUART ${ayatQuarter}${quarterMetaForPill ? ` (${quarterMetaForPill.shortLabel})` : ''}`
+                                          : `⇄ AUTRE SOURATE DU HIZB ${ayatHizb}`}
+                                      </span>
                                     )}
                                   </div>
                                   {isOtherSurah && (
@@ -4506,9 +5118,17 @@ function AppInner({ currentUser, onSignOut }) {
                                           englishName: sEn,
                                           numberOfAyahs: totalA,
                                         };
-                                        setActiveHizbCoran(ayatHizb);
-                                        setSelectedSurah(targetSurah);
-                                        navigate(buildQuranRoute({ surahNum: ayatSurahNum, ayatNum: fromA, mode: 'hizb', hizb: ayatHizb }));
+                                        if (quarterHizbMode) {
+                                          preserveQuarterHizbRef.current = ayatQuarter;
+                                          setActiveQuarterHizbCoran(ayatQuarter);
+                                          setSelectedSurah(targetSurah);
+                                          navigate(buildQuranRoute({ surahNum: ayatSurahNum, ayatNum: fromA, mode: 'quarter', quarter: ayatQuarter }));
+                                        } else {
+                                          preserveHizbRef.current = ayatHizb;
+                                          setActiveHizbCoran(ayatHizb);
+                                          setSelectedSurah(targetSurah);
+                                          navigate(buildQuranRoute({ surahNum: ayatSurahNum, ayatNum: fromA, mode: 'hizb', hizb: ayatHizb }));
+                                        }
                                       }}
                                     >
                                       OUVRIR S.{ayatSurahNum} ➔
@@ -4524,7 +5144,7 @@ function AppInner({ currentUser, onSignOut }) {
                             );
                           })()}
                           <div
-                            className={`ayat-row${isPlaying ? " playing" : ""}${isCurrent ? " current" : ""}${ld.learned ? " learned" : ""}${isSelecting ? " selecting" : ""}${isOtherSurah ? " cross-surah-ayat" : ""}${isPageStart ? " page-start" : ""}${isPageEnd ? " page-end" : ""}${isHizbStart ? " hizb-start" : ""}${isHizbEnd ? " hizb-end" : ""}${isJuzStart ? " juz-start" : ""}${isJuzEnd ? " juz-end" : ""}`}
+                            className={`ayat-row${isPlaying ? " playing" : ""}${isCurrent ? " current" : ""}${ld.learned ? " learned" : ""}${isSelecting ? " selecting" : ""}${isOtherSurah ? " cross-surah-ayat" : ""}${isPageStart ? " page-start" : ""}${isPageEnd ? " page-end" : ""}${isHizbStart ? " hizb-start" : ""}${isHizbEnd ? " hizb-end" : ""}${isQuarterStart ? " quarter-start" : ""}${isQuarterEnd ? " quarter-end" : ""}${isJuzStart ? " juz-start" : ""}${isJuzEnd ? " juz-end" : ""}`}
                             style={inLoop && !isPlaying && !isSelecting ? { borderLeft: "2px solid var(--teal)", background: "rgba(62,184,160,0.04)" } : isSelecting ? { borderLeft: "2px solid var(--gold)", background: "rgba(201,168,76,0.04)" } : {}}
                             ref={el => {
                               ayatRefs.current[ayatCompositeKey] = el;
@@ -4533,18 +5153,20 @@ function AppInner({ currentUser, onSignOut }) {
 
                           <EditableUiSlot
                             elementId="ayatDividers"
-                            condition={isPageStart || isHizbStart || isJuzStart}
+                            condition={isPageStart || isHizbStart || isQuarterStart || isJuzStart}
                             inline={false}
                             showPlaceholder={visIdx === 0}
                             showRemove={visIdx === 0}
                           >
                             {(() => {
-                              const pageSlice = isPageStart ? (hizbMode ? visible : ayats).filter(a => a.page === ayat.page) : [];
-                              const hizbSlice = isHizbStart ? (hizbMode && currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === ayatHizb)) : [];
-                              const juzSlice  = isJuzStart  ? (hizbMode ? visible : ayats).filter(a => getAyatJuz(a) === ayatJuz) : [];
-                              const pMast = isPageStart ? computeDisplayedPartMastery(pageSlice, learnData, selectedSurah.number) : null;
-                              const hMast = isHizbStart ? computeDisplayedPartMastery(hizbSlice, learnData, selectedSurah.number) : null;
-                              const jMast = isJuzStart  ? computeDisplayedPartMastery(juzSlice, learnData, selectedSurah.number)  : null;
+                              const pageSlice    = isPageStart    ? (isCrossMode ? visible : ayats).filter(a => a.page === ayat.page) : [];
+                              const hizbSlice    = isHizbStart    ? (hizbMode && currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === ayatHizb)) : [];
+                              const quarterSlice = isQuarterStart ? (quarterHizbMode && currentQuarterCrossAyats.length > 0 ? currentQuarterCrossAyats : ayats.filter(a => getAyatQuarterHizb(a) === ayatQuarter)) : [];
+                              const juzSlice     = isJuzStart     ? (isCrossMode ? visible : ayats).filter(a => getAyatJuz(a) === ayatJuz) : [];
+                              const pMast = isPageStart    ? computeDisplayedPartMastery(pageSlice, learnData, selectedSurah.number) : null;
+                              const hMast = isHizbStart    ? computeDisplayedPartMastery(hizbSlice, learnData, selectedSurah.number) : null;
+                              const qMast = isQuarterStart ? computeDisplayedPartMastery(quarterSlice, learnData, selectedSurah.number) : null;
+                              const jMast = isJuzStart     ? computeDisplayedPartMastery(juzSlice, learnData, selectedSurah.number)  : null;
                               return (
                                 <div className="edge-pills-bar start">
                                   {isPageStart && (
@@ -4564,6 +5186,20 @@ function AppInner({ currentUser, onSignOut }) {
                                       }}
                                     >
                                       ◆ HIZB {ayatHizb}{hizbBoundsForPill?.pageShort ? ` · ${hizbBoundsForPill.pageShort}` : ''}{isHizbCrossSurah ? ` · S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah}` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount})
+                                    </div>
+                                  )}
+                                  {isQuarterStart && (
+                                    <div
+                                      className="quarter-edge-pill start"
+                                      style={{ cursor: 'pointer' }}
+                                      title={`Quart ${ayatQuarter}/240 (${quarterMetaForPill?.fullLabel || ''})${isQuarterCrossSurah ? ` · S.${quarterBoundsForPill.startSurah}–S.${quarterBoundsForPill.endSurah}` : ''} — cliquer pour afficher ce Quart de Hizb`}
+                                      onClick={e => {
+                                        e.stopPropagation();
+                                        setActiveQuarterHizbCoran(ayatQuarter);
+                                        if (!quarterHizbMode) setQuarterHizbMode(true);
+                                      }}
+                                    >
+                                      ◔ QUART {ayatQuarter}/240{quarterMetaForPill ? ` · ${quarterMetaForPill.shortLabel}` : ''}{isQuarterCrossSurah ? ` · S.${quarterBoundsForPill.startSurah}–S.${quarterBoundsForPill.endSurah}` : ''} · {qMast.masteryPct}% ({qMast.learnedCount}/{qMast.totalCount})
                                     </div>
                                   )}
                                   {isJuzStart && (
@@ -4678,7 +5314,13 @@ function AppInner({ currentUser, onSignOut }) {
                                     if (isOtherSurah) {
                                       const targetSurah = surahs.find(s => s.number === ayatSurahNum);
                                       if (targetSurah) {
-                                        setActiveHizbCoran(ayatHizb);
+                                        if (quarterHizbMode) {
+                                          preserveQuarterHizbRef.current = ayatQuarter;
+                                          setActiveQuarterHizbCoran(ayatQuarter);
+                                        } else {
+                                          preserveHizbRef.current = ayatHizb;
+                                          setActiveHizbCoran(ayatHizb);
+                                        }
                                         setSelectedSurah(targetSurah);
                                       }
                                     }
@@ -4706,7 +5348,7 @@ function AppInner({ currentUser, onSignOut }) {
                                 return (
                                   <div
                                     className="ayat-mastery-col"
-                                    title={`Maîtrise du verset : ${m}%${ld.learned ? " · Appris" : ""}${ld.toRevise ? " · À réviser" : ""}`}
+                                    title={`Maîtrise du verset : ${m}%${ld.learned ? " · Appris" : ""}${ld.toRevise ? " · À réviser" : ""}${studyRecency ? ` · ${studyRecency.tooltip}` : ""}`}
                                     style={{
                                       display: "flex",
                                       flexDirection: "column",
@@ -4762,6 +5404,22 @@ function AppInner({ currentUser, onSignOut }) {
                                         }}
                                       />
                                     </div>
+
+                                    {/* Badge d'ancienneté d'étude (code couleurs sémantique) */}
+                                    {showStudyRecency && studyRecency && (
+                                      <span
+                                        className="study-recency-badge"
+                                        title={studyRecency.tooltip}
+                                        style={{
+                                          background: studyRecency.rgbaBg,
+                                          border: `1px solid ${studyRecency.rgbaBorder}`,
+                                          color: studyRecency.textColor,
+                                        }}
+                                      >
+                                        <span className="study-recency-dot" style={{ background: studyRecency.hex }} />
+                                        <span>{studyRecency.shortLabel}</span>
+                                      </span>
+                                    )}
 
                                     {/* Indicateurs complémentaires */}
                                     {ld.learned && (
@@ -4856,13 +5514,15 @@ function AppInner({ currentUser, onSignOut }) {
                               onFullScreen={() => setExplicitFullScreen(true)}
                             />
                           </AnimatedSubmenu>
-                          {(isPageEnd || isHizbEnd || isJuzEnd) && (() => {
-                            const pageSlice = isPageEnd ? (hizbMode ? visible : ayats).filter(a => a.page === ayat.page) : [];
-                            const hizbSlice = isHizbEnd ? (hizbMode && currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === ayatHizb)) : [];
-                            const juzSlice  = isJuzEnd  ? (hizbMode ? visible : ayats).filter(a => getAyatJuz(a) === ayatJuz) : [];
-                            const pMast = isPageEnd ? computeDisplayedPartMastery(pageSlice, learnData, selectedSurah.number) : null;
-                            const hMast = isHizbEnd ? computeDisplayedPartMastery(hizbSlice, learnData, selectedSurah.number) : null;
-                            const jMast = isJuzEnd  ? computeDisplayedPartMastery(juzSlice, learnData, selectedSurah.number)  : null;
+                          {(isPageEnd || isHizbEnd || isQuarterEnd || isJuzEnd) && (() => {
+                            const pageSlice    = isPageEnd    ? (isCrossMode ? visible : ayats).filter(a => a.page === ayat.page) : [];
+                            const hizbSlice    = isHizbEnd    ? (hizbMode && currentHizbCrossAyats.length > 0 ? currentHizbCrossAyats : ayats.filter(a => getAyatHizb(a) === ayatHizb)) : [];
+                            const quarterSlice = isQuarterEnd ? (quarterHizbMode && currentQuarterCrossAyats.length > 0 ? currentQuarterCrossAyats : ayats.filter(a => getAyatQuarterHizb(a) === ayatQuarter)) : [];
+                            const juzSlice     = isJuzEnd     ? (isCrossMode ? visible : ayats).filter(a => getAyatJuz(a) === ayatJuz) : [];
+                            const pMast = isPageEnd    ? computeDisplayedPartMastery(pageSlice, learnData, selectedSurah.number) : null;
+                            const hMast = isHizbEnd    ? computeDisplayedPartMastery(hizbSlice, learnData, selectedSurah.number) : null;
+                            const qMast = isQuarterEnd ? computeDisplayedPartMastery(quarterSlice, learnData, selectedSurah.number) : null;
+                            const jMast = isJuzEnd     ? computeDisplayedPartMastery(juzSlice, learnData, selectedSurah.number)  : null;
                             return (
                               <div className="edge-pills-bar end">
                                 {isPageEnd && (
@@ -4884,6 +5544,20 @@ function AppInner({ currentUser, onSignOut }) {
                                     FIN · HIZB {ayatHizb}{hizbBoundsForPill?.pageShort ? ` · ${hizbBoundsForPill.pageShort}` : ''}{isHizbCrossSurah ? ` (S.${hizbBoundsForPill.startSurah}–S.${hizbBoundsForPill.endSurah})` : ''} · {hMast.masteryPct}% ({hMast.learnedCount}/{hMast.totalCount}) ◆
                                   </div>
                                 )}
+                                {isQuarterEnd && (
+                                  <div
+                                    className="quarter-edge-pill end"
+                                    style={{ cursor: 'pointer' }}
+                                    title={`Fin Quart ${ayatQuarter}/240 (${quarterMetaForPill?.fullLabel || ''})${isQuarterCrossSurah ? ` · S.${quarterBoundsForPill.startSurah}–S.${quarterBoundsForPill.endSurah}` : ''} — cliquer pour afficher ce Quart de Hizb`}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      setActiveQuarterHizbCoran(ayatQuarter);
+                                      if (!quarterHizbMode) setQuarterHizbMode(true);
+                                    }}
+                                  >
+                                    FIN · QUART {ayatQuarter}/240{quarterMetaForPill ? ` · ${quarterMetaForPill.shortLabel}` : ''}{isQuarterCrossSurah ? ` (S.${quarterBoundsForPill.startSurah}–S.${quarterBoundsForPill.endSurah})` : ''} · {qMast.masteryPct}% ({qMast.learnedCount}/{qMast.totalCount}) ◔
+                                  </div>
+                                )}
                                 {isJuzEnd  && (
                                   <div className="juz-edge-pill end">
                                     FIN · JUZ {ayatJuz} · {jMast.masteryPct}% ({jMast.learnedCount}/{jMast.totalCount}) ◆
@@ -4894,7 +5568,7 @@ function AppInner({ currentUser, onSignOut }) {
                           })()}
                           </div>
                           {/* In normal mode, if this is the last verse of the surah and its Hizb continues into another surah, show a prompt to display the rest of the Hizb */}
-                          {!hizbMode && !pageMode && !juzMode && visIdx === visible.length - 1 && isHizbCrossSurah && hizbBoundsForPill && hizbBoundsForPill.endSurah > selectedSurah.number && (
+                          {!hizbMode && !quarterHizbMode && !pageMode && !juzMode && visIdx === visible.length - 1 && isHizbCrossSurah && hizbBoundsForPill && hizbBoundsForPill.endSurah > selectedSurah.number && (
                             <div className="hizb-cross-notice-bar">
                               <span style={{ fontSize:8.5, letterSpacing:1, color:'#ffd166', fontFamily:"'Cinzel',serif", fontWeight:700 }}>
                                 ۞ LE HIZB {ayatHizb} SE POURSUIT DANS S.{selectedSurah.number + 1} {SURAH_INFO[selectedSurah.number]?.en || ''} (S.{hizbBoundsForPill.startSurah}–S.{hizbBoundsForPill.endSurah})
@@ -5089,7 +5763,7 @@ function AppInner({ currentUser, onSignOut }) {
         )}
 
         {/* AYAT FULL SCREEN (FOCUS) MODAL */}
-        {((fullScreenSelectedAyat || explicitFullScreen) && openAyatNum != null && selectedSurah) && (() => {
+        {(activePage === 'quran' && !isBookRoute && (fullScreenSelectedAyat || explicitFullScreen) && openAyatNum != null && selectedSurah) && (() => {
           const currentAyat = ayats.find(a => a.numberInSurah === openAyatNum);
           if (!currentAyat) return null;
           const tKey = `${translationLang}:${selectedSurah.number}`;
@@ -5113,8 +5787,20 @@ function AppInner({ currentUser, onSignOut }) {
           };
 
           const handleSelectAyat = (nextAyatNum) => {
-            setOpenAyatNum(nextAyatNum);
-            const nextIdx = ayats.findIndex(a => a.numberInSurah === nextAyatNum);
+            const stepRes = resolveFullScreenAyatSelection({
+              surah: selectedSurah,
+              nextAyatNum,
+              totalAyats: ayats.length,
+              currentRouteParams: parsedRoute,
+              uxMode,
+              isFullscreenActive: fullScreenSelectedAyat || explicitFullScreen,
+            });
+            if (!stepRes) return;
+            pendingExplicitAyatRef.current = { surahNum: stepRes.surahNum, ayatNum: stepRes.ayatNum };
+            pendingNavTargetRef.current = { path: stepRes.targetPath, expiresAt: Date.now() + 1000 };
+            setOpenAyatNum(stepRes.ayatNum);
+            navigate(stepRes.targetRoute, { replace: true });
+            const nextIdx = ayats.findIndex(a => a.numberInSurah === stepRes.ayatNum);
             if (nextIdx >= 0 && isMainPlaying) {
               playMainAyat(nextIdx);
             }
@@ -5135,12 +5821,17 @@ function AppInner({ currentUser, onSignOut }) {
           };
 
           const handleExitToNormalMode = () => {
+            pendingExplicitAyatRef.current = null;
             dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.LIST));
             if (fullScreenSelectedAyat) {
               dispatch(uiActions.setFullScreenSelectedAyat(false));
             }
             setExplicitFullScreen(false);
             if (parsedRoute.view === QURAN_READING_TIERS.FULLSCREEN && selectedSurah) {
+              const targetPath = openAyatNum != null
+                ? `/quran/${selectedSurah.number}/${openAyatNum}`
+                : `/quran/${selectedSurah.number}`;
+              pendingNavTargetRef.current = { path: targetPath, expiresAt: Date.now() + 1000 };
               navigate(
                 buildQuranRoute({
                   activePage: "quran",
@@ -5164,6 +5855,7 @@ function AppInner({ currentUser, onSignOut }) {
             <AyatFullScreenModal
               isOpen={true}
               onClose={() => {
+                pendingExplicitAyatRef.current = null;
                 dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.LIST));
                 if (fullScreenSelectedAyat) {
                   dispatch(uiActions.setFullScreenSelectedAyat(false));
@@ -5171,6 +5863,7 @@ function AppInner({ currentUser, onSignOut }) {
                 setOpenAyatNum(null);
                 setExplicitFullScreen(false);
                 if (parsedRoute.view === QURAN_READING_TIERS.FULLSCREEN && selectedSurah) {
+                  pendingNavTargetRef.current = { path: `/quran/${selectedSurah.number}`, expiresAt: Date.now() + 1000 };
                   navigate(
                     buildQuranRoute({
                       activePage: "quran",
@@ -5185,6 +5878,8 @@ function AppInner({ currentUser, onSignOut }) {
               onOpenBook3D={
                 allow3D
                   ? () => {
+                      pendingExplicitAyatRef.current = null;
+                      pendingNavTargetRef.current = { path: "/quran/book3d", expiresAt: Date.now() + 1000 };
                       dispatch(uiActions.setQuranReadingTier(QURAN_READING_TIERS.BOOK3D));
                       setExplicitFullScreen(false);
                       navigate("/quran/book3d");

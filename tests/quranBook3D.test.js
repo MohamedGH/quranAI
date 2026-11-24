@@ -9,6 +9,11 @@ import {
   isIdgham,
   getMaddType,
 } from "../src/utils/tajweedRules.js";
+import {
+  detectSoftwareWebGL,
+  acquireSafeWebGLContext,
+  createPacedRenderScheduler,
+} from "../src/utils/quranBookEngine.js";
 
 describe("Quran Book WebGL & 3D Reader Engine", () => {
   beforeEach(() => {
@@ -393,6 +398,194 @@ describe("Quran Book WebGL & 3D Reader Engine", () => {
       mockStandGroup.children.forEach((c) => {
         expect(c.visible).toBe(true);
       });
+    });
+  });
+
+  describe("WebGL Context Safety, Software GPU Detection & Paced Rendering", () => {
+    it("detects SwiftShader / llvmpipe / softpipe software WebGL renderers accurately", () => {
+      const makeMockGl = (name) => ({
+        RENDERER: 0x1f01,
+        getExtension: () => ({ UNMASKED_RENDERER_WEBGL: 0x9246 }),
+        getParameter: () => name,
+      });
+
+      expect(detectSoftwareWebGL(makeMockGl("ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device))"))).toBe(true);
+      expect(detectSoftwareWebGL(makeMockGl("llvmpipe (LLVM 15.0.7, 256 bits)"))).toBe(true);
+      expect(detectSoftwareWebGL(makeMockGl("softpipe"))).toBe(true);
+      expect(detectSoftwareWebGL(makeMockGl("NVIDIA GeForce RTX 4070"))).toBe(false);
+    });
+
+    it("captures webglcontextcreationerror reason gracefully without throwing when WebGL is blocked", () => {
+      const onProfileDetected = vi.fn();
+      const createCanvas = () => {
+        const listeners = {};
+        return {
+          addEventListener: (evt, fn) => {
+            listeners[evt] = fn;
+          },
+          removeEventListener: (evt) => {
+            delete listeners[evt];
+          },
+          getContext: () => {
+            listeners.webglcontextcreationerror?.({
+              preventDefault: vi.fn(),
+              statusMessage: "Web page caused context loss and was blocked",
+            });
+            return null;
+          },
+        };
+      };
+
+      const res = acquireSafeWebGLContext({
+        createCanvas,
+        hasNativeWebGL: true,
+        onProfileDetected,
+      });
+
+      expect(res.status).toBe("unavailable");
+      expect(res.context).toBeNull();
+      expect(res.reason).toBe("Web page caused context loss and was blocked");
+      expect(onProfileDetected).toHaveBeenCalledWith({
+        supported: false,
+        isSoftware: true,
+        reason: "Web page caused context loss and was blocked",
+      });
+
+      // Subsequent mount short-circuits immediately when blocked unless allowRetry is true
+      const createCanvasSpy = vi.fn();
+      const cachedRes = acquireSafeWebGLContext({
+        createCanvas: createCanvasSpy,
+        hasNativeWebGL: true,
+        cachedProfile: onProfileDetected.mock.calls[0][0],
+      });
+      expect(cachedRes.status).toBe("unavailable");
+      expect(createCanvasSpy).not.toHaveBeenCalled();
+    });
+
+    it("reuses the single non-MSAA context on software WebGL and upgrades to MSAA on hardware GPUs", () => {
+      const swLoseSpy = vi.fn();
+      let swCanvasCalls = 0;
+      const swResult = acquireSafeWebGLContext({
+        hasNativeWebGL: true,
+        createCanvas: () => {
+          swCanvasCalls += 1;
+          return {
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            getContext: () => ({
+              RENDERER: 0x1f01,
+              getExtension: (ext) =>
+                ext === "WEBGL_lose_context"
+                  ? { loseContext: swLoseSpy }
+                  : { UNMASKED_RENDERER_WEBGL: 0x9246 },
+              getParameter: () => "Google SwiftShader",
+            }),
+          };
+        },
+      });
+      expect(swResult.status).toBe("ready");
+      expect(swResult.isSoftware).toBe(true);
+      expect(swCanvasCalls).toBe(1);
+      expect(swLoseSpy).not.toHaveBeenCalled();
+
+      const hwLoseSpy = vi.fn();
+      const requestedAttrs = [];
+      const hwResult = acquireSafeWebGLContext({
+        hasNativeWebGL: true,
+        preferHardwareAntialias: true,
+        createCanvas: () => ({
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          getContext: (_type, attrs) => {
+            requestedAttrs.push(attrs);
+            return {
+              RENDERER: 0x1f01,
+              getExtension: (ext) =>
+                ext === "WEBGL_lose_context"
+                  ? { loseContext: hwLoseSpy }
+                  : { UNMASKED_RENDERER_WEBGL: 0x9246 },
+              getParameter: () => "Apple M3 Max GPU",
+            };
+          },
+        }),
+      });
+      expect(hwResult.status).toBe("ready");
+      expect(hwResult.isSoftware).toBe(false);
+      expect(hwLoseSpy).toHaveBeenCalledTimes(1);
+      expect(requestedAttrs[0].antialias).toBe(false);
+      expect(requestedAttrs[1].antialias).toBe(true);
+      expect(requestedAttrs[1].powerPreference).toBe("high-performance");
+    });
+
+    it("paces software WebGL loops with fenceSync + cooldown and cancels all timers on dispose", () => {
+      vi.useFakeTimers();
+      try {
+        const rafQueue = [];
+        const cancelRaf = vi.fn();
+        const deleteSync = vi.fn();
+        const flush = vi.fn();
+        let syncChecks = 0;
+
+        const mockRenderer = {
+          getContext: () => ({
+            SYNC_GPU_COMMANDS_COMPLETE: 0x9117,
+            SYNC_STATUS: 0x9114,
+            UNSIGNALED: 0x9118,
+            SIGNALED: 0x9119,
+            fenceSync: () => ({ id: "sync-1" }),
+            flush,
+            getSyncParameter: () => {
+              syncChecks += 1;
+              return syncChecks >= 2 ? 0x9119 : 0x9118;
+            },
+            deleteSync,
+          }),
+        };
+
+        let nextRafId = 0;
+        const scheduler = createPacedRenderScheduler({
+          renderer: mockRenderer,
+          isSoftwareGl: true,
+          isHidden: () => false,
+          requestAnimationFrameFn: (cb) => {
+            rafQueue.push(cb);
+            nextRafId += 1;
+            return nextRafId;
+          },
+          cancelAnimationFrameFn: cancelRaf,
+          softwareCooldownMs: 80,
+          pollIntervalMs: 5,
+        });
+
+        let ticks = 0;
+        const tick = () => {
+          ticks += 1;
+          return ticks < 2; // request one follow-up frame
+        };
+
+        scheduler.schedule(tick);
+        expect(rafQueue.length).toBe(1);
+
+        // Execute first frame -> enters fenceSync poll -> waits 80ms -> queues frame 2
+        rafQueue.shift()(16);
+        expect(ticks).toBe(1);
+        expect(flush).toHaveBeenCalledTimes(1);
+        expect(rafQueue.length).toBe(0);
+
+        vi.advanceTimersByTime(10); // finishes poll & deletes sync
+        expect(deleteSync).toHaveBeenCalledTimes(1);
+        expect(rafQueue.length).toBe(0);
+
+        vi.advanceTimersByTime(80); // software cooldown elapses -> schedules second frame
+        expect(rafQueue.length).toBe(1);
+
+        // Dispose cancels pending rAF immediately
+        scheduler.dispose();
+        expect(scheduler.isDisposed()).toBe(true);
+        expect(cancelRaf).toHaveBeenCalledWith(2);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

@@ -30,6 +30,8 @@ import {
   evalFlipPivotState,
   evalFlipSheetPoint,
   detectSoftwareWebGL,
+  acquireSafeWebGLContext,
+  createPacedRenderScheduler,
   buildPageRenderCacheKey,
   createPageCanvasCache,
   computeSpreadPages,
@@ -62,6 +64,10 @@ const _cameraLookAtTarget = new THREE.Vector3(0, -0.1, 0);
 // Bounded LRU cache for rasterized offscreen canvases across page flips & drawer toggles
 const _pageCanvasCache = createPageCanvasCache(18);
 let _endpaperCanvas = null;
+let _cachedGlProfile = null;
+export const resetBook3DWebGLCache = () => {
+  _cachedGlProfile = null;
+};
 
 // Helper for authentic Eastern Arabic digits (e.g. ﴿١﴾)
 function toArabicDigits(num) {
@@ -785,7 +791,8 @@ export function QuranBook3DPage({
   const showGlowRef = useRef(showGlow);
   const bookOpenRef = useRef(bookOpen);
   const openAnimRef = useRef({ progress: 0, particleTime: 0 });
-  const isSoftwareGlRef = useRef(false);
+  const isSoftwareGlRef = useRef(Boolean(_cachedGlProfile?.isSoftware));
+  const retryWebGLRef = useRef(false);
   const requestRenderRef = useRef(() => {});
 
   // Texture & Hit-test Refs
@@ -970,24 +977,57 @@ export function QuranBook3DPage({
 
     const width = container.clientWidth || 920;
     const height = container.clientHeight || 600;
+    const allowRetry = retryWebGLRef.current;
+    retryWebGLRef.current = false;
 
-    // Renderer
-    let renderer;
-    try {
-      renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        alpha: true,
-        powerPreference: "high-performance",
-      });
-      renderer.debug.checkShaderErrors = false;
-    } catch (err) {
-      console.warn("WebGL initialization failed, falling back to 2D view:", err);
+    const acquired = acquireSafeWebGLContext({
+      preferHardwareAntialias: true,
+      alpha: true,
+      cachedProfile: _cachedGlProfile,
+      allowRetry,
+      onProfileDetected: (profile) => {
+        _cachedGlProfile = profile;
+      },
+    });
+
+    if (acquired.status === "unavailable") {
+      console.warn(
+        "WebGL2 indisponible ou bloqué, bascule automatique en mode Mushaf 2D :",
+        acquired.reason || "context unavailable"
+      );
       setWebglFailed(true);
       setViewMode("2d");
       return;
     }
 
-    const isSwGl = detectSoftwareWebGL(renderer);
+    // Renderer (reuses pre-acquired canvas/context when native WebGL2 was verified)
+    let renderer;
+    try {
+      const rendererOpts =
+        acquired.status === "ready"
+          ? {
+              canvas: acquired.canvas,
+              context: acquired.context,
+              antialias: !acquired.isSoftware,
+              alpha: true,
+              powerPreference: acquired.isSoftware ? "default" : "high-performance",
+            }
+          : {
+              antialias: !isSoftwareGlRef.current,
+              alpha: true,
+              powerPreference: isSoftwareGlRef.current ? "default" : "high-performance",
+            };
+      renderer = new THREE.WebGLRenderer(rendererOpts);
+      renderer.debug.checkShaderErrors = false;
+    } catch (err) {
+      console.warn("WebGL initialization failed, falling back to 2D view:", err);
+      _cachedGlProfile = { supported: false, isSoftware: true, reason: err?.message || "init error" };
+      setWebglFailed(true);
+      setViewMode("2d");
+      return;
+    }
+
+    const isSwGl = acquired.status === "ready" ? acquired.isSoftware : detectSoftwareWebGL(renderer);
     isSoftwareGlRef.current = isSwGl;
 
     renderer.setSize(width, height, false);
@@ -1011,15 +1051,15 @@ export function QuranBook3DPage({
     sceneRef.current = scene;
 
     // Studio PBR Environment via PMREM + RoomEnvironment (zero external HDR fetch / 404)
-    let pmremGenerator = null;
     let envTarget = null;
     try {
-      pmremGenerator = new THREE.PMREMGenerator(renderer);
+      const pmremGenerator = new THREE.PMREMGenerator(renderer);
       const roomEnv = new RoomEnvironment();
       envTarget = pmremGenerator.fromScene(roomEnv, 0.04);
       scene.environment = envTarget.texture;
       scene.environmentIntensity = 0.48;
       roomEnv.dispose();
+      pmremGenerator.dispose();
     } catch {
       // Non-fatal if environment generation unsupported on mocked/minimal context
     }
@@ -1035,12 +1075,6 @@ export function QuranBook3DPage({
     _cameraLookAtTarget.set(initialPose.targetX, initialPose.targetY, initialPose.targetZ);
     camera.lookAt(_cameraLookAtTarget);
     cameraRef.current = camera;
-
-    const onContextLost = (e) => {
-      e.preventDefault();
-      console.warn("WebGL context lost");
-    };
-    renderer.domElement.addEventListener("webglcontextlost", onContextLost, false);
 
     // ── Studio Lighting ──
     const ambientLight = new THREE.AmbientLight(0xffeedb, 0.72);
@@ -1460,10 +1494,27 @@ export function QuranBook3DPage({
     // Populate initial page textures cleanly
     updatePageTexturesRef.current();
 
-    // ── Delta-timed & Paced Render Loop ──
-    let rafId = 0;
+    // ── Delta-timed & Software-WebGL-Paced Render Loop ──
     let isDisposed = false;
+    let isContextLost = false;
     let lastTimeMs = performance.now();
+    const scheduler = createPacedRenderScheduler({
+      renderer,
+      isSoftwareGl: isSwGl,
+      isHidden: () => typeof document !== "undefined" && Boolean(document.hidden),
+    });
+
+    const handleContextLost = (e) => {
+      if (e && typeof e.preventDefault === "function") e.preventDefault();
+      if (isContextLost) return;
+      isContextLost = true;
+      scheduler.cancelAll();
+      console.warn("WebGL context lost — bascule automatique vers le mode Mushaf 2D");
+      _cachedGlProfile = { supported: false, isSoftware: true, reason: "webglcontextlost" };
+      setWebglFailed(true);
+      setViewMode("2d");
+    };
+    renderer.domElement.addEventListener("webglcontextlost", handleContextLost, false);
 
     const applyFlipGeometryFrame = (progress, direction) => {
       const fState = evalFlipPivotState(progress, direction);
@@ -1492,8 +1543,13 @@ export function QuranBook3DPage({
     };
 
     const renderFrame = (nowMs) => {
-      if (isDisposed) return;
-      rafId = 0;
+      if (isDisposed || isContextLost) return false;
+      const glCtx = renderer.getContext?.();
+      if (glCtx?.isContextLost?.()) {
+        handleContextLost();
+        return false;
+      }
+
       const dt = Math.min(0.05, Math.max(0.001, (nowMs - lastTimeMs) / 1000));
       lastTimeMs = nowMs;
 
@@ -1614,11 +1670,13 @@ export function QuranBook3DPage({
         renderer.render(scene, camera);
       } catch (renderErr) {
         console.warn("Render loop error:", renderErr);
+        handleContextLost();
+        return false;
       }
 
       // Continue ticking while opening, flipping, orbiting, zooming, panning, or dust active on GPU
       const emittingParticles = dustActive && openState.particleEmissionFactor > 0.001;
-      if (
+      return (
         openMoving ||
         fAnim.active ||
         orbitMoving ||
@@ -1626,17 +1684,22 @@ export function QuranBook3DPage({
         panMoving ||
         emittingParticles ||
         (glowActive && openState.auraFactor > 0.001)
-      ) {
-        rafId = requestAnimationFrame(renderFrame);
-      }
+      );
     };
 
     const scheduleFrame = () => {
-      if (isDisposed || rafId) return;
+      if (isDisposed || isContextLost) return;
       lastTimeMs = performance.now();
-      rafId = requestAnimationFrame(renderFrame);
+      scheduler.schedule(renderFrame);
     };
     requestRenderRef.current = scheduleFrame;
+
+    const onVisibilityChange = () => {
+      if (!document.hidden && !isDisposed && !isContextLost) {
+        scheduleFrame();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange, false);
 
     // Non-passive wheel zoom over WebGL canvas so scroll zooms the Mushaf smoothly
     const onWheel = (e) => {
@@ -1654,10 +1717,11 @@ export function QuranBook3DPage({
     return () => {
       isDisposed = true;
       requestRenderRef.current = () => {};
-      if (rafId) cancelAnimationFrame(rafId);
+      scheduler.dispose();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (resizeObserver) resizeObserver.disconnect();
       container.removeEventListener("wheel", onWheel);
-      renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
+      renderer.domElement.removeEventListener("webglcontextlost", handleContextLost);
 
       // Explicit GPU disposal
       dustGeo.dispose();
@@ -1692,8 +1756,13 @@ export function QuranBook3DPage({
       ribbonGeo.dispose();
       ribbonMat.dispose();
       envTarget?.dispose();
-      pmremGenerator?.dispose();
       renderer.dispose();
+      if (renderer.domElement?.parentNode === container) {
+        container.removeChild(renderer.domElement);
+      }
+      rendererRef.current = null;
+      sceneRef.current = null;
+      cameraRef.current = null;
     };
   }, [viewMode, webglFailed]);
 
@@ -2520,11 +2589,19 @@ export function QuranBook3DPage({
           <EditableUiSlot elementId="quran3dViewModeBtn" inline={true}>
             <button
               data-testid="q3d-view-toggle"
-              onClick={() => setViewMode((m) => (m === "3d" ? "2d" : "3d"))}
+              onClick={() => {
+                if (webglFailed || viewMode === "2d") {
+                  retryWebGLRef.current = true;
+                  setWebglFailed(false);
+                  setViewMode("3d");
+                } else {
+                  setViewMode("2d");
+                }
+              }}
               style={{
-                background: viewMode === "3d" ? "rgba(212,175,55,0.25)" : "rgba(56,189,248,0.2)",
-                border: `1px solid ${viewMode === "3d" ? "#d4af37" : "#38bdf8"}`,
-                color: viewMode === "3d" ? "#ffd700" : "#38bdf8",
+                background: viewMode === "3d" && !webglFailed ? "rgba(212,175,55,0.25)" : "rgba(56,189,248,0.2)",
+                border: `1px solid ${viewMode === "3d" && !webglFailed ? "#d4af37" : "#38bdf8"}`,
+                color: viewMode === "3d" && !webglFailed ? "#ffd700" : "#38bdf8",
                 borderRadius: 8,
                 padding: "6px 12px",
                 cursor: "pointer",
@@ -2535,9 +2612,13 @@ export function QuranBook3DPage({
                 alignItems: "center",
                 gap: 5,
               }}
-              title={viewMode === "3d" ? "Passer en vue 2D directe" : "Passer en vue 3D interactive"}
+              title={
+                viewMode === "3d" && !webglFailed
+                  ? "Passer en vue 2D directe"
+                  : "Passer en vue 3D interactive"
+              }
             >
-              <span>{viewMode === "3d" ? "🧊 MODE 3D" : "📖 MODE 2D"}</span>
+              <span>{viewMode === "3d" && !webglFailed ? "🧊 MODE 3D" : "📖 MODE 2D"}</span>
             </button>
           </EditableUiSlot>
 
@@ -2780,6 +2861,7 @@ export function QuranBook3DPage({
         {/* 3D WebGL Canvas Mode */}
         {viewMode === "3d" && !webglFailed ? (
           <div
+            key="q3d-webgl-host"
             ref={containerRef}
             data-testid="q3d-webgl-container"
             onContextMenu={(e) => e.preventDefault()}
@@ -2800,6 +2882,7 @@ export function QuranBook3DPage({
         ) : (
           /* 2D Medina Mushaf Page Reader Mode (High-DPI sharp layout with 2D zoom & pan) */
           <div
+            key="q3d-2d-host"
             style={{
               width: "100%",
               height: "100%",

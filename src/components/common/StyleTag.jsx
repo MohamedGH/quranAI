@@ -1237,16 +1237,18 @@ export const CSS = `
   .ayat-row.learned{background:var(--learned-bg);}
   .ayat-row.selecting{background:rgba(201,168,76,.03);}
   .ayat-row.learned .ayat-number-badge{border-color:var(--green);color:var(--green);}
-  .ayat-row.page-start,.ayat-row.hizb-start,.ayat-row.juz-start{position:relative;margin-top:22px;}
+  .ayat-row.page-start,.ayat-row.hizb-start,.ayat-row.quarter-start,.ayat-row.juz-start{position:relative;margin-top:22px;}
   .ayat-row.page-start::before{content:'';position:absolute;top:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(200,120,255,.15),#c878ff,rgba(200,120,255,.15),transparent);}
   .ayat-row.hizb-start:not(.page-start)::before{content:'';position:absolute;top:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,209,102,.18),#ffd166,rgba(255,209,102,.18),transparent);}
-  .ayat-row.juz-start:not(.page-start):not(.hizb-start)::before{content:'';position:absolute;top:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(86,212,188,.18),#56d4bc,rgba(86,212,188,.18),transparent);}
+  .ayat-row.quarter-start:not(.page-start):not(.hizb-start)::before{content:'';position:absolute;top:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(56,189,248,.18),#38bdf8,rgba(56,189,248,.18),transparent);}
+  .ayat-row.juz-start:not(.page-start):not(.hizb-start):not(.quarter-start)::before{content:'';position:absolute;top:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(86,212,188,.18),#56d4bc,rgba(86,212,188,.18),transparent);}
   .ayat-row.page-start.hizb-start::before{background:linear-gradient(90deg,transparent,rgba(200,120,255,.2),#c878ff,#ffd166,rgba(255,209,102,.2),transparent);}
   .ayat-row.page-start.hizb-start.juz-start::before{background:linear-gradient(90deg,transparent,rgba(200,120,255,.2),#c878ff,#ffd166,#56d4bc,rgba(86,212,188,.2),transparent);}
-  .ayat-row.page-end,.ayat-row.hizb-end,.ayat-row.juz-end{position:relative;margin-bottom:22px;}
+  .ayat-row.page-end,.ayat-row.hizb-end,.ayat-row.quarter-end,.ayat-row.juz-end{position:relative;margin-bottom:22px;}
   .ayat-row.page-end::after{content:'';position:absolute;bottom:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(200,120,255,.15),#c878ff,rgba(200,120,255,.15),transparent);}
   .ayat-row.hizb-end:not(.page-end)::after{content:'';position:absolute;bottom:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,209,102,.18),#ffd166,rgba(255,209,102,.18),transparent);}
-  .ayat-row.juz-end:not(.page-end):not(.hizb-end)::after{content:'';position:absolute;bottom:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(86,212,188,.18),#56d4bc,rgba(86,212,188,.18),transparent);}
+  .ayat-row.quarter-end:not(.page-end):not(.hizb-end)::after{content:'';position:absolute;bottom:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(56,189,248,.18),#38bdf8,rgba(56,189,248,.18),transparent);}
+  .ayat-row.juz-end:not(.page-end):not(.hizb-end):not(.quarter-end)::after{content:'';position:absolute;bottom:-11px;left:22px;right:22px;height:1px;background:linear-gradient(90deg,transparent,rgba(86,212,188,.18),#56d4bc,rgba(86,212,188,.18),transparent);}
   .ayat-row.page-end.hizb-end::after{background:linear-gradient(90deg,transparent,rgba(200,120,255,.2),#c878ff,#ffd166,rgba(255,209,102,.2),transparent);}
   .ayat-row.page-end.hizb-end.juz-end::after{background:linear-gradient(90deg,transparent,rgba(200,120,255,.2),#c878ff,#ffd166,#56d4bc,rgba(86,212,188,.2),transparent);}
   .edge-pills-bar{position:absolute;left:50%;display:flex;align-items:center;justify-content:center;gap:6px;z-index:2;white-space:nowrap;}
@@ -1260,11 +1262,14 @@ export const CSS = `
   .hizb-edge-pill.start{top:-11px;transform:translate(-50%,-50%);}
   .hizb-edge-pill.end{bottom:-11px;transform:translate(-50%,50%);}
   .hizb-edge-pill svg{width:8px;height:8px;}
+  .quarter-edge-pill{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,#38bdf8,#0284c7);color:#06131c;font-weight:700;font-size:7px;letter-spacing:1.8px;padding:4px 12px;border-radius:20px;font-family:'Cinzel',serif;box-shadow:0 3px 14px rgba(56,189,248,.42),0 0 0 3px var(--surface1,#12141c);white-space:nowrap;z-index:2;}
+  .quarter-edge-pill.start{top:-11px;transform:translate(-50%,-50%);}
+  .quarter-edge-pill.end{bottom:-11px;transform:translate(-50%,50%);}
   .juz-edge-pill{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,#56d4bc,#2a8f7c);color:#091714;font-weight:700;font-size:7px;letter-spacing:2px;padding:4px 12px;border-radius:20px;font-family:'Cinzel',serif;box-shadow:0 3px 14px rgba(86,212,188,.45),0 0 0 3px var(--surface1,#12141c);white-space:nowrap;z-index:2;}
   .juz-edge-pill.start{top:-11px;transform:translate(-50%,-50%);}
   .juz-edge-pill.end{bottom:-11px;transform:translate(-50%,50%);}
   .juz-edge-pill svg{width:8px;height:8px;}
-  .edge-pills-bar .page-edge-pill,.edge-pills-bar .hizb-edge-pill,.edge-pills-bar .juz-edge-pill{position:static;transform:none;top:auto;bottom:auto;left:auto;}
+  .edge-pills-bar .page-edge-pill,.edge-pills-bar .hizb-edge-pill,.edge-pills-bar .quarter-edge-pill,.edge-pills-bar .juz-edge-pill{position:static;transform:none;top:auto;bottom:auto;left:auto;}
   .ayat-row.cross-surah-ayat{background:linear-gradient(90deg,rgba(255,209,102,.035),transparent 45%);border-left:2px solid rgba(255,209,102,.38);}
   .cross-surah-verse-tag{font-family:'Cinzel',serif;font-size:7px;font-weight:700;letter-spacing:.8px;padding:1px 5px;border-radius:6px;background:rgba(255,209,102,.14);border:1px solid rgba(255,209,102,.45);color:#ffd166;white-space:nowrap;line-height:1.3;}
   .hizb-cross-surah-banner{margin:14px 10px 8px;padding:10px 12px;border-radius:10px;background:linear-gradient(135deg,rgba(255,209,102,.09),rgba(201,168,76,.03));border:1px solid rgba(255,209,102,.32);display:flex;flex-direction:column;gap:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);}
@@ -1284,9 +1289,17 @@ export const CSS = `
   .hizb-cross-nav-chip{font-family:'Cinzel',serif;font-size:7.5px;letter-spacing:.9px;padding:3px 9px;border-radius:12px;border:1px solid rgba(255,209,102,.32);background:rgba(255,255,255,.03);color:var(--text2);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;flex-shrink:0;transition:all .15s;}
   .hizb-cross-nav-chip.active{background:rgba(255,209,102,.2);border-color:#ffd166;color:#ffd166;font-weight:700;}
   .hizb-cross-notice-bar{margin:8px 10px;padding:8px 12px;border-radius:8px;background:rgba(255,209,102,.07);border:1px dashed rgba(255,209,102,.38);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+  .study-recency-legend-bar{display:flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(13,17,26,.85);border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;font-variant-numeric:tabular-nums;}
+  .study-recency-legend-bar::-webkit-scrollbar{display:none;}
+  .study-recency-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:8px;border:1px solid var(--border2);background:rgba(255,255,255,.03);color:var(--text2);font-family:'Cinzel',serif;font-size:7.5px;font-weight:600;letter-spacing:.5px;white-space:nowrap;flex-shrink:0;cursor:pointer;transition:all .15s ease;}
+  .study-recency-chip:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.24);}
+  .study-recency-chip.active{font-weight:700;}
+  .study-recency-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block;}
+  .study-recency-badge{display:inline-flex;align-items:center;gap:4px;font-size:7.5px;letter-spacing:.4px;padding:2px 6px;border-radius:7px;font-family:'Cinzel',serif;font-weight:700;white-space:nowrap;line-height:1.2;font-variant-numeric:tabular-nums;transition:all .18s ease;}
   @media(min-width:769px){
     .hizb-cross-surah-banner{margin:16px 22px 10px;padding:12px 18px;}
     .hizb-cross-notice-bar{margin:10px 22px;}
+    .study-recency-legend-bar{padding:6px 22px;}
   }
   .ayat-main{display:flex;align-items:flex-start;gap:14px;padding:14px 22px;cursor:pointer;}
   .ayat-main:hover{background:rgba(255,255,255,.02);}

@@ -94,11 +94,12 @@ import * as THREE from "three";
 import { store, uiActions } from "../src/store.js";
 import * as reciterAudio from "../src/utils/reciterAudio.js";
 import { BOOK3D_ZOOM, BOOK3D_PARTICLES } from "../src/utils/quranBookEngine.js";
-import { QuranBook3DPage } from "../src/components/pages/QuranBook3DPage.jsx";
+import { QuranBook3DPage, resetBook3DWebGLCache } from "../src/components/pages/QuranBook3DPage.jsx";
 
 describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric Aura", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetBook3DWebGLCache();
     mockRendererState.shaderMaterials.length = 0;
     mockRendererState.sprites.length = 0;
     mockRendererState.cameras.length = 0;
@@ -314,5 +315,51 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     unmount();
     expect(dustShader.disposeCount).toBe(1);
     expect(mockRendererState.disposeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("handles webglcontextlost cleanly by halting frames and falling back to 2D Mushaf mode", async () => {
+    const rafQueue = [];
+    const cancelSpy = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
+
+    const { unmount } = render(
+      React.createElement(
+        Provider,
+        { store },
+        React.createElement(
+          MemoryRouter,
+          null,
+          React.createElement(QuranBook3DPage, {
+            surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha" }],
+          })
+        )
+      )
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="q3d-webgl-container"]')).toBeTruthy();
+    });
+
+    const canvas = document.querySelector('[data-testid="q3d-webgl-container"] canvas');
+    expect(canvas).toBeTruthy();
+
+    // Dispatch webglcontextlost -> must switch smoothly to 2D spread stage & dispose GPU resources
+    act(() => {
+      const lostEvt = new Event("webglcontextlost", { cancelable: true });
+      canvas.dispatchEvent(lostEvt);
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="q3d-2d-spread-stage"]')).toBeTruthy();
+      expect(document.querySelector('[data-testid="q3d-webgl-container"]')).toBeNull();
+    });
+    expect(cancelSpy).toHaveBeenCalled();
+    expect(mockRendererState.disposeSpy).toHaveBeenCalled();
+    expect(document.querySelector('[data-testid="q3d-view-toggle"]')?.textContent).toContain("MODE 2D");
+
+    unmount();
   });
 });

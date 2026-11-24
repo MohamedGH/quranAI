@@ -33,6 +33,8 @@ export function SurahAllOptionsModal({
   setPageMode,
   hizbMode,
   setHizbMode,
+  quarterHizbMode = false,
+  setQuarterHizbMode = () => {},
   juzMode,
   setJuzMode,
   fullScreenSelectedAyat,
@@ -53,6 +55,7 @@ export function SurahAllOptionsModal({
   const [activeTab, setActiveTab] = useState(initialTab);
   const [searchAyatText, setSearchAyatText] = useState("");
   const dispatch = useDispatch();
+  const showStudyRecency = useSelector(sel.showStudyRecency);
   const touchStartRef = useRef(null);
   const SURAH_MODAL_TABS = ["tajweed", "display", "jump", "filters", "lang"];
 
@@ -459,13 +462,14 @@ export function SurahAllOptionsModal({
                 </div>
               </div>
 
-              {/* Reading Modes (Page / Hizb / Juz) */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              {/* Reading Modes (Page / Hizb / Quart Hizb / Juz) */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
                 <button
                   type="button"
                   onClick={() => {
-                    setPageMode(!pageMode);
-                    if (!pageMode) { setHizbMode(false); setJuzMode(false); }
+                    const next = !pageMode;
+                    setPageMode(next);
+                    if (next) { setHizbMode(false); setQuarterHizbMode(false); setJuzMode(false); }
                   }}
                   style={{
                     padding: "10px",
@@ -485,8 +489,9 @@ export function SurahAllOptionsModal({
                 <button
                   type="button"
                   onClick={() => {
-                    setHizbMode(!hizbMode);
-                    if (!hizbMode) { setPageMode(false); setJuzMode(false); }
+                    const next = !hizbMode;
+                    setHizbMode(next);
+                    if (next) { setPageMode(false); setQuarterHizbMode(false); setJuzMode(false); }
                   }}
                   style={{
                     padding: "10px",
@@ -501,13 +506,36 @@ export function SurahAllOptionsModal({
                     cursor: "pointer",
                   }}
                 >
-                  ⚡ MODE HIZB
+                  ۞ MODE HIZB
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setJuzMode(!juzMode);
-                    if (!juzMode) { setPageMode(false); setHizbMode(false); }
+                    const next = !quarterHizbMode;
+                    setQuarterHizbMode(next);
+                    if (next) { setPageMode(false); setHizbMode(false); setJuzMode(false); }
+                  }}
+                  style={{
+                    padding: "10px",
+                    borderRadius: 8,
+                    textAlign: "center",
+                    border: quarterHizbMode ? "1.5px solid #38bdf8" : "1px solid rgba(255,255,255,0.08)",
+                    background: quarterHizbMode ? "rgba(56,189,248,0.18)" : "var(--surface2)",
+                    color: quarterHizbMode ? "#38bdf8" : "var(--text2)",
+                    fontFamily: "'Cinzel', serif",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  ◔ QUART DE HIZB (¼)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !juzMode;
+                    setJuzMode(next);
+                    if (next) { setPageMode(false); setHizbMode(false); setQuarterHizbMode(false); }
                   }}
                   style={{
                     padding: "10px",
@@ -529,6 +557,7 @@ export function SurahAllOptionsModal({
               {/* Toggles */}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {[
+                  { label: "Afficher l'ancienneté d'étude des versets (code couleurs)", on: showStudyRecency, toggle: () => dispatch(uiActions.toggleShowStudyRecency()) },
                   { label: "Plein écran focus sur le verset sélectionné", on: fullScreenSelectedAyat, toggle: toggleFullScreen },
                   { label: "Vérification orthographique (aide à l'apprentissage)", on: spellCheck, toggle: toggleSpellCheck },
                   { label: "Afficher le découpage par parties d'apprentissage", on: showParts, toggle: toggleShowParts },

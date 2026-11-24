@@ -7,6 +7,13 @@ import { TajweedColorPickerModal } from "./TajweedColorPickerModal.jsx";
 import { getUxProfile, isSimplifiedUxMode, getSimplifiedLayoutConfig, getCompactLayoutConfig } from "../../utils/uxProfileManager.js";
 import { SurahAllOptionsModal } from "./SurahAllOptionsModal.jsx";
 import { EditableUiSlot } from "./EditableUiSlot.jsx";
+import { getQuarterHizbForSurahAyah, getQuarterFractionMeta } from "../../utils/quarterHizbUtils.js";
+import {
+  STUDY_RECENCY_TIER_LIST,
+  STUDY_RECENCY_FILTERS,
+  getStudyRecencyInfo,
+  matchesStudyRecencyFilter,
+} from "../../utils/studyRecency.js";
 
 export function SurahHeader({
   selectedSurah,
@@ -25,12 +32,18 @@ export function SurahHeader({
   setHizbMode = () => {},
   activeHizbCoran = null,
   setActiveHizbCoran = () => {},
+  quarterHizbMode = false,
+  setQuarterHizbMode = () => {},
+  activeQuarterHizbCoran = null,
+  setActiveQuarterHizbCoran = () => {},
   juzMode = false,
   setJuzMode = () => {},
   activeJuzCoran = null,
   setActiveJuzCoran = () => {},
   currentHizbCrossAyats = [],
   resolvedActiveHizb = null,
+  currentQuarterCrossAyats = [],
+  resolvedActiveQuarterHizb = null,
   mainAyatIdx,
   learnData,
   lkey,
@@ -137,6 +150,8 @@ export function SurahHeader({
   const masteryFilterPreset = useSelector(sel.masteryFilterPreset);
   const ayatFilterRange     = useSelector(sel.ayatFilterRange);
   const ayatFilterActive    = useSelector(sel.ayatFilterActive);
+  const showStudyRecency    = useSelector(sel.showStudyRecency);
+  const studyRecencyFilter  = useSelector(sel.studyRecencyFilter);
   const isAnyFilterActive   = useSelector(sel.isAnyFilterActive);
 
   const totalAyahsInSurah = selectedSurah?.numberOfAyahs || ayats?.length || 1;
@@ -146,30 +161,44 @@ export function SurahHeader({
     if (!ayats || !ayats.length) return 0;
     const [minM, maxM] = masteryFilterRange || [0, 100];
     const [fromA, toA] = ayatFilterRange || [1, totalAyahsInSurah];
+    const now = new Date();
     return ayats.filter(a => {
       const snNum = Number(a.surahNumber ?? a.surah?.number ?? selectedSurah?.number ?? 1);
       const anNum = Number(a.numberInSurah);
       if (ayatFilterActive && (anNum < fromA || anNum > toA)) return false;
+      const ldVal = learnData?.[`${snNum}:${anNum}`];
       if (masteryFilterActive) {
-        const ldVal = learnData?.[`${snNum}:${anNum}`];
         const m = computeMastery(ldVal, a.text);
         if (m < minM || m > maxM) return false;
       }
+      if (studyRecencyFilter && studyRecencyFilter !== "all") {
+        const recencyInfo = getStudyRecencyInfo(ldVal, now);
+        if (!matchesStudyRecencyFilter(recencyInfo, studyRecencyFilter)) return false;
+      }
       return true;
     }).length;
-  }, [ayats, learnData, selectedSurah?.number, masteryFilterRange, masteryFilterActive, ayatFilterRange, ayatFilterActive, totalAyahsInSurah]);
+  }, [ayats, learnData, selectedSurah?.number, masteryFilterRange, masteryFilterActive, ayatFilterRange, ayatFilterActive, studyRecencyFilter, totalAyahsInSurah]);
 
   if (!selectedSurah) return null;
 
   const sn = selectedSurah.number;
   const getAyatHizb = (a) => a?.hizb != null ? a.hizb : (a?.hizbQuarter != null ? Math.ceil(a.hizbQuarter / 4) : null);
+  const getAyatQuarterHizb = (a) => {
+    if (!a) return null;
+    if (a.hizbQuarter != null) return a.hizbQuarter;
+    const aSn = Number(a.surahNumber ?? a.surah?.number ?? sn);
+    return getQuarterHizbForSurahAyah(aSn, a.numberInSurah);
+  };
   const activeAyat = ayats[mainAyatIdx] || ayats[0];
-  const curPage = pageMode ? (activePageCoran ?? activeAyat?.page ?? null) : null;
-  const curHizb = hizbMode ? (resolvedActiveHizb ?? activeHizbCoran ?? getAyatHizb(activeAyat)) : null;
-  const curJuz  = juzMode  ? (activeJuzCoran  ?? activeAyat?.juz ?? null) : null;
-  const displayPage = curPage ?? activeAyat?.page ?? surahMeta?.page ?? null;
-  const displayHizb = curHizb ?? getAyatHizb(activeAyat) ?? pageMeta?.hizb ?? surahMeta?.hizb ?? null;
-  const displayJuz  = curJuz  ?? activeAyat?.juz  ?? pageMeta?.juz  ?? surahMeta?.juz  ?? null;
+  const curPage    = pageMode        ? (activePageCoran ?? activeAyat?.page ?? null) : null;
+  const curHizb    = hizbMode        ? (resolvedActiveHizb ?? activeHizbCoran ?? getAyatHizb(activeAyat)) : null;
+  const curQuarter = quarterHizbMode ? (resolvedActiveQuarterHizb ?? activeQuarterHizbCoran ?? getAyatQuarterHizb(activeAyat)) : null;
+  const curJuz     = juzMode         ? (activeJuzCoran  ?? activeAyat?.juz ?? null) : null;
+  const displayPage    = curPage ?? activeAyat?.page ?? surahMeta?.page ?? null;
+  const displayHizb    = curHizb ?? getAyatHizb(activeAyat) ?? pageMeta?.hizb ?? surahMeta?.hizb ?? null;
+  const displayQuarter = curQuarter ?? getAyatQuarterHizb(activeAyat) ?? null;
+  const displayQuarterMeta = displayQuarter ? getQuarterFractionMeta(displayQuarter) : null;
+  const displayJuz     = curJuz  ?? activeAyat?.juz  ?? pageMeta?.juz  ?? surahMeta?.juz  ?? null;
 
   const displayPageAyats = displayPage != null ? ayats.filter(a => a.page === displayPage) : [];
   const displayHizbAyats = displayHizb != null
@@ -177,14 +206,22 @@ export function SurahHeader({
         ? currentHizbCrossAyats
         : ayats.filter(a => getAyatHizb(a) === displayHizb))
     : [];
+  const displayQuarterAyats = displayQuarter != null
+    ? (quarterHizbMode && currentQuarterCrossAyats?.length > 0
+        ? currentQuarterCrossAyats
+        : ayats.filter(a => getAyatQuarterHizb(a) === displayQuarter))
+    : [];
   const displayJuzAyats = displayJuz != null ? ayats.filter(a => a.juz === displayJuz) : [];
 
-  const displayPageMastery = computeDisplayedPartMastery(displayPageAyats, learnData, sn);
-  const displayHizbMastery = computeDisplayedPartMastery(displayHizbAyats, learnData, sn);
-  const displayJuzMastery  = computeDisplayedPartMastery(displayJuzAyats, learnData, sn);
+  const displayPageMastery    = computeDisplayedPartMastery(displayPageAyats, learnData, sn);
+  const displayHizbMastery    = computeDisplayedPartMastery(displayHizbAyats, learnData, sn);
+  const displayQuarterMastery = computeDisplayedPartMastery(displayQuarterAyats, learnData, sn);
+  const displayJuzMastery     = computeDisplayedPartMastery(displayJuzAyats, learnData, sn);
 
   const pageAyats = curPage
     ? displayPageAyats
+    : curQuarter
+    ? displayQuarterAyats
     : curHizb
     ? displayHizbAyats
     : curJuz
@@ -192,8 +229,11 @@ export function SurahHeader({
     : ayats;
 
   const displayedPartMastery = computeDisplayedPartMastery(pageAyats, learnData, sn);
+  const curQuarterMeta = curQuarter ? getQuarterFractionMeta(curQuarter) : null;
   const activePartModeLabel = curPage
     ? `P.${curPage}`
+    : curQuarter
+    ? (curQuarterMeta ? `${curQuarterMeta.shortLabel}` : `Q.${curQuarter}`)
     : curHizb
     ? `H.${curHizb}`
     : curJuz
@@ -201,6 +241,8 @@ export function SurahHeader({
     : null;
   const activePartFullTitle = curPage
     ? `LA PAGE ${curPage}`
+    : curQuarter
+    ? `LE QUART ${curQuarter}/240 (${curQuarterMeta?.shortLabel || ''})`
     : curHizb
     ? `LE HIZB ${curHizb}`
     : curJuz
@@ -235,8 +277,8 @@ export function SurahHeader({
 
   const anyTj = tjQalqala || tjMadd || tjIzhar || tjIdgham || tjIkhfa || tjIqlab || tjGhunnah || tjTajweedTone;
   const activeTjCount = [tjQalqala, tjMadd, tjIzhar, tjIdgham, tjIkhfa, tjIqlab, tjGhunnah, tjTajweedTone].filter(Boolean).length;
-  const anyOpt = announceNum || spellCheck || showParts || pageMode || hizbMode || juzMode || fullScreenSelectedAyat;
-  const activeOptCount = [announceNum, spellCheck, showParts, pageMode, hizbMode, juzMode, fullScreenSelectedAyat].filter(Boolean).length;
+  const anyOpt = announceNum || spellCheck || showParts || pageMode || hizbMode || quarterHizbMode || juzMode || fullScreenSelectedAyat;
+  const activeOptCount = [announceNum, spellCheck, showParts, pageMode, hizbMode, quarterHizbMode, juzMode, fullScreenSelectedAyat].filter(Boolean).length;
   const langLabel = translationLang ? (TRANS_LABELS[translationLang] || translationLang.toUpperCase()) : "OFF";
 
   // Prev / Next Surah
@@ -314,6 +356,7 @@ export function SurahHeader({
                       {selectedSurah.numberOfAyahs}v · {isMeccan ? 'Mecq' : 'Méd'}
                       {displayPage ? ` · P.${displayPage}${pageMode || displayPageMastery.masteryPct > 0 ? ` (${displayPageMastery.masteryPct}%)` : ''}` : ''}
                       {displayHizb ? ` · H.${displayHizb}${hizbMode || displayHizbMastery.masteryPct > 0 ? ` (${displayHizbMastery.masteryPct}%)` : ''}` : ''}
+                      {displayQuarterMeta ? ` · Q.${displayQuarter} (${displayQuarterMeta.symbol})${quarterHizbMode || displayQuarterMastery.masteryPct > 0 ? ` (${displayQuarterMastery.masteryPct}%)` : ''}` : ''}
                       {displayJuz ? ` · J.${displayJuz}${juzMode || displayJuzMastery.masteryPct > 0 ? ` (${displayJuzMastery.masteryPct}%)` : ''}` : ''}
                       {cachedSurahsMap?.[selectedSurah.number]?.isComplete ? ' · 💾 ✓' : cachedSurahsMap?.[selectedSurah.number]?.audioCount > 0 ? ` · 💾 ${cachedSurahsMap[selectedSurah.number].audioCount}/${cachedSurahsMap[selectedSurah.number].totalCount}` : ''}
                     </>
@@ -416,6 +459,22 @@ export function SurahHeader({
               </div>
               <div className="m-stat-tag">
                 HIZB {displayHizb != null ? `(${displayHizbMastery.learnedCount}/${displayHizbMastery.totalCount} v.)` : ''}
+              </div>
+            </div>
+            <div
+              className="m-info-stat-card quarter"
+              style={quarterHizbMode ? { borderColor: '#38bdf8', background: 'rgba(56,189,248,0.12)' } : undefined}
+            >
+              <div className="m-stat-num" style={{ color: '#38bdf8' }}>
+                {displayQuarterMeta ? `${displayQuarterMeta.shortLabel}` : '—'}
+                {displayQuarter != null && (
+                  <span style={{ fontSize: 10, marginLeft: 5, color: masteryColor(displayQuarterMastery.masteryPct) }}>
+                    · {displayQuarterMastery.masteryPct}%
+                  </span>
+                )}
+              </div>
+              <div className="m-stat-tag">
+                QUART {displayQuarter != null ? `#${displayQuarter} (${displayQuarterMastery.learnedCount}/${displayQuarterMastery.totalCount} v.)` : 'DE HIZB'}
               </div>
             </div>
             <div
@@ -600,6 +659,8 @@ export function SurahHeader({
                 <span className="m-act-label">
                   {pageMode
                     ? `PAGE · ${displayPageMastery.masteryPct}%`
+                    : quarterHizbMode
+                    ? `QUART · ${displayQuarterMastery.masteryPct}%`
                     : hizbMode
                     ? `HIZB · ${displayHizbMastery.masteryPct}%`
                     : juzMode
@@ -609,7 +670,7 @@ export function SurahHeader({
                 {activeOptCount > 0 && <span className="m-act-badge">{activeOptCount}</span>}
               </button>
 
-              {/* 5. Filter Action Button (Custom Ayat Range & Mastery Level) */}
+              {/* 5. Filter Action Button (Custom Ayat Range, Mastery Level & Study Recency) */}
               <button
                 onClick={() => {
                   setShowMasteryFilter(v => !v);
@@ -621,8 +682,8 @@ export function SurahHeader({
                 className={`m-action-btn mastery-filter ${isAnyFilterActive || showMasteryFilter ? 'active' : ''}`}
                 title={
                   isAnyFilterActive
-                    ? `Filtre actif : ${ayatFilterActive ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}` : ''}${ayatFilterActive && masteryFilterActive ? ' · ' : ''}${masteryFilterActive ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%` : ''} (${matchingAyatsCount} versets)`
-                    : "Filtrer les versets par plage de versets et/ou niveau de maîtrise"
+                    ? `Filtre actif : ${ayatFilterActive ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}` : ''}${ayatFilterActive && masteryFilterActive ? ' · ' : ''}${masteryFilterActive ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%` : ''}${studyRecencyFilter !== 'all' ? ` · Ancienneté: ${studyRecencyFilter}` : ''} (${matchingAyatsCount} versets)`
+                    : "Filtrer les versets par plage, maîtrise ou ancienneté d'étude"
                 }
                 style={isAnyFilterActive ? { borderColor: 'var(--teal)', color: 'var(--teal2)', background: 'rgba(62,184,160,0.18)' } : undefined}
               >
@@ -634,6 +695,8 @@ export function SurahHeader({
                     ? `v. ${currentAyatRange[0]}–${currentAyatRange[1]}`
                     : masteryFilterActive
                     ? `${masteryFilterRange[0]}–${masteryFilterRange[1]}%`
+                    : studyRecencyFilter !== 'all'
+                    ? `ÉTUDE: ${STUDY_RECENCY_FILTERS.find(f => f.id === studyRecencyFilter)?.shortLabel || studyRecencyFilter}`
                     : "FILTRER"}
                 </span>
                 {isAnyFilterActive && (
@@ -965,6 +1028,66 @@ export function SurahHeader({
             </div>
           </div>
 
+          {/* ── Section 3: Study Recency Filter (Code Couleurs) ── */}
+          <div style={{
+            background: 'var(--surface3)',
+            borderRadius: 8,
+            border: '1px solid var(--border2)',
+            padding: '10px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11 }}>🕒</span>
+                <span style={{ fontSize: 8.5, fontFamily: "'Cinzel',serif", letterSpacing: 1, color: 'var(--gold)', fontWeight: 600 }}>
+                  ANCIENNETÉ D'ÉTUDE : {STUDY_RECENCY_FILTERS.find(f => f.id === studyRecencyFilter)?.label.toUpperCase() || 'TOUS'}
+                </span>
+              </div>
+              {studyRecencyFilter !== 'all' && (
+                <button
+                  onClick={() => dispatch(uiActions.resetStudyRecencyFilter())}
+                  style={{
+                    fontSize: 7.5, letterSpacing: 0.5, padding: '2px 6px', borderRadius: 4,
+                    background: 'transparent', border: '1px solid var(--border2)', color: 'var(--text3)', cursor: 'pointer'
+                  }}
+                >
+                  ✕ Tous
+                </button>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+              {STUDY_RECENCY_FILTERS.map((f) => {
+                const isSelected = studyRecencyFilter === f.id;
+                const tierObj = STUDY_RECENCY_TIER_LIST.find(t => t.id === f.id);
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => dispatch(uiActions.setStudyRecencyFilter(f.id))}
+                    style={{
+                      fontSize: 8,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      border: isSelected ? `1px solid ${tierObj?.hex || 'var(--teal)'}` : '1px solid var(--border2)',
+                      background: isSelected ? (tierObj?.rgbaBg || 'rgba(62,184,160,0.22)') : 'rgba(255,255,255,0.02)',
+                      color: isSelected ? (tierObj?.textColor || 'var(--teal2)') : 'var(--text2)',
+                      cursor: 'pointer',
+                      fontWeight: isSelected ? 700 : 400,
+                    }}
+                  >
+                    {tierObj && <span className="study-recency-dot" style={{ background: tierObj.hex }} />}
+                    <span>{f.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Status summary */}
           <div style={{
             display: 'flex',
@@ -978,7 +1101,7 @@ export function SurahHeader({
           }}>
             <span>
               {isAnyFilterActive ? (
-                <>Filtre actif : {ayatFilterActive ? <strong style={{ color: 'var(--teal2)' }}>Versets {currentAyatRange[0]} à {currentAyatRange[1]}</strong> : ''}{ayatFilterActive && masteryFilterActive ? ' · ' : ''}{masteryFilterActive ? <strong style={{ color: 'var(--teal2)' }}>Maîtrise {masteryFilterRange[0]}% à {masteryFilterRange[1]}%</strong> : ''} · <strong style={{ color: matchingAyatsCount > 0 ? 'var(--gold)' : '#ff7e7e' }}>{matchingAyatsCount} verset(s)</strong> affiché(s) sur {ayats?.length || totalAyahsInSurah}</>
+                <>Filtre actif : {ayatFilterActive ? <strong style={{ color: 'var(--teal2)' }}>Versets {currentAyatRange[0]} à {currentAyatRange[1]}</strong> : ''}{ayatFilterActive && masteryFilterActive ? ' · ' : ''}{masteryFilterActive ? <strong style={{ color: 'var(--teal2)' }}>Maîtrise {masteryFilterRange[0]}% à {masteryFilterRange[1]}%</strong> : ''}{studyRecencyFilter !== 'all' ? <strong style={{ color: 'var(--teal2)' }}> · {STUDY_RECENCY_FILTERS.find(f => f.id === studyRecencyFilter)?.label}</strong> : ''} · <strong style={{ color: matchingAyatsCount > 0 ? 'var(--gold)' : '#ff7e7e' }}>{matchingAyatsCount} verset(s)</strong> affiché(s) sur {ayats?.length || totalAyahsInSurah}</>
               ) : (
                 <>Aucun filtre · Tous les versets sont affichés ({ayats?.length || totalAyahsInSurah} versets)</>
               )}
@@ -1401,6 +1524,7 @@ export function SurahHeader({
                 setPageMode(next);
                 setactivePageCoran(null);
                 if (next && hizbMode) { setHizbMode(false); setActiveHizbCoran(null); }
+                if (next && quarterHizbMode) { setQuarterHizbMode(false); setActiveQuarterHizbCoran(null); }
                 if (next && juzMode) { setJuzMode(false); setActiveJuzCoran(null); }
               }}
               className={`m-option-card ${pageMode ? 'active' : ''}`}
@@ -1419,6 +1543,7 @@ export function SurahHeader({
                 setHizbMode(next);
                 setActiveHizbCoran(null);
                 if (next && pageMode) { setPageMode(false); setactivePageCoran(null); }
+                if (next && quarterHizbMode) { setQuarterHizbMode(false); setActiveQuarterHizbCoran(null); }
                 if (next && juzMode) { setJuzMode(false); setActiveJuzCoran(null); }
               }}
               className={`m-option-card ${hizbMode ? 'active' : ''}`}
@@ -1426,9 +1551,28 @@ export function SurahHeader({
               <span className="m-opt-card-icon">۞</span>
               <div className="m-opt-card-text">
                 <span className="m-opt-card-title">MODE HIZB</span>
-                <span className="m-opt-card-desc">Afficher et naviguer par Hizb (1 à 60 avec pages Mushaf)</span>
+                <span className="m-opt-card-desc">Afficher et naviguer par Hizb (1 à 60)</span>
               </div>
               <span className="m-opt-indicator">{hizbMode ? 'ON' : 'OFF'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const next = !quarterHizbMode;
+                setQuarterHizbMode(next);
+                setActiveQuarterHizbCoran(null);
+                if (next && pageMode) { setPageMode(false); setactivePageCoran(null); }
+                if (next && hizbMode) { setHizbMode(false); setActiveHizbCoran(null); }
+                if (next && juzMode) { setJuzMode(false); setActiveJuzCoran(null); }
+              }}
+              className={`m-option-card ${quarterHizbMode ? 'active' : ''}`}
+            >
+              <span className="m-opt-card-icon">◔</span>
+              <div className="m-opt-card-text">
+                <span className="m-opt-card-title">QUART DE HIZB (¼)</span>
+                <span className="m-opt-card-desc">Naviguer par quart de Hizb (1 à 240)</span>
+              </div>
+              <span className="m-opt-indicator">{quarterHizbMode ? 'ON' : 'OFF'}</span>
             </button>
 
             <button
@@ -1438,6 +1582,7 @@ export function SurahHeader({
                 setActiveJuzCoran(null);
                 if (next && pageMode) { setPageMode(false); setactivePageCoran(null); }
                 if (next && hizbMode) { setHizbMode(false); setActiveHizbCoran(null); }
+                if (next && quarterHizbMode) { setQuarterHizbMode(false); setActiveQuarterHizbCoran(null); }
               }}
               className={`m-option-card ${juzMode ? 'active' : ''}`}
             >
@@ -1449,15 +1594,31 @@ export function SurahHeader({
               <span className="m-opt-indicator">{juzMode ? 'ON' : 'OFF'}</span>
             </button>
 
-            {(pageMode || hizbMode || juzMode) && (
+            <button
+              onClick={() => dispatch(uiActions.toggleShowStudyRecency())}
+              className={`m-option-card ${showStudyRecency ? 'active' : ''}`}
+            >
+              <span className="m-opt-card-icon">🕒</span>
+              <div className="m-opt-card-text">
+                <span className="m-opt-card-title">ANCIENNETÉ D'ÉTUDE</span>
+                <span className="m-opt-card-desc">Code couleurs par délai depuis révision</span>
+              </div>
+              <span className="m-opt-indicator">{showStudyRecency ? 'ON' : 'OFF'}</span>
+            </button>
+
+            {(pageMode || hizbMode || quarterHizbMode || juzMode) && (
               <button
                 onClick={() => setAutoPageFollow(v => !v)}
                 className={`m-option-card ${autoPageFollow ? 'active' : ''}`}
               >
                 <span className="m-opt-card-icon">⇄</span>
                 <div className="m-opt-card-text">
-                  <span className="m-opt-card-title">{juzMode ? 'SUIVI AUTO DE JUZ' : hizbMode ? 'SUIVI AUTO DE HIZB' : 'SUIVI AUTO DE PAGE'}</span>
-                  <span className="m-opt-card-desc">{juzMode ? 'Changer de Juz automatiquement' : hizbMode ? 'Changer de Hizb automatiquement' : 'Tourner la page automatiquement'}</span>
+                  <span className="m-opt-card-title">
+                    {juzMode ? 'SUIVI AUTO DE JUZ' : quarterHizbMode ? 'SUIVI AUTO DE QUART' : hizbMode ? 'SUIVI AUTO DE HIZB' : 'SUIVI AUTO DE PAGE'}
+                  </span>
+                  <span className="m-opt-card-desc">
+                    {juzMode ? 'Changer de Juz automatiquement' : quarterHizbMode ? 'Changer de Quart automatiquement' : hizbMode ? 'Changer de Hizb automatiquement' : 'Tourner la page automatiquement'}
+                  </span>
                 </div>
                 <span className="m-opt-indicator">{autoPageFollow ? 'ON' : 'OFF'}</span>
               </button>
@@ -1563,6 +1724,8 @@ export function SurahHeader({
           setPageMode={setPageMode}
           hizbMode={hizbMode}
           setHizbMode={setHizbMode}
+          quarterHizbMode={quarterHizbMode}
+          setQuarterHizbMode={setQuarterHizbMode}
           juzMode={juzMode}
           setJuzMode={setJuzMode}
           fullScreenSelectedAyat={fullScreenSelectedAyat}

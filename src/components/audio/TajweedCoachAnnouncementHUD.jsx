@@ -60,7 +60,6 @@ export function TajweedCoachAnnouncementHUD({
           boxShadow: `0 12px 36px rgba(0, 0, 0, 0.45), 0 0 20px ${color}44`,
           padding: "16px 20px",
           color: "var(--text, #f8fafc)",
-          backdropFilter: "blur(12px)",
           display: "flex",
           flexDirection: "column",
           gap: 12

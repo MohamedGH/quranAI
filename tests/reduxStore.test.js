@@ -91,6 +91,17 @@ describe("Redux Store & Production Slice Integration", () => {
 
       store.dispatch(quranActions.setSelectedSurah(dummySurahs[0]));
       expect(sel.selectedSurah(store.getState())).toEqual(dummySurahs[0]);
+
+      store.dispatch(quranActions.setAyats([{ number: 1, numberInSurah: 1, surahNumber: 1 }]));
+      expect(sel.ayats(store.getState())).toHaveLength(1);
+
+      // Re-selecting the same surah preserves ayats
+      store.dispatch(quranActions.setSelectedSurah(dummySurahs[0]));
+      expect(sel.ayats(store.getState())).toHaveLength(1);
+
+      // Switching to a different surah clears stale ayats immediately
+      store.dispatch(quranActions.setSelectedSurah(dummySurahs[1]));
+      expect(sel.ayats(store.getState())).toEqual([]);
     });
 
     it("tracks search queries and open ayat index", () => {

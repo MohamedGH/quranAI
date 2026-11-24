@@ -24,7 +24,7 @@ export const OfflineIndicator = () => {
         gap: 10,
         padding: "7px 14px",
         borderRadius: 24,
-        background: "rgba(14, 20, 32, 0.94)",
+        background: "rgba(14, 20, 32, 0.97)",
         border: downloadTask?.active ? "1px solid var(--teal)" : "1px solid #ffd166",
         color: downloadTask?.active ? "var(--teal2)" : "#ffd166",
         boxShadow: "0 8px 24px rgba(0,0,0,0.65)",
@@ -32,7 +32,6 @@ export const OfflineIndicator = () => {
         fontSize: 10,
         fontWeight: 700,
         letterSpacing: 0.8,
-        backdropFilter: "blur(8px)",
       }}
       role="status"
       aria-live="polite"

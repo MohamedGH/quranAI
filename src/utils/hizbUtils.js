@@ -295,6 +295,16 @@ export const enrichAyahWithSurahMeta = (ayah, surahNum, primarySurahNum = null) 
  * Pure functional builder that constructs the complete ordered list of verses for `hizbNum`
  * across all Surahs in that Hizb, given `surahAyatsMap` ({ [surahNum]: ayahs[] }).
  */
+export const ayahsBelongToSurah = (ayahs, surahNum) => {
+  const target = Number(surahNum);
+  if (!Number.isFinite(target) || !Array.isArray(ayahs) || ayahs.length === 0) return false;
+  return ayahs.every((a) => {
+    if (!a) return false;
+    const sn = a.surahNumber ?? a.surah?.number;
+    return sn == null || Number(sn) === target;
+  });
+};
+
 export const buildCrossSurahHizbAyats = (
   hizbNum,
   surahAyatsMap = {},
@@ -303,17 +313,26 @@ export const buildCrossSurahHizbAyats = (
   const segments = getHizbSegments(hizbNum);
   if (segments.length === 0) return [];
   const multiSurah = segments.length > 1;
+  const seenComposite = new Set();
 
   return segments.flatMap((seg) => {
     const rawAyahs = surahAyatsMap?.[seg.surahNum];
     if (!Array.isArray(rawAyahs) || rawAyahs.length === 0) return [];
 
-    const filtered = rawAyahs.filter(
-      (a) =>
-        a &&
-        a.numberInSurah >= seg.fromAyah &&
-        a.numberInSurah <= seg.toAyah
-    );
+    const filtered = rawAyahs.filter((a) => {
+      if (!a) return false;
+      const itemSurah = a.surahNumber ?? a.surah?.number;
+      if (itemSurah != null && Number(itemSurah) !== seg.surahNum) {
+        return false;
+      }
+      if (a.numberInSurah < seg.fromAyah || a.numberInSurah > seg.toAyah) {
+        return false;
+      }
+      const compositeKey = `${seg.surahNum}:${a.numberInSurah}`;
+      if (seenComposite.has(compositeKey)) return false;
+      seenComposite.add(compositeKey);
+      return true;
+    });
 
     return filtered.map((a, idx) => ({
       ...enrichAyahWithSurahMeta(a, seg.surahNum, primarySurahNum),
@@ -376,7 +395,7 @@ export const fetchCrossSurahHizbAyats = async (
 
   const baseMap = {
     ...existingMap,
-    ...(primarySurahNum && Array.isArray(primaryAyats) && primaryAyats.length > 0
+    ...(primarySurahNum && ayahsBelongToSurah(primaryAyats, primarySurahNum)
       ? { [Number(primarySurahNum)]: primaryAyats }
       : {}),
   };

@@ -13,6 +13,7 @@ import {
   resolveInitialQuranReadingTier,
   resolveStepDownQuranTier,
 } from "./utils/uxProfileManager.js";
+import { resolveAyatStudyInfo } from "./utils/studyRecency.js";
 
 // ─── Helpers localStorage ────────────────────────────────────────────────────
 const load = (key, fallback) => safeGetItem(key, fallback);
@@ -61,10 +62,14 @@ const uiSlice = createSlice({
     ayatFontSize:        load("quran_ayatFontSize", 26),
     pageMode:            load("quran_page_mode", false) ?? false,
     hizbMode:            load("quran_hizb_mode", false) ?? false,
+    quarterHizbMode:     load("quran_quarter_hizb_mode", false) ?? false,
     juzMode:             load("quran_juz_mode", false) ?? false,
     activePageCoran:     null,
     activeHizbCoran:     null,
+    activeQuarterHizbCoran: null,
     activeJuzCoran:      null,
+    showStudyRecency:    load("quran_show_study_recency", true) !== false,
+    studyRecencyFilter:  load("quran_study_recency_filter", "all") || "all",
     masteryFilterRange:  load("quran_masteryFilterRange", [0, 100]),
     masteryFilterActive: load("quran_masteryFilterActive", false),
     masteryFilterPreset: load("quran_masteryFilterPreset", "all"),
@@ -159,10 +164,13 @@ const uiSlice = createSlice({
       save("quran_page_mode", next);
       if (next) {
         s.hizbMode = false;
+        s.quarterHizbMode = false;
         s.juzMode = false;
         s.activeHizbCoran = null;
+        s.activeQuarterHizbCoran = null;
         s.activeJuzCoran = null;
         save("quran_hizb_mode", false);
+        save("quran_quarter_hizb_mode", false);
         save("quran_juz_mode", false);
       }
     },
@@ -172,10 +180,29 @@ const uiSlice = createSlice({
       save("quran_hizb_mode", next);
       if (next) {
         s.pageMode = false;
+        s.quarterHizbMode = false;
         s.juzMode = false;
         s.activePageCoran = null;
+        s.activeQuarterHizbCoran = null;
         s.activeJuzCoran = null;
         save("quran_page_mode", false);
+        save("quran_quarter_hizb_mode", false);
+        save("quran_juz_mode", false);
+      }
+    },
+    setQuarterHizbMode: (s, a) => {
+      const next = !!a.payload;
+      s.quarterHizbMode = next;
+      save("quran_quarter_hizb_mode", next);
+      if (next) {
+        s.pageMode = false;
+        s.hizbMode = false;
+        s.juzMode = false;
+        s.activePageCoran = null;
+        s.activeHizbCoran = null;
+        s.activeJuzCoran = null;
+        save("quran_page_mode", false);
+        save("quran_hizb_mode", false);
         save("quran_juz_mode", false);
       }
     },
@@ -186,15 +213,37 @@ const uiSlice = createSlice({
       if (next) {
         s.pageMode = false;
         s.hizbMode = false;
+        s.quarterHizbMode = false;
         s.activePageCoran = null;
         s.activeHizbCoran = null;
+        s.activeQuarterHizbCoran = null;
         save("quran_page_mode", false);
         save("quran_hizb_mode", false);
+        save("quran_quarter_hizb_mode", false);
       }
     },
-    setActivePageCoran: (s, a) => { s.activePageCoran = a.payload ?? null; },
-    setActiveHizbCoran: (s, a) => { s.activeHizbCoran = a.payload ?? null; },
-    setActiveJuzCoran:  (s, a) => { s.activeJuzCoran  = a.payload ?? null; },
+    setActivePageCoran:        (s, a) => { s.activePageCoran        = a.payload ?? null; },
+    setActiveHizbCoran:        (s, a) => { s.activeHizbCoran        = a.payload ?? null; },
+    setActiveQuarterHizbCoran: (s, a) => { s.activeQuarterHizbCoran = a.payload ?? null; },
+    setActiveJuzCoran:         (s, a) => { s.activeJuzCoran         = a.payload ?? null; },
+    toggleShowStudyRecency: (s) => {
+      s.showStudyRecency = s.showStudyRecency === false;
+      save("quran_show_study_recency", s.showStudyRecency);
+    },
+    setShowStudyRecency: (s, a) => {
+      s.showStudyRecency = Boolean(a.payload);
+      save("quran_show_study_recency", s.showStudyRecency);
+    },
+    setStudyRecencyFilter: (s, a) => {
+      const valid = ["all", "toReview", "fresh", "recent", "refresh", "aging", "overdue", "never"];
+      const next = valid.includes(a.payload) ? a.payload : "all";
+      s.studyRecencyFilter = next;
+      save("quran_study_recency_filter", next);
+    },
+    resetStudyRecencyFilter: (s) => {
+      s.studyRecencyFilter = "all";
+      save("quran_study_recency_filter", "all");
+    },
     setMasteryFilterRange: (s, a) => {
       const [rawMin, rawMax] = Array.isArray(a.payload) ? a.payload : [0, 100];
       const min = Math.max(0, Math.min(100, Number(rawMin) || 0));
@@ -265,9 +314,11 @@ const uiSlice = createSlice({
       s.masteryFilterPreset = "all";
       s.ayatFilterRange = null;
       s.ayatFilterActive = false;
+      s.studyRecencyFilter = "all";
       save("quran_masteryFilterRange", [0, 100]);
       save("quran_masteryFilterActive", false);
       save("quran_masteryFilterPreset", "all");
+      save("quran_study_recency_filter", "all");
     },
     setDashboardRevisionGroupBy: (s, a) => {
       s.dashboardRevisionGroupBy = a.payload;
@@ -579,7 +630,17 @@ const quranSlice = createSlice({
   },
   reducers: {
     setSurahs:        (s, a) => { s.surahs        = a.payload; s.loadingSurahs = false; },
-    setSelectedSurah: (s, a) => { s.selectedSurah = a.payload; s.openAyatNum  = null; s.openCrossAyatKey = null; s.submenuMode = "lecture"; },
+    setSelectedSurah: (s, a) => {
+      const prevNum = s.selectedSurah?.number ?? null;
+      const nextNum = a.payload?.number ?? null;
+      s.selectedSurah = a.payload;
+      s.openAyatNum = null;
+      s.openCrossAyatKey = null;
+      s.submenuMode = "lecture";
+      if (prevNum !== nextNum) {
+        s.ayats = [];
+      }
+    },
     setAyats:         (s, a) => { s.ayats         = a.payload; },
     setLoadingAyats:  (s, a) => { s.loadingAyats  = a.payload; },
     setSearch:        (s, a) => { s.search        = a.payload; },
@@ -803,6 +864,32 @@ const learnSlice = createSlice({
       const firstRevisedAt = prev.firstRevisedAt || (justToRevise ? now : (nextVal.toRevise ? now : undefined));
       const lastRevisedAt = justToRevise ? now : (nextVal.lastRevisedAt || prev.lastRevisedAt || (nextVal.toRevise ? now : undefined));
 
+      // Track recitation, writing & memorization attempts increases
+      const recitIncreased = (nextVal.recitAttempts?.length || 0) > (prev.recitAttempts?.length || 0);
+      const writeIncreased = (nextVal.writingAttempts?.length || 0) > (prev.writingAttempts?.length || 0);
+      const memIncreased = (nextVal.memScores?.length || 0) > (prev.memScores?.length || 0);
+      const studyActivityOccurred =
+        readCountIncreased ||
+        justLearned ||
+        partsIncreased ||
+        wordsIncreased ||
+        justToRevise ||
+        recitIncreased ||
+        writeIncreased ||
+        memIncreased;
+
+      const resolvedPrevStudy = resolveAyatStudyInfo({
+        ...nextVal,
+        lastReadAt,
+        lastLearnedAt,
+        lastCutAt,
+        lastWordLearnedAt,
+        lastRevisedAt,
+      }).lastStudiedAt;
+      const lastStudiedAt = studyActivityOccurred
+        ? now
+        : (nextVal.lastStudiedAt || prev.lastStudiedAt || resolvedPrevStudy || undefined);
+
       const value = {
         ...nextVal,
         updatedAt: now,
@@ -819,6 +906,7 @@ const learnSlice = createSlice({
         lastWordLearnedAt,
         firstRevisedAt,
         lastRevisedAt,
+        lastStudiedAt,
       };
       s.data = { ...s.data, [a.payload.key]: value };
       save("quran_learnData", s.data);
@@ -1262,18 +1350,22 @@ const rawSel = {
   showParts:       (s) => s.ui.showParts,
   fullScreenSelectedAyat: (s) => s.ui.fullScreenSelectedAyat,
   ayatFontSize:    (s) => s.ui.ayatFontSize || 26,
-  pageMode:        (s) => !!s.ui.pageMode,
-  hizbMode:        (s) => !!s.ui.hizbMode,
-  juzMode:         (s) => !!s.ui.juzMode,
-  activePageCoran: (s) => s.ui.activePageCoran,
-  activeHizbCoran: (s) => s.ui.activeHizbCoran,
-  activeJuzCoran:  (s) => s.ui.activeJuzCoran,
-  masteryFilterRange:  (s) => s.ui.masteryFilterRange || [0, 100],
-  masteryFilterActive: (s) => !!s.ui.masteryFilterActive,
-  masteryFilterPreset: (s) => s.ui.masteryFilterPreset || "all",
-  ayatFilterRange:     (s) => s.ui.ayatFilterRange || null,
-  ayatFilterActive:    (s) => !!s.ui.ayatFilterActive,
-  isAnyFilterActive:   (s) => !!s.ui.masteryFilterActive || !!s.ui.ayatFilterActive,
+  pageMode:              (s) => !!s.ui.pageMode,
+  hizbMode:              (s) => !!s.ui.hizbMode,
+  quarterHizbMode:       (s) => !!s.ui.quarterHizbMode,
+  juzMode:               (s) => !!s.ui.juzMode,
+  activePageCoran:       (s) => s.ui.activePageCoran,
+  activeHizbCoran:       (s) => s.ui.activeHizbCoran,
+  activeQuarterHizbCoran:(s) => s.ui.activeQuarterHizbCoran,
+  activeJuzCoran:        (s) => s.ui.activeJuzCoran,
+  showStudyRecency:      (s) => s.ui.showStudyRecency !== false,
+  studyRecencyFilter:    (s) => s.ui.studyRecencyFilter || "all",
+  masteryFilterRange:    (s) => s.ui.masteryFilterRange || [0, 100],
+  masteryFilterActive:   (s) => !!s.ui.masteryFilterActive,
+  masteryFilterPreset:   (s) => s.ui.masteryFilterPreset || "all",
+  ayatFilterRange:       (s) => s.ui.ayatFilterRange || null,
+  ayatFilterActive:      (s) => !!s.ui.ayatFilterActive,
+  isAnyFilterActive:     (s) => !!s.ui.masteryFilterActive || !!s.ui.ayatFilterActive || ((s.ui.studyRecencyFilter || "all") !== "all"),
   dashboardRevisionGroupBy: (s) => s.ui.dashboardRevisionGroupBy || "surah",
   dashboardRevisionCollapsedGroups: (s) => s.ui.dashboardRevisionCollapsedGroups || {},
   uxMode:              (s) => s.ui.uxMode || "standard",

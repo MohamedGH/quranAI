@@ -2,9 +2,9 @@
 import React from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, fireEvent, cleanup, screen } from "@testing-library/react";
-import { Provider } from "react-redux";
-import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
-import { store, sel, uiActions } from "../src/store.js";
+import { Provider, useSelector } from "react-redux";
+import { MemoryRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { store, sel, uiActions, quranActions } from "../src/store.js";
 import {
   QURAN_READING_TIERS,
   QURAN_PRIORITY_ORDER_SIMPLIFIED,
@@ -20,6 +20,10 @@ import {
   resolveExitToNormalModeState,
   resolveCloseFullScreenState,
   resolveBook3DStepDownNavigation,
+  resolveMenuSurahSelection,
+  resolveFullScreenAyatSelection,
+  evaluateUrlToReduxSync,
+  resolveReduxToUrlSync,
 } from "../src/utils/fullScreenNavigation.js";
 import * as reciterAudio from "../src/utils/reciterAudio.js";
 import { ChildUnlockQuranCelebrationModal } from "../src/components/common/ChildUnlockQuranCelebrationModal.jsx";
@@ -438,4 +442,290 @@ describe("3-Tier Priority Reading Cascade (Coran 3D -> Fullscreen -> Liste Ayat)
       });
     });
   });
+
+  describe("Bug 1 & Bug 2 Regression: Menu Sourates 3D -> Fullscreen & Loop-Free Verse Stepping", () => {
+    it("resolveMenuSurahSelection switches cleanly from 3D book to Fullscreen for all UX modes", () => {
+      const baqarah = { number: 2, englishName: "Al-Baqara", numberOfAyahs: 286 };
+
+      ["child", "beginner", "standard", "expert"].forEach((mode) => {
+        const res = resolveMenuSurahSelection({
+          surah: baqarah,
+          isBookRoute: true,
+          isFullscreenActive: false,
+          uxMode: mode,
+          lastAyatBySurah: {},
+          currentRouteParams: { uxMode: mode },
+        });
+        expect(res.surahNum).toBe(2);
+        expect(res.targetAyat).toBe(1);
+        expect(res.shouldEnterFullscreen).toBe(true);
+        expect(res.nextTier).toBe("fullscreen");
+        expect(res.targetPath).toBe("/quran/2/1");
+        expect(res.targetRoute).toBe(`/quran/2/1?ux=${mode}&view=fullscreen`);
+      });
+
+      const resumed = resolveMenuSurahSelection({
+        surah: baqarah,
+        isBookRoute: true,
+        uxMode: "child",
+        lastAyatBySurah: { 2: 255 },
+      });
+      expect(resumed.targetAyat).toBe(255);
+      expect(resumed.targetRoute).toBe("/quran/2/255?view=fullscreen");
+
+      const listModeClick = resolveMenuSurahSelection({
+        surah: baqarah,
+        isBookRoute: false,
+        isFullscreenActive: false,
+        uxMode: "standard",
+        lastAyatBySurah: { 2: 10 },
+      });
+      expect(listModeClick.shouldEnterFullscreen).toBe(false);
+      expect(listModeClick.nextTier).toBe("list");
+      expect(listModeClick.targetRoute).toBe("/quran/2");
+    });
+
+    it("resolveFullScreenAyatSelection builds canonical clamped routes preserving view=fullscreen", () => {
+      const surah = { number: 2, numberOfAyahs: 286 };
+      const next = resolveFullScreenAyatSelection({
+        surah,
+        nextAyatNum: 2,
+        totalAyats: 286,
+        currentRouteParams: { view: "fullscreen", uxMode: "child" },
+        uxMode: "child",
+        isFullscreenActive: true,
+      });
+      expect(next.ayatNum).toBe(2);
+      expect(next.targetPath).toBe("/quran/2/2");
+      expect(next.targetRoute).toBe("/quran/2/2?ux=child&view=fullscreen");
+
+      const clampedHigh = resolveFullScreenAyatSelection({
+        surah: { number: 1, numberOfAyahs: 7 },
+        nextAyatNum: 99,
+        totalAyats: 7,
+        currentRouteParams: { view: "fullscreen" },
+        uxMode: "beginner",
+      });
+      expect(clampedHigh.ayatNum).toBe(7);
+      expect(clampedHigh.targetPath).toBe("/quran/1/7");
+    });
+
+    it("evaluateUrlToReduxSync & resolveReduxToUrlSync prevent ping-pong loops and /quran/1 vs /quran/10 prefix bugs", () => {
+      const pending = { path: "/quran/2/3", expiresAt: 5000 };
+
+      // Router still lagging on /quran/2/2 -> skip URL->Redux so it does not overwrite openAyatNum=3
+      expect(
+        evaluateUrlToReduxSync({ locationPath: "/quran/2/2", pendingNavTarget: pending, now: 1000 })
+      ).toEqual({ skip: true, clearPending: false });
+
+      // Router caught up to /quran/2/3 -> skip echo and clear pending target
+      expect(
+        evaluateUrlToReduxSync({ locationPath: "/quran/2/3", pendingNavTarget: pending, now: 1050 })
+      ).toEqual({ skip: true, clearPending: true });
+
+      // External browser back navigation (no pending target) -> allow sync
+      expect(
+        evaluateUrlToReduxSync({ locationPath: "/quran/2/1", pendingNavTarget: null, now: 2000 })
+      ).toEqual({ skip: false, clearPending: false });
+
+      // Prefix check: selectedSurah=1 vs urlSurahNum=10 must still sync!
+      const fixPrefix = resolveReduxToUrlSync({
+        activePage: "quran",
+        isBookRoute: false,
+        selectedSurah: { number: 1, numberOfAyahs: 7 },
+        openAyatNum: 2,
+        urlSurahNum: 10,
+        urlAyatNum: 2,
+        currentRouteParams: { view: "fullscreen" },
+      });
+      expect(fixPrefix.targetPath).toBe("/quran/1/2");
+      expect(fixPrefix.targetRoute).toBe("/quran/1/2?view=fullscreen");
+
+      // Exact match -> returns null (no redundant navigate)
+      expect(
+        resolveReduxToUrlSync({
+          activePage: "quran",
+          isBookRoute: false,
+          selectedSurah: { number: 1, numberOfAyahs: 7 },
+          openAyatNum: 2,
+          urlSurahNum: 1,
+          urlAyatNum: 2,
+          currentRouteParams: { view: "fullscreen" },
+        })
+      ).toBeNull();
+    });
+
+    it("Integration: child in 3D -> Menu Sourate selects sourate -> opens Fullscreen -> steps verses 1->2->3->5->4 with zero loop", () => {
+      if (typeof Element !== "undefined" && !Element.prototype.scrollTo) {
+        Element.prototype.scrollTo = () => {};
+      }
+      store.dispatch(uiActions.setUxMode("child"));
+      store.dispatch(uiActions.validateAllLetters());
+      store.dispatch(quranActions.setLastAyatForSurah({ surahNum: 2, ayatNum: 1 }));
+
+      const surah2 = { number: 2, name: "البقرة", englishName: "Al-Baqara", numberOfAyahs: 6 };
+      const ayats2 = [1, 2, 3, 4, 5, 6].map((n) => ({
+        number: 7 + n,
+        numberInSurah: n,
+        text: `آية ${n}`,
+        page: 2,
+      }));
+
+      const ayatChangeLog = [];
+
+      function Harness() {
+        const location = useLocation();
+        const navigate = useNavigate();
+        const parsedRoute = parseQuranRoute(location.pathname, location.search);
+        const isBookRoute = Boolean(parsedRoute.isBook3D || parsedRoute.isBook2D);
+        const urlSurahNum = isBookRoute ? NaN : (parsedRoute.surahNum ?? NaN);
+        const urlAyatNum = isBookRoute ? NaN : (parsedRoute.ayatNum ?? NaN);
+        const pendingNavRef = React.useRef(null);
+
+        const openAyatNum = useSelector(sel.openAyatNum);
+        const selectedSurah = useSelector(sel.selectedSurah);
+        const fullScreenSelectedAyat = useSelector(sel.fullScreenSelectedAyat);
+        const uxMode = useSelector(sel.uxMode);
+        const quranReadingTier = useSelector(sel.quranReadingTier);
+        const lastAyatBySurah = useSelector(sel.lastAyatBySurah);
+
+        React.useEffect(() => {
+          if (openAyatNum != null) ayatChangeLog.push(openAyatNum);
+        }, [openAyatNum]);
+
+        // Mirror App.jsx URL <-> Redux sync
+        React.useEffect(() => {
+          const guard = evaluateUrlToReduxSync({
+            locationPath: location.pathname,
+            pendingNavTarget: pendingNavRef.current,
+          });
+          if (guard.clearPending) pendingNavRef.current = null;
+          if (guard.skip) return;
+          if (isBookRoute || Number.isNaN(urlSurahNum)) return;
+          if (!Number.isNaN(urlAyatNum) && urlAyatNum !== openAyatNum) {
+            store.dispatch(quranActions.setOpenAyatNum(urlAyatNum));
+          }
+        }, [location.pathname, isBookRoute, urlSurahNum, urlAyatNum, openAyatNum]);
+
+        React.useEffect(() => {
+          const syncTarget = resolveReduxToUrlSync({
+            activePage: "quran",
+            isBookRoute,
+            selectedSurah,
+            openAyatNum,
+            uxMode,
+            quranReadingTier,
+            isQuranUnlocked: true,
+            allow3D: true,
+            urlSurahNum,
+            urlAyatNum,
+            pendingNavTarget: pendingNavRef.current,
+            currentRouteParams: parsedRoute,
+          });
+          if (!syncTarget) return;
+          pendingNavRef.current = { path: syncTarget.targetPath, expiresAt: Date.now() + 1000 };
+          navigate(syncTarget.targetRoute, { replace: true });
+        }, [openAyatNum, selectedSurah, isBookRoute, uxMode, quranReadingTier, urlSurahNum, urlAyatNum, parsedRoute, navigate]);
+
+        const handleMenuSelectSurah = () => {
+          const plan = resolveMenuSurahSelection({
+            surah: surah2,
+            isBookRoute,
+            isFullscreenActive: fullScreenSelectedAyat,
+            uxMode,
+            lastAyatBySurah,
+            currentRouteParams: parsedRoute,
+          });
+          pendingNavRef.current = { path: plan.targetPath, expiresAt: Date.now() + 1000 };
+          store.dispatch(quranActions.setSelectedSurah(surah2));
+          store.dispatch(quranActions.setOpenAyatNum(plan.targetAyat));
+          store.dispatch(uiActions.setQuranReadingTier(plan.nextTier));
+          store.dispatch(uiActions.setFullScreenSelectedAyat(true));
+          navigate(plan.targetRoute);
+        };
+
+        const handleSelectAyat = (nextAyatNum) => {
+          const step = resolveFullScreenAyatSelection({
+            surah: selectedSurah,
+            nextAyatNum,
+            totalAyats: ayats2.length,
+            currentRouteParams: parsedRoute,
+            uxMode,
+            isFullscreenActive: fullScreenSelectedAyat,
+          });
+          pendingNavRef.current = { path: step.targetPath, expiresAt: Date.now() + 1000 };
+          store.dispatch(quranActions.setOpenAyatNum(step.ayatNum));
+          navigate(step.targetRoute, { replace: true });
+        };
+
+        const activeAyat = ayats2.find((a) => a.numberInSurah === openAyatNum) || ayats2[0];
+
+        return React.createElement(
+          "div",
+          null,
+          React.createElement(LocationProbe),
+          React.createElement(
+            "button",
+            { "data-testid": "menu-select-surah-2", onClick: handleMenuSelectSurah },
+            "Sourate 2"
+          ),
+          !isBookRoute &&
+            fullScreenSelectedAyat &&
+            openAyatNum != null &&
+            selectedSurah &&
+            React.createElement(AyatFullScreenModal, {
+              isOpen: true,
+              onClose: () => {},
+              onExitToNormalMode: () => {},
+              ayat: activeAyat,
+              selectedSurah,
+              ayats: ayats2,
+              onSelectAyat: handleSelectAyat,
+              translationLang: "fr",
+              translationText: "Traduction",
+            })
+        );
+      }
+
+      render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            { initialEntries: ["/quran/book3d"] },
+            React.createElement(Harness)
+          )
+        )
+      );
+
+      expect(screen.getByTestId("location-probe").textContent).toBe("/quran/book3d");
+
+      // Step 1: Select Surah 2 from Menu Sourates while in 3D
+      fireEvent.click(screen.getByTestId("menu-select-surah-2"));
+      expect(screen.getByTestId("location-probe").textContent).toBe("/quran/2/1?view=fullscreen");
+      expect(document.getElementById("ayat-fullscreen-modal")).toBeTruthy();
+
+      // Step 2: Change verses cleanly in Fullscreen -> 2 -> 3 -> 5 -> 4
+      fireEvent.click(document.getElementById("btn-fs-next-ayat"));
+      expect(sel.openAyatNum(store.getState())).toBe(2);
+      expect(screen.getByTestId("location-probe").textContent).toBe("/quran/2/2?view=fullscreen");
+
+      fireEvent.click(document.getElementById("btn-fs-next-ayat"));
+      expect(sel.openAyatNum(store.getState())).toBe(3);
+      expect(screen.getByTestId("location-probe").textContent).toBe("/quran/2/3?view=fullscreen");
+
+      fireEvent.change(document.getElementById("select-fs-ayat-num"), { target: { value: "5" } });
+      expect(sel.openAyatNum(store.getState())).toBe(5);
+      expect(screen.getByTestId("location-probe").textContent).toBe("/quran/2/5?view=fullscreen");
+
+      fireEvent.click(document.getElementById("btn-fs-prev-ayat"));
+      expect(sel.openAyatNum(store.getState())).toBe(4);
+      expect(screen.getByTestId("location-probe").textContent).toBe("/quran/2/4?view=fullscreen");
+
+      // Strictly monotonic sequence [1, 2, 3, 5, 4] with zero ping-pong / bounce-back!
+      expect(ayatChangeLog).toEqual([1, 2, 3, 5, 4]);
+    });
+  });
 });
+

@@ -1,6 +1,7 @@
 // ─── Pure Functional Route Manager ───────────────────────────────────────────
 import { SURAH_INFO } from "./arabicUtils.js";
 import { clampHizbNumber, getHizbBounds, getSurahsForHizb } from "./hizbUtils.js";
+import { clampQuarterHizbNumber, getQuarterHizbBounds, getSurahsForQuarterHizb } from "./quarterHizbUtils.js";
 import { ERROR_CODES, trySync } from "./errorManager.js";
 
 export const VALID_PAGES = Object.freeze([
@@ -40,9 +41,11 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
 
       const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
       const modeParam = params.get("mode");
-      const mode = ["page", "hizb", "juz"].includes(modeParam) ? modeParam : null;
+      const mode = ["page", "hizb", "quarter", "juz"].includes(modeParam) ? modeParam : null;
       const hizbParam = params.get("hizb") || params.get("hizbNum");
       const hizb = hizbParam ? clampHizbNumber(hizbParam) : null;
+      const quarterParam = params.get("quarter") || params.get("quarterHizb") || params.get("rub");
+      const quarter = quarterParam ? clampQuarterHizbNumber(quarterParam) : null;
       const isCrossSurah = params.get("cross") === "1" || params.get("cross") === "true";
       const juzRaw = params.get("juz") ? parseInt(params.get("juz"), 10) : null;
       const juz =
@@ -96,6 +99,8 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
         mode,
         hizb,
         hizbNum: hizb,
+        quarter,
+        quarterHizb: quarter,
         isCrossSurah,
         juz,
         page,
@@ -119,6 +124,8 @@ export const parseQuranRoute = (pathname = "/quran", search = "") =>
       mode: null,
       hizb: null,
       hizbNum: null,
+      quarter: null,
+      quarterHizb: null,
       isCrossSurah: false,
       juz: null,
       page: null,
@@ -162,6 +169,8 @@ export const buildQuranRoute = ({
   mode = null,
   hizb = null,
   hizbNum = null,
+  quarter = null,
+  quarterHizb = null,
   isCrossSurah = false,
   juz = null,
   page = null,
@@ -222,9 +231,11 @@ export const buildQuranRoute = ({
       : `/quran/${sn}`
     : "/quran";
 
-  if (mode && ["page", "hizb", "juz"].includes(mode)) query.set("mode", mode);
+  if (mode && ["page", "hizb", "quarter", "juz"].includes(mode)) query.set("mode", mode);
   const targetHizb = hizb ?? hizbNum;
   if (targetHizb != null && clampHizbNumber(targetHizb)) query.set("hizb", String(clampHizbNumber(targetHizb)));
+  const targetQuarter = quarter ?? quarterHizb;
+  if (targetQuarter != null && clampQuarterHizbNumber(targetQuarter)) query.set("quarter", String(clampQuarterHizbNumber(targetQuarter)));
   if (isCrossSurah) query.set("cross", "1");
   if (juz != null && Number.isFinite(Number(juz))) {
     query.set("juz", String(Math.max(1, Math.min(30, Math.round(Number(juz))))));
@@ -292,6 +303,33 @@ export const resolveHizbRouteTarget = (hizbNum, preferredSurahNum = null) => {
     surahNum: bounds.startSurah,
     ayatNum: bounds.startAyah,
     route: buildQuranRoute({ surahNum: bounds.startSurah, ayatNum: bounds.startAyah }),
+  });
+};
+
+/**
+ * Purely resolves the target Surah and starting Ayah when navigating to a Quarter of Hizb (1..240).
+ */
+export const resolveQuarterHizbRouteTarget = (quarterNum, preferredSurahNum = null) => {
+  const bounds = getQuarterHizbBounds(quarterNum);
+  if (!bounds) return null;
+  const surahsInQuarter = getSurahsForQuarterHizb(bounds.quarter);
+  const pref = Number(preferredSurahNum);
+  if (Number.isFinite(pref) && surahsInQuarter.includes(pref)) {
+    const startAyah = pref === bounds.startSurah ? bounds.startAyah : 1;
+    return Object.freeze({
+      quarter: bounds.quarter,
+      hizb: bounds.hizb,
+      surahNum: pref,
+      ayatNum: startAyah,
+      route: buildQuranRoute({ surahNum: pref, ayatNum: startAyah, mode: "quarter", quarter: bounds.quarter }),
+    });
+  }
+  return Object.freeze({
+    quarter: bounds.quarter,
+    hizb: bounds.hizb,
+    surahNum: bounds.startSurah,
+    ayatNum: bounds.startAyah,
+    route: buildQuranRoute({ surahNum: bounds.startSurah, ayatNum: bounds.startAyah, mode: "quarter", quarter: bounds.quarter }),
   });
 };
 

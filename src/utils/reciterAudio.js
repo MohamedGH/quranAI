@@ -2,6 +2,7 @@ import { IS_ANDROID } from './audioRecorder.js';
 import { splitArabicWords, stripBasmalaFromAyah, SURAH_INFO } from './arabicUtils.js';
 import { safeGetItem, safeSetItem } from './safeStorage.js';
 import { getHizbForSurahAyah } from './hizbUtils.js';
+import { getQuarterHizbForSurahAyah } from './quarterHizbUtils.js';
 
 export { stripBasmalaFromAyah };
 
@@ -206,23 +207,36 @@ export async function fetchSurahWbw(sn, lang = 'fr') {
 
 function _cleanAyahsArray(ayahs, fallbackSurahNum = null) {
   if (!Array.isArray(ayahs)) return [];
-  return ayahs.map(a => {
-    if (!a) return a;
+  const seen = new Set();
+  const out = [];
+  for (const a of ayahs) {
+    if (!a) continue;
     const sn = a.surahNumber ?? a.surah?.number ?? fallbackSurahNum;
-    const hizbVal = a.hizb ?? (a.hizbQuarter != null ? Math.ceil(a.hizbQuarter / 4) : (sn != null ? getHizbForSurahAyah(sn, a.numberInSurah) : undefined));
+    const dedupKey = a.numberInSurah != null
+      ? `${sn ?? ""}:${a.numberInSurah}`
+      : (a.number != null ? `g:${a.number}` : null);
+    if (dedupKey != null) {
+      if (seen.has(dedupKey)) continue;
+      seen.add(dedupKey);
+    }
+    const hizbQuarterVal = a.hizbQuarter ?? (sn != null && a.numberInSurah != null ? getQuarterHizbForSurahAyah(sn, a.numberInSurah) : undefined);
+    const hizbVal = a.hizb ?? (hizbQuarterVal != null ? Math.ceil(hizbQuarterVal / 4) : (sn != null ? getHizbForSurahAyah(sn, a.numberInSurah) : undefined));
     const cleaned = (a.numberInSurah === 1 && a.text)
       ? stripBasmalaFromAyah(a.text, sn, a.numberInSurah)
       : a.text;
-    if (cleaned !== a.text || (hizbVal !== undefined && a.hizb !== hizbVal) || (sn != null && a.surahNumber !== sn)) {
-      return {
+    if (cleaned !== a.text || (hizbVal !== undefined && a.hizb !== hizbVal) || (hizbQuarterVal !== undefined && a.hizbQuarter !== hizbQuarterVal) || (sn != null && a.surahNumber !== sn)) {
+      out.push({
         ...a,
         ...(cleaned !== a.text ? { text: cleaned } : {}),
         ...(hizbVal !== undefined ? { hizb: hizbVal } : {}),
+        ...(hizbQuarterVal !== undefined ? { hizbQuarter: hizbQuarterVal } : {}),
         ...(sn != null ? { surahNumber: sn } : {}),
-      };
+      });
+    } else {
+      out.push(a);
     }
-    return a;
-  });
+  }
+  return out;
 }
 
 function _cleanSimpleAyatsArray(ayats, surahNum = null) {
@@ -284,6 +298,7 @@ export async function fetchAyats(n) {
             text: a.text,
             surahNumber: n,
             hizb: getHizbForSurahAyah(n, a.num),
+            hizbQuarter: getQuarterHizbForSurahAyah(n, a.num),
           })),
           n
         ),

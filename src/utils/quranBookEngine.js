@@ -636,10 +636,345 @@ export const detectSoftwareWebGL = (rendererOrGl) => {
     if (!rendererStr && gl.RENDERER) {
       rendererStr = String(gl.getParameter(gl.RENDERER) || "");
     }
-    return /swiftshader|llvmpipe|software|mesa offscreen|microsoft basic render/i.test(rendererStr);
+    return /swiftshader|llvmpipe|softpipe|software|mesa offscreen|microsoft basic render|vmware|virtualbox/i.test(
+      rendererStr
+    );
   } catch {
     return false;
   }
+};
+
+/**
+ * Safely acquires a WebGL2 canvas & context BEFORE instantiating THREE.WebGLRenderer,
+ * preventing uncaught Three.js `console.error` logs when WebGL is blocked or lost.
+ * In mocked test environments where native WebGL2RenderingContext is absent,
+ * returns status "unverified" so mocked THREE.WebGLRenderer paths continue working.
+ */
+export const acquireSafeWebGLContext = ({
+  createCanvas = null,
+  preferHardwareAntialias = true,
+  alpha = true,
+  cachedProfile = null,
+  onProfileDetected = null,
+  allowRetry = false,
+  hasNativeWebGL = typeof WebGL2RenderingContext !== "undefined",
+} = {}) => {
+  const makeCanvas =
+    typeof createCanvas === "function"
+      ? createCanvas
+      : () => (typeof document !== "undefined" ? document.createElement("canvas") : null);
+
+  if (!hasNativeWebGL && typeof createCanvas !== "function") {
+    return {
+      status: "unverified",
+      canvas: null,
+      context: null,
+      isSoftware: Boolean(cachedProfile?.isSoftware),
+      reason: null,
+    };
+  }
+
+  if (cachedProfile && cachedProfile.supported === false && !allowRetry) {
+    return {
+      status: "unavailable",
+      canvas: null,
+      context: null,
+      isSoftware: true,
+      reason: cachedProfile.reason || "WebGL2 context blocked",
+    };
+  }
+
+  const tryOpenOnCanvas = (attrs) => {
+    const cvs = makeCanvas();
+    if (!cvs || typeof cvs.getContext !== "function") {
+      return { canvas: null, gl: null, reason: "Canvas unavailable" };
+    }
+    let reason = null;
+    const onErr = (ev) => {
+      if (ev && typeof ev.preventDefault === "function") ev.preventDefault();
+      if (ev && ev.statusMessage) reason = String(ev.statusMessage);
+    };
+    cvs.addEventListener?.("webglcontextcreationerror", onErr, false);
+    let gl = null;
+    try {
+      gl = cvs.getContext("webgl2", attrs);
+    } catch (err) {
+      reason = reason || err?.message || "WebGL2 context exception";
+      gl = null;
+    } finally {
+      cvs.removeEventListener?.("webglcontextcreationerror", onErr, false);
+    }
+    if (!gl || typeof gl.getParameter !== "function") {
+      return { canvas: null, gl: null, reason: reason || "WebGL2 context unavailable" };
+    }
+    return { canvas: cvs, gl, reason: null };
+  };
+
+  // First-time probe: open lightweight non-MSAA context once, detect software GL,
+  // and reuse it directly on software WebGL (zero duplicate contexts or MSAA waste).
+  if (!cachedProfile) {
+    const probe = tryOpenOnCanvas({
+      alpha,
+      antialias: false,
+      powerPreference: "default",
+      failIfMajorPerformanceCaveat: false,
+    });
+    if (!probe.gl) {
+      onProfileDetected?.({ supported: false, isSoftware: true, reason: probe.reason });
+      return {
+        status: "unavailable",
+        canvas: null,
+        context: null,
+        isSoftware: true,
+        reason: probe.reason,
+      };
+    }
+
+    const isSw = detectSoftwareWebGL(probe.gl);
+    onProfileDetected?.({ supported: true, isSoftware: isSw, reason: null });
+
+    if (isSw || !preferHardwareAntialias) {
+      return {
+        status: "ready",
+        canvas: probe.canvas,
+        context: probe.gl,
+        isSoftware: isSw,
+        reason: null,
+      };
+    }
+
+    // Hardware GPU: release lightweight probe once and open MSAA context
+    try {
+      probe.gl.getExtension?.("WEBGL_lose_context")?.loseContext?.();
+    } catch {}
+
+    const hwAttempt = tryOpenOnCanvas({
+      alpha,
+      antialias: true,
+      powerPreference: "high-performance",
+      failIfMajorPerformanceCaveat: false,
+    });
+    if (hwAttempt.gl) {
+      return {
+        status: "ready",
+        canvas: hwAttempt.canvas,
+        context: hwAttempt.gl,
+        isSoftware: false,
+        reason: null,
+      };
+    }
+
+    const hwFallback = tryOpenOnCanvas({
+      alpha,
+      antialias: false,
+      powerPreference: "default",
+      failIfMajorPerformanceCaveat: false,
+    });
+    if (hwFallback.gl) {
+      return {
+        status: "ready",
+        canvas: hwFallback.canvas,
+        context: hwFallback.gl,
+        isSoftware: false,
+        reason: null,
+      };
+    }
+
+    return {
+      status: "unavailable",
+      canvas: null,
+      context: null,
+      isSoftware: true,
+      reason: hwFallback.reason || hwAttempt.reason,
+    };
+  }
+
+  // Subsequent mounts use cached GPU tier
+  const useSoftwareDefaults = Boolean(cachedProfile.isSoftware) || !preferHardwareAntialias;
+  const primary = tryOpenOnCanvas({
+    alpha,
+    antialias: !useSoftwareDefaults,
+    powerPreference: useSoftwareDefaults ? "default" : "high-performance",
+    failIfMajorPerformanceCaveat: false,
+  });
+  if (primary.gl) {
+    return {
+      status: "ready",
+      canvas: primary.canvas,
+      context: primary.gl,
+      isSoftware: detectSoftwareWebGL(primary.gl) || Boolean(cachedProfile.isSoftware),
+      reason: null,
+    };
+  }
+
+  if (!useSoftwareDefaults) {
+    const conservative = tryOpenOnCanvas({
+      alpha,
+      antialias: false,
+      powerPreference: "default",
+      failIfMajorPerformanceCaveat: false,
+    });
+    if (conservative.gl) {
+      return {
+        status: "ready",
+        canvas: conservative.canvas,
+        context: conservative.gl,
+        isSoftware: detectSoftwareWebGL(conservative.gl),
+        reason: null,
+      };
+    }
+    return {
+      status: "unavailable",
+      canvas: null,
+      context: null,
+      isSoftware: true,
+      reason: conservative.reason || primary.reason,
+    };
+  }
+
+  return {
+    status: "unavailable",
+    canvas: null,
+    context: null,
+    isSoftware: true,
+    reason: primary.reason,
+  };
+};
+
+/**
+ * Coordinates hardware rAF rendering vs software WebGL `fenceSync` + cooldown pacing
+ * so SwiftShader/CPU rasterization never starves Chromium's GPU watchdog.
+ */
+export const createPacedRenderScheduler = ({
+  renderer,
+  isSoftwareGl = false,
+  isHidden = () => (typeof document !== "undefined" ? Boolean(document.hidden) : false),
+  requestAnimationFrameFn = (cb) =>
+    (typeof window !== "undefined" ? window.requestAnimationFrame : globalThis.requestAnimationFrame)(cb),
+  cancelAnimationFrameFn = (id) =>
+    (typeof window !== "undefined" ? window.cancelAnimationFrame : globalThis.cancelAnimationFrame)(id),
+  setTimeoutFn = (cb, ms) => globalThis.setTimeout(cb, ms),
+  clearTimeoutFn = (id) => globalThis.clearTimeout(id),
+  nowFn = () => (typeof performance !== "undefined" ? performance.now() : Date.now()),
+  softwareCooldownMs = 80,
+  pollIntervalMs = 5,
+  maxSyncWaitMs = 1500,
+} = {}) => {
+  let rafId = 0;
+  let timerId = 0;
+  let disposed = false;
+  let busy = false;
+  let dirty = false;
+
+  const cancelTimers = () => {
+    if (rafId) {
+      cancelAnimationFrameFn(rafId);
+      rafId = 0;
+    }
+    if (timerId) {
+      clearTimeoutFn(timerId);
+      timerId = 0;
+    }
+    busy = false;
+    dirty = false;
+  };
+
+  const afterDraw = (done) => {
+    if (disposed) return;
+    if (!isSoftwareGl) {
+      done();
+      return;
+    }
+
+    const gl = renderer?.getContext?.();
+    if (gl && typeof gl.fenceSync === "function" && typeof gl.getSyncParameter === "function") {
+      let sync = null;
+      try {
+        sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl.flush?.();
+      } catch {
+        sync = null;
+      }
+
+      if (sync) {
+        const startMs = nowFn();
+        const poll = () => {
+          timerId = 0;
+          if (disposed) {
+            try {
+              gl.deleteSync?.(sync);
+            } catch {}
+            return;
+          }
+          let signaled = true;
+          try {
+            const state = gl.getSyncParameter(sync, gl.SYNC_STATUS);
+            signaled = state !== gl.UNSIGNALED;
+          } catch {
+            signaled = true;
+          }
+          if (!signaled && nowFn() - startMs < maxSyncWaitMs) {
+            timerId = setTimeoutFn(poll, pollIntervalMs);
+          } else {
+            try {
+              gl.deleteSync?.(sync);
+            } catch {}
+            timerId = setTimeoutFn(() => {
+              timerId = 0;
+              if (!disposed) done();
+            }, softwareCooldownMs);
+          }
+        };
+        timerId = setTimeoutFn(poll, pollIntervalMs);
+        return;
+      }
+    }
+
+    timerId = setTimeoutFn(() => {
+      timerId = 0;
+      if (!disposed) done();
+    }, softwareCooldownMs);
+  };
+
+  const schedule = (renderTick) => {
+    if (disposed || typeof renderTick !== "function") return;
+    if (isHidden()) {
+      dirty = true;
+      return;
+    }
+    if (busy || rafId) {
+      dirty = true;
+      return;
+    }
+    rafId = requestAnimationFrameFn((ts) => {
+      rafId = 0;
+      if (disposed || isHidden()) {
+        if (!disposed) dirty = true;
+        return;
+      }
+      busy = true;
+      dirty = false;
+      const shouldContinue = Boolean(renderTick(ts));
+      afterDraw(() => {
+        busy = false;
+        if (disposed) return;
+        if (shouldContinue || dirty) {
+          schedule(renderTick);
+        }
+      });
+    });
+  };
+
+  return {
+    schedule,
+    cancelAll: cancelTimers,
+    dispose() {
+      disposed = true;
+      cancelTimers();
+    },
+    isDisposed: () => disposed,
+    hasPendingWork: () => Boolean(rafId || timerId || busy || dirty),
+  };
 };
 
 /**

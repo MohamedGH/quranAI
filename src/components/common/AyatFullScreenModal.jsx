@@ -12,6 +12,8 @@ import { SilenceReviseControl } from "../audio/SilenceReviseControl.jsx";
 import { TajweedAudioCoachControl } from "../audio/TajweedAudioCoachControl.jsx";
 import { isSimplifiedUxMode, getUxProfile } from "../../utils/uxProfileManager.js";
 import { calculateTouchDistance, detectPinchGesture, detectSheetDismissGesture } from "../../utils/swipeNavigation.js";
+import { getQuarterHizbForSurahAyah, getQuarterFractionMeta } from "../../utils/quarterHizbUtils.js";
+import { getStudyRecencyInfo } from "../../utils/studyRecency.js";
 
 // Helper for Arabic Eastern digits: e.g. 108 -> ۱۰۸
 function toArabicDigits(num) {
@@ -1182,6 +1184,58 @@ export function AyatFullScreenModal({
                   P.{ayat.page}
                 </span>
               )}
+              {(() => {
+                const qNum = ayat.hizbQuarter ?? getQuarterHizbForSurahAyah(selectedSurah?.number, currentAyatNum);
+                const qMeta = qNum ? getQuarterFractionMeta(qNum) : null;
+                if (!qMeta) return null;
+                return (
+                  <span
+                    className="hide-mobile"
+                    style={{
+                      fontSize: 8.5,
+                      fontFamily: "'Cinzel',serif",
+                      color: "#38bdf8",
+                      fontWeight: 700,
+                      padding: "1px 5px",
+                      borderRadius: 4,
+                      background: "rgba(56,189,248,.14)",
+                      border: "1px solid rgba(56,189,248,.35)",
+                      whiteSpace: "nowrap",
+                      flexShrink: 0,
+                    }}
+                    title={qMeta.fullLabel}
+                  >
+                    {qMeta.shortLabel}
+                  </span>
+                );
+              })()}
+              {(() => {
+                const rec = getStudyRecencyInfo(ld);
+                return (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      fontSize: 8.5,
+                      fontFamily: "'Cinzel',serif",
+                      color: rec.textColor,
+                      fontWeight: 700,
+                      padding: "1px 6px",
+                      borderRadius: 4,
+                      background: rec.rgbaBg,
+                      border: `1px solid ${rec.rgbaBorder}`,
+                      whiteSpace: "nowrap",
+                      flexShrink: 0,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                    title={rec.tooltip}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: rec.hex, flexShrink: 0 }} />
+                    <span>{rec.shortLabel}</span>
+                  </span>
+                );
+              })()}
             </div>
 
             <button

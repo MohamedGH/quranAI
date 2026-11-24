@@ -134,4 +134,46 @@ describe('hizbUtils - Cross-Surah Hizb Engine', () => {
     expect(b60.endPage).toBe(604);
     expect(b60.pageShort).toBe('P.591–604');
   });
+
+  it('rejects mismatched-surah ayahs and deduplicates verses in buildCrossSurahHizbAyats (prevents duplicate React keys 8..14)', async () => {
+    const { ayahsBelongToSurah, fetchCrossSurahHizbAyats } = await import('../src/utils/hizbUtils.js');
+
+    const baqarahStale = Array.from({ length: 10 }, (_, idx) => ({
+      number: 8 + idx,
+      numberInSurah: idx + 1,
+      surahNumber: 2,
+      surah: { number: 2 },
+      text: `ayah ${idx + 1}`,
+    }));
+
+    expect(ayahsBelongToSurah(baqarahStale, 2)).toBe(true);
+    expect(ayahsBelongToSurah(baqarahStale, 1)).toBe(false);
+
+    // Simulate stale Surah 2 ayahs passed under key 1 alongside valid key 2 + duplicate entry
+    const corruptedMap = {
+      1: baqarahStale,
+      2: [...baqarahStale, baqarahStale[0]],
+    };
+    const combined = buildCrossSurahHizbAyats(1, corruptedMap, 1);
+    const numbers = combined.map((a) => a.number);
+    expect(new Set(numbers).size).toBe(numbers.length);
+    expect(combined.every((a) => a.surahNumber === 2)).toBe(true);
+
+    // fetchCrossSurahHizbAyats should ignore mismatched primaryAyats and fetch Surah 1 cleanly
+    const fatihaReal = Array.from({ length: 7 }, (_, idx) => ({
+      number: idx + 1,
+      numberInSurah: idx + 1,
+      surahNumber: 1,
+      text: `fatiha ${idx + 1}`,
+    }));
+    const res = await fetchCrossSurahHizbAyats(1, {
+      primarySurahNum: 1,
+      primaryAyats: baqarahStale,
+      existingMap: { 2: baqarahStale },
+      fetchSurahFn: async (sn) => (sn === 1 ? { ayahs: fatihaReal } : { ayahs: [] }),
+    });
+    expect(res.surahMap[1]).toEqual(fatihaReal);
+    expect(res.ayats.map((a) => `${a.surahNumber}:${a.numberInSurah}`)).toHaveLength(17);
+  });
 });
+

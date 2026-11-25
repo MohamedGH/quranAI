@@ -114,7 +114,7 @@ vi.mock("three", async (importOriginal) => {
 import * as THREE from "three";
 import { store, uiActions } from "../src/store.js";
 import * as reciterAudio from "../src/utils/reciterAudio.js";
-import { BOOK3D_ZOOM, BOOK3D_PARTICLES } from "../src/utils/quranBookEngine.js";
+import { BOOK3D_ZOOM, BOOK3D_PARTICLES, computeResponsive3DFov } from "../src/utils/quranBookEngine.js";
 import { QuranBook3DPage, resetBook3DWebGLCache } from "../src/components/pages/QuranBook3DPage.jsx";
 
 describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric Aura", () => {
@@ -221,6 +221,8 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     expect(mockRendererState.sprites.length).toBe(1);
     const auraSprite = mockRendererState.sprites[0];
     expect(auraSprite.visible).toBe(true);
+    expect(auraSprite.renderOrder).toBe(-1);
+    expect(auraSprite.material.depthTest).toBe(false);
     expect(auraSprite.material.blending).toBe(THREE.AdditiveBlending);
     expect(auraSprite.material.map).toBeInstanceOf(THREE.CanvasTexture);
     expect(auraSprite.material.map.colorSpace).toBe(THREE.SRGBColorSpace);
@@ -237,6 +239,8 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
       }
     });
     expect(mockRendererState.renderSpy).toHaveBeenCalled();
+    const [renderedScene] = mockRendererState.renderSpy.mock.calls[0];
+    expect(renderedScene.background).toBeInstanceOf(THREE.Color);
     expect(dustShader.uniforms.uEmitFactor.value).toBe(0);
     expect(dustShader.uniforms.uParticleTime.value).toBe(0);
 
@@ -473,7 +477,7 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     unmount();
   });
 
-  it("renders single crisp mobile 2D Mushaf page without nested double frame or minHeight 460 clipping", async () => {
+  it("renders BOTH crisp 2D Mushaf pages side-by-side on mobile without nested frames or minHeight clipping", async () => {
     const origWidth = window.innerWidth;
     const origHeight = window.innerHeight;
     Object.defineProperty(window, "innerWidth", { value: 375, writable: true, configurable: true });
@@ -504,6 +508,7 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
 
       await waitFor(() => {
         expect(document.querySelector('[data-testid="q3d-2d-right-page"]')).toBeTruthy();
+        expect(document.querySelector('[data-testid="q3d-2d-left-page"]')).toBeTruthy();
       });
 
       const root = document.querySelector('[data-testid="q3d-root"]');
@@ -514,10 +519,13 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
       expect(root.style.height).toBe("100%");
       expect(mainStage.style.minHeight).toBe("0px");
       expect(mainStage.style.boxShadow).toBe("none");
-      expect(leftPage).toBeNull();
+      expect(leftPage.style.height).toBe("auto");
+      expect(leftPage.style.boxShadow).toBe("none");
+      expect(leftPage.style.aspectRatio).toBe("1024 / 1536");
       expect(rightPage.style.height).toBe("auto");
       expect(rightPage.style.boxShadow).toBe("none");
       expect(rightPage.style.aspectRatio).toBe("1024 / 1536");
+      expect(document.querySelector('[data-testid="q3d-page-info"]').textContent).toContain("P.1–2");
 
       unmount();
     } finally {
@@ -526,7 +534,7 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     }
   });
 
-  it("hides left cover wing on mobile 3D view and centers camera and particles on the single Mushaf page", async () => {
+  it("keeps full 2-page 3D Mushaf visible on mobile with responsive portrait FOV, centered camera, and full particle spread", async () => {
     const origWidth = window.innerWidth;
     const origHeight = window.innerHeight;
     Object.defineProperty(window, "innerWidth", { value: 375, writable: true, configurable: true });
@@ -558,16 +566,23 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
       });
 
       const leftPageMesh = mockRendererState.meshes.find((m) => m.name === "leftPage");
+      const rightPageMesh = mockRendererState.meshes.find((m) => m.name === "rightPage");
       expect(leftPageMesh).toBeTruthy();
-      expect(leftPageMesh.parent.visible).toBe(false);
+      expect(rightPageMesh).toBeTruthy();
+      expect(leftPageMesh.parent.visible).toBe(true);
+      expect(rightPageMesh.parent.visible).toBe(true);
 
       const camera = mockRendererState.cameras[0];
-      expect(camera.position.x).toBeGreaterThan(0.5);
+      expect(camera.position.x).toBe(0);
       expect(camera.position.z).toBeCloseTo(BOOK3D_ZOOM.defaultMobileDist, 2);
 
+      // Verify responsive FOV widens properly on portrait aspect ratios so both pages fit edge-to-edge
+      expect(computeResponsive3DFov(375 / 520, BOOK3D_ZOOM.defaultMobileDist)).toBeGreaterThan(38);
+      expect(computeResponsive3DFov(1280 / 720, BOOK3D_ZOOM.defaultDesktopDist)).toBe(38);
+
       const dustPoints = mockRendererState.points[0];
-      expect(dustPoints.position.x).toBeGreaterThan(0.5);
-      expect(dustPoints.scale.x).toBeLessThan(0.7);
+      expect(dustPoints.position.x).toBe(0);
+      expect(dustPoints.scale.x).toBe(1);
 
       const mainStage = document.querySelector('[data-testid="q3d-main-stage"]');
       expect(mainStage.style.boxShadow).toBe("none");

@@ -69,7 +69,7 @@ export const BOOK3D_ZOOM = Object.freeze({
   minDist: 2.0,
   maxDist: 7.8,
   defaultDesktopDist: 4.8,
-  defaultMobileDist: 3.55,
+  defaultMobileDist: 5.0,
   buttonStep: 0.65,
   wheelSensitivity: 0.0032,
   min2DScale: 0.75,
@@ -98,11 +98,11 @@ export const BOOK3D_PARTICLES = Object.freeze({
   maxSize: 19.5,
   minScale: 0.95,
   maxScale: 1.75,
-  defaultGlowStrength: 1.65,
-  auraOpacity: 0.24,
+  defaultGlowStrength: 1.95,
+  auraOpacity: 0.56,
   openDurationSec: 0.95,
   spawnWindowSec: 0.65,
-  maxRise: 2.35,
+  maxRise: 2.65,
 });
 
 /**
@@ -247,6 +247,23 @@ export const computeCameraPositionForZoom = (zoomDist, isSingleMode = false) => 
   const baseZ = isSingleMode ? BOOK3D_ZOOM.defaultMobileDist : BOOK3D_ZOOM.defaultDesktopDist;
   const y = Math.max(0.95, 2.25 * (z / baseZ));
   return Object.freeze({ y, z });
+};
+
+/**
+ * Computes responsive vertical camera FOV so the full 2-page Mushaf width (+/-1.385 + margin)
+ * remains completely visible side-by-side on portrait mobile as well as desktop viewports.
+ */
+export const computeResponsive3DFov = (
+  aspect,
+  baseDist = BOOK3D_ZOOM.defaultDesktopDist,
+  baseFov = 38
+) => {
+  const safeAspect = Math.max(0.35, Math.min(3.5, Number(aspect) || 1.5));
+  const safeDist = clamp3DZoomDist(baseDist);
+  const minHalfWidth = 1.56;
+  const requiredHalfTan = minHalfWidth / (safeDist * safeAspect);
+  const neededFov = (2 * Math.atan(requiredHalfTan) * 180) / Math.PI;
+  return Math.max(baseFov, Math.min(68, Number(neededFov.toFixed(2))));
 };
 
 export const computeZoomPercent = (zoomDist, isSingleMode = false) => {

@@ -69,7 +69,7 @@ export const BOOK3D_ZOOM = Object.freeze({
   minDist: 2.0,
   maxDist: 7.8,
   defaultDesktopDist: 4.8,
-  defaultMobileDist: 5.6,
+  defaultMobileDist: 3.55,
   buttonStep: 0.65,
   wheelSensitivity: 0.0032,
   min2DScale: 0.75,
@@ -92,16 +92,16 @@ export const BOOK3D_PAN = Object.freeze({
 });
 
 export const BOOK3D_PARTICLES = Object.freeze({
-  hardwareCount: 72,
-  softwareCount: 32,
-  baseSize: 7.4,
-  maxSize: 18.0,
-  minScale: 0.55,
-  maxScale: 1.15,
-  defaultGlowStrength: 1.25,
-  auraOpacity: 0.28,
+  hardwareCount: 92,
+  softwareCount: 44,
+  baseSize: 8.0,
+  maxSize: 19.5,
+  minScale: 0.95,
+  maxScale: 1.75,
+  defaultGlowStrength: 1.65,
+  auraOpacity: 0.24,
   openDurationSec: 0.95,
-  spawnWindowSec: 1.8,
+  spawnWindowSec: 0.65,
   maxRise: 2.35,
 });
 
@@ -329,11 +329,14 @@ export const computeCameraPose = ({
 } = {}) => {
   const { y: baseY, z } = computeCameraPositionForZoom(zoomDist, isSingleMode);
   const pan = clampCameraPan({ x: panX, y: panY });
+  const centerOffsetX = isSingleMode
+    ? BOOK3D_SPEC.wingOffsetX + BOOK3D_SPEC.pageInnerMarginX + BOOK3D_SPEC.pageWidth * 0.5
+    : 0;
   return Object.freeze({
-    posX: pan.x,
+    posX: centerOffsetX + pan.x,
     posY: baseY + pan.y,
     posZ: z,
-    targetX: pan.x,
+    targetX: centerOffsetX + pan.x,
     targetY: -0.1 + pan.y,
     targetZ: 0,
   });

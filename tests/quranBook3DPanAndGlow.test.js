@@ -16,6 +16,7 @@ const { mockRendererState } = vi.hoisted(() => ({
     points: [],
     cameras: [],
     renderers: [],
+    meshes: [],
   },
 }));
 
@@ -92,6 +93,13 @@ vi.mock("three", async (importOriginal) => {
     }
   }
 
+  class TrackedMesh extends actual.Mesh {
+    constructor(geometry, material) {
+      super(geometry, material);
+      mockRendererState.meshes.push(this);
+    }
+  }
+
   return {
     ...actual,
     WebGLRenderer: MockWebGLRenderer,
@@ -99,6 +107,7 @@ vi.mock("three", async (importOriginal) => {
     Sprite: TrackedSprite,
     Points: TrackedPoints,
     PerspectiveCamera: TrackedPerspectiveCamera,
+    Mesh: TrackedMesh,
   };
 });
 
@@ -118,6 +127,7 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     mockRendererState.points.length = 0;
     mockRendererState.cameras.length = 0;
     mockRendererState.renderers.length = 0;
+    mockRendererState.meshes.length = 0;
     store.dispatch(uiActions.resetUiElementsVisibility());
 
     const gradStub = { addColorStop: vi.fn() };
@@ -423,7 +433,7 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
           fn(simNow);
         }
       });
-      await new Promise((resolve) => setTimeout(resolve, 22));
+      await new Promise((resolve) => setTimeout(resolve, 56));
     }
     expect(dustShader.uniforms.uEmitFactor.value).toBeGreaterThan(0.5);
 
@@ -505,8 +515,62 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
       expect(mainStage.style.minHeight).toBe("0px");
       expect(mainStage.style.boxShadow).toBe("none");
       expect(leftPage).toBeNull();
-      expect(rightPage.style.height).toBe("100%");
-      expect(rightPage.style.width).toBe("auto");
+      expect(rightPage.style.height).toBe("auto");
+      expect(rightPage.style.boxShadow).toBe("none");
+      expect(rightPage.style.aspectRatio).toBe("1024 / 1536");
+
+      unmount();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: origWidth, writable: true, configurable: true });
+      Object.defineProperty(window, "innerHeight", { value: origHeight, writable: true, configurable: true });
+    }
+  });
+
+  it("hides left cover wing on mobile 3D view and centers camera and particles on the single Mushaf page", async () => {
+    const origWidth = window.innerWidth;
+    const origHeight = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", { value: 375, writable: true, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 667, writable: true, configurable: true });
+    const rafQueue = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    try {
+      const { unmount } = render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            null,
+            React.createElement(QuranBook3DPage, {
+              surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha" }],
+            })
+          )
+        )
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector('[data-testid="q3d-webgl-container"]')).toBeTruthy();
+      });
+
+      const leftPageMesh = mockRendererState.meshes.find((m) => m.name === "leftPage");
+      expect(leftPageMesh).toBeTruthy();
+      expect(leftPageMesh.parent.visible).toBe(false);
+
+      const camera = mockRendererState.cameras[0];
+      expect(camera.position.x).toBeGreaterThan(0.5);
+      expect(camera.position.z).toBeCloseTo(BOOK3D_ZOOM.defaultMobileDist, 2);
+
+      const dustPoints = mockRendererState.points[0];
+      expect(dustPoints.position.x).toBeGreaterThan(0.5);
+      expect(dustPoints.scale.x).toBeLessThan(0.7);
+
+      const mainStage = document.querySelector('[data-testid="q3d-main-stage"]');
+      expect(mainStage.style.boxShadow).toBe("none");
 
       unmount();
     } finally {

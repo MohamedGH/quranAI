@@ -55,12 +55,15 @@ import { resolveBook3DStepDownNavigation } from "../../utils/fullScreenNavigatio
 
 const _MUSHAF_PAGES = MUSHAF_TOTAL_PAGES;
 
-// Pre-allocated camera lookAt target so render loop causes zero GC allocations
+// Pre-allocated helpers so render loop and clicks cause zero GC allocations
 const _cameraLookAtTarget = new THREE.Vector3(0, -0.1, 0);
+const _raycaster = new THREE.Raycaster();
+const _pointerNdc = new THREE.Vector2();
+const _SINGLE_CENTER_X =
+  BOOK3D_SPEC.wingOffsetX + BOOK3D_SPEC.pageInnerMarginX + BOOK3D_SPEC.pageWidth * 0.5;
 
 // Bounded LRU cache for rasterized offscreen canvases across page flips & drawer toggles
 const _pageCanvasCache = createPageCanvasCache(18);
-let _endpaperCanvas = null;
 let _cachedGlProfile = null;
 export const resetBook3DWebGLCache = () => {
   _cachedGlProfile = null;
@@ -74,55 +77,6 @@ function toArabicDigits(num) {
 
 function stripBismillahIfPresent(text, surahNum, ayahNum) {
   return stripBasmalaFromAyah(text, surahNum, ayahNum);
-}
-
-// Lightweight ornamental endpaper for single-page mobile left wing
-function getOrnamentalEndpaperCanvas(resolutionTier = "hd") {
-  if (typeof document === "undefined") return null;
-  if (_endpaperCanvas && _endpaperCanvas.dataset?.tier === resolutionTier) {
-    return _endpaperCanvas;
-  }
-  const scale = resolutionTier === "lite" ? 1 : 1.5;
-  const w = Math.round(512 * scale);
-  const h = Math.round(768 * scale);
-  const cvs = document.createElement("canvas");
-  cvs.width = w;
-  cvs.height = h;
-  cvs.dataset.tier = resolutionTier;
-  const ctx = cvs.getContext("2d", { alpha: false });
-  if (!ctx) return cvs;
-
-  ctx.fillStyle = "#041f13";
-  ctx.fillRect(0, 0, w, h);
-
-  const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.5, 10 * scale, w * 0.5, h * 0.5, w * 0.72);
-  bgGrad.addColorStop(0, "#083321");
-  bgGrad.addColorStop(0.65, "#041f13");
-  bgGrad.addColorStop(1, "#02100a");
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(0, 0, w, h);
-
-  const margin = 36 * scale;
-  ctx.strokeStyle = "rgba(212, 175, 55, 0.55)";
-  ctx.lineWidth = 3 * scale;
-  ctx.strokeRect(margin, margin, w - margin * 2, h - margin * 2);
-
-  ctx.strokeStyle = "rgba(212, 175, 55, 0.25)";
-  ctx.lineWidth = 1.5 * scale;
-  ctx.strokeRect(margin + 10 * scale, margin + 10 * scale, w - (margin + 10 * scale) * 2, h - (margin + 10 * scale) * 2);
-
-  ctx.fillStyle = "rgba(212, 175, 55, 0.72)";
-  ctx.font = `bold ${28 * scale}px 'Amiri Quran', serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("﷽", w / 2, h / 2 - 14 * scale);
-
-  ctx.fillStyle = "rgba(212, 175, 55, 0.5)";
-  ctx.font = `bold ${10 * scale}px 'Cinzel', serif`;
-  ctx.fillText("AL-QUR'AN AL-KARIM", w / 2, h / 2 + 28 * scale);
-
-  _endpaperCanvas = cvs;
-  return cvs;
 }
 
 // ─── 2D Canvas Mushaf Page Texture Generator (LRU-cached & Tier-adaptive) ─────
@@ -177,21 +131,22 @@ function renderPageToCanvas(
     return _pageCanvasCache.set(cacheKey, { canvas: cvs, boxes });
   }
 
-  // Outer Ornate Golden Border Frame
-  const margin = 48 * scale;
+  // Outer Ornate Golden Border Frame (tighter margin on lite/mobile so page fills screen cleanly)
+  const isLite = resolutionTier === "lite";
+  const margin = (isLite ? 30 : 48) * scale;
   const frameW = w - margin * 2;
   const frameH = h - margin * 2;
 
   ctx.strokeStyle = "rgba(195, 155, 60, 0.85)";
-  ctx.lineWidth = 4 * scale;
+  ctx.lineWidth = (isLite ? 3.5 : 4) * scale;
   ctx.strokeRect(margin, margin, frameW, frameH);
 
   ctx.strokeStyle = "rgba(195, 155, 60, 0.35)";
   ctx.lineWidth = 1.5 * scale;
-  ctx.strokeRect(margin + 8 * scale, margin + 8 * scale, frameW - 16 * scale, frameH - 16 * scale);
+  ctx.strokeRect(margin + 7 * scale, margin + 7 * scale, frameW - 14 * scale, frameH - 14 * scale);
 
   // Corner Rosettes
-  const cRadius = 10 * scale;
+  const cRadius = (isLite ? 8 : 10) * scale;
   const corners = [
     [margin, margin],
     [margin + frameW, margin],
@@ -219,20 +174,28 @@ function renderPageToCanvas(
     (topAyah?.hizbQuarter != null ? Math.ceil(topAyah.hizbQuarter / 4) : Math.ceil(pageNum / 10));
 
   ctx.fillStyle = "#8a6d25";
-  ctx.font = `bold ${14 * scale}px 'Cinzel', serif`;
+  ctx.font = `bold ${(isLite ? 13 : 14) * scale}px 'Cinzel', serif`;
   ctx.textAlign = "left";
-  ctx.fillText(`JUZ ${juzNum} · HIZB ${hizbNum}`, margin + 18 * scale, margin - 12 * scale);
+  ctx.fillText(
+    `JUZ ${juzNum} · HIZB ${hizbNum}`,
+    margin + 14 * scale,
+    margin - (isLite ? 9 : 12) * scale
+  );
 
   if (cleanSurahHeader) {
     ctx.textAlign = "right";
-    ctx.font = `bold ${16 * scale}px 'Amiri Quran', serif`;
-    ctx.fillText(`سُورَةُ ${cleanSurahHeader}`, margin + frameW - 18 * scale, margin - 12 * scale);
+    ctx.font = `bold ${(isLite ? 15 : 16) * scale}px 'Amiri Quran', serif`;
+    ctx.fillText(
+      `سُورَةُ ${cleanSurahHeader}`,
+      margin + frameW - 14 * scale,
+      margin - (isLite ? 9 : 12) * scale
+    );
   }
 
   ctx.fillStyle = "#a17e2e";
-  ctx.font = `bold ${15 * scale}px 'Cinzel', serif`;
+  ctx.font = `bold ${(isLite ? 14 : 15) * scale}px 'Cinzel', serif`;
   ctx.textAlign = "center";
-  ctx.fillText(`${pageNum}`, w / 2, h - margin + 26 * scale);
+  ctx.fillText(`${pageNum}`, w / 2, h - margin + (isLite ? 20 : 26) * scale);
 
   if (!ayahs || !ayahs.length) {
     ctx.fillStyle = "#9c824c";
@@ -242,9 +205,10 @@ function renderPageToCanvas(
     return _pageCanvasCache.set(cacheKey, { canvas: cvs, boxes });
   }
 
-  let curY = margin + 34 * scale;
-  const contentW = frameW - 36 * scale;
-  const contentX = margin + 18 * scale;
+  let curY = margin + (isLite ? 28 : 34) * scale;
+  const sidePad = (isLite ? 14 : 18) * scale;
+  const contentW = frameW - sidePad * 2;
+  const contentX = margin + sidePad;
 
   const surahGroups = [];
   for (let i = 0; i < ayahs.length; i++) {
@@ -449,7 +413,7 @@ function renderPageToCanvas(
 }
 
 // Crisp zero-reencode 2D canvas mirror for 2D mode
-function CanvasMirror({ canvas, alt }) {
+function CanvasMirror({ canvas, alt, fit = "contain" }) {
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;
@@ -465,7 +429,7 @@ function CanvasMirror({ canvas, alt }) {
       ref={ref}
       role="img"
       aria-label={alt}
-      style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+      style={{ width: "100%", height: "100%", objectFit: fit, display: "block" }}
     />
   );
 }
@@ -596,25 +560,25 @@ export function createParticleGlowTexture(size = 64) {
   if (typeof ctx.createRadialGradient === "function") {
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
     grad.addColorStop(0.0, "rgba(255, 255, 255, 1)");
-    grad.addColorStop(0.24, "rgba(255, 245, 200, 0.95)");
-    grad.addColorStop(0.52, "rgba(255, 215, 95, 0.56)");
-    grad.addColorStop(0.82, "rgba(212, 175, 55, 0.18)");
+    grad.addColorStop(0.34, "rgba(255, 246, 196, 0.98)");
+    grad.addColorStop(0.62, "rgba(255, 214, 88, 0.72)");
+    grad.addColorStop(0.86, "rgba(235, 175, 45, 0.28)");
     grad.addColorStop(1.0, "rgba(212, 175, 55, 0)");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, s, s);
   } else {
-    ctx.fillStyle = "rgba(255, 232, 145, 0.85)";
+    ctx.fillStyle = "rgba(255, 232, 145, 0.92)";
     ctx.beginPath();
-    ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r * 0.65, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Delicate compact 4-point celestial starflare core
+  // Crisp luminous 4-point celestial starflare core
   if (typeof ctx.ellipse === "function") {
     ctx.save();
-    ctx.fillStyle = "rgba(255, 252, 230, 0.78)";
-    const armLen = r * 0.62;
-    const armThick = Math.max(1.0, s * 0.032);
+    ctx.fillStyle = "rgba(255, 254, 238, 0.92)";
+    const armLen = r * 0.72;
+    const armThick = Math.max(1.2, s * 0.045);
     ctx.beginPath();
     ctx.ellipse(cx, cy, armLen, armThick, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -817,6 +781,7 @@ export function QuranBook3DPage({
   const flipLeftTexRef = useRef(null);
   const rightBoxesRef = useRef([]);
   const leftBoxesRef = useRef([]);
+  const inFlightPagesRef = useRef(new Set());
   const pageCacheRef = useRef(pageCache);
   pageCacheRef.current = pageCache;
 
@@ -866,8 +831,18 @@ export function QuranBook3DPage({
         const h = containerRef.current.clientHeight || 460;
         const dpr = isSoftwareGlRef.current
           ? 1
-          : Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+          : Math.min(window.devicePixelRatio || 1, isMobile ? 1.25 : 2);
         rendererRef.current.setPixelRatio(dpr);
+        const singleOffsetX = isMobile ? _SINGLE_CENTER_X : 0;
+        if (leftWingRef.current) leftWingRef.current.visible = !isMobile;
+        if (flipLeftFaceMeshRef.current) flipLeftFaceMeshRef.current.visible = !isMobile;
+        if (standGroupRef.current) standGroupRef.current.position.x = singleOffsetX;
+        if (dustParticlesRef.current) {
+          dustParticlesRef.current.position.x = singleOffsetX;
+          dustParticlesRef.current.scale.x = isMobile ? 0.52 : 1;
+        }
+        if (auraSpriteRef.current) auraSpriteRef.current.position.x = singleOffsetX;
+
         const pose = computeCameraPose({
           zoomDist: defaultDist,
           panX: currentPanRef.current.x,
@@ -888,18 +863,28 @@ export function QuranBook3DPage({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Safe async page loader integrated with ErrorManager
+  // Safe async page loader (tracks in-flight pages without redundant React re-renders)
   const loadPage = useCallback(async (pNum) => {
-    if (!pNum || pNum < 1 || pNum > _MUSHAF_PAGES || pageCacheRef.current[pNum] !== undefined) {
+    if (
+      !pNum ||
+      pNum < 1 ||
+      pNum > _MUSHAF_PAGES ||
+      pageCacheRef.current[pNum] !== undefined ||
+      inFlightPagesRef.current.has(pNum)
+    ) {
       return;
     }
-    setPageCache((c) => (c[pNum] !== undefined ? c : { ...c, [pNum]: null }));
-    const data = await withErrorRecovery(() => fetchQuranPage(pNum), [], {
-      code: ERROR_CODES.NETWORK_ERROR,
-      message: `Chargement page ${pNum} échoué`,
-      context: { pageNum: pNum },
-    });
-    setPageCache((c) => ({ ...c, [pNum]: data || [] }));
+    inFlightPagesRef.current.add(pNum);
+    try {
+      const data = await withErrorRecovery(() => fetchQuranPage(pNum), [], {
+        code: ERROR_CODES.NETWORK_ERROR,
+        message: `Chargement page ${pNum} échoué`,
+        context: { pageNum: pNum },
+      });
+      setPageCache((c) => ({ ...c, [pNum]: data || [] }));
+    } finally {
+      inFlightPagesRef.current.delete(pNum);
+    }
   }, []);
 
   // Preload active spread & immediate neighbors
@@ -915,13 +900,15 @@ export function QuranBook3DPage({
     return isSoftwareGlRef.current || isSingleMode ? "lite" : "hd";
   }, [isSingleMode]);
 
-  // Synchronize page canvases & WebGL textures WITHOUT reconstructing the 3D scene
+  const rData = pageCache[rPage];
+  const lData = !isSingleMode && lPage ? pageCache[lPage] : null;
+
+  // Synchronize ONLY visible page canvases & WebGL textures (ignores background preloads)
   const updatePageTextures = useCallback(() => {
     const tier = getResolutionTier();
     const activeKey = selectedAyah ? `${selectedAyah.surahNum}:${selectedAyah.ayahNum}` : null;
     const tajweedOpts = { showQalqala, showMadd, showIzhar, showIdgham, showTajweedTone };
 
-    const rData = pageCache[rPage];
     const { canvas: rCanvas, boxes: rBoxes } = renderPageToCanvas(
       rData,
       rPage,
@@ -941,7 +928,6 @@ export function QuranBook3DPage({
     }
 
     if (!isSingleMode && lPage) {
-      const lData = pageCache[lPage];
       const { canvas: lCanvas, boxes: lBoxes } = renderPageToCanvas(
         lData,
         lPage,
@@ -961,18 +947,12 @@ export function QuranBook3DPage({
     } else {
       leftBoxesRef.current = [];
       setLeftCanvas((prev) => (prev === null ? prev : null));
-      if (!flipAnimRef.current.active && leftTexRef.current) {
-        const endpaper = getOrnamentalEndpaperCanvas(tier);
-        if (endpaper && leftTexRef.current.image !== endpaper) {
-          leftTexRef.current.image = endpaper;
-          leftTexRef.current.needsUpdate = true;
-        }
-      }
     }
 
     requestRenderRef.current();
   }, [
-    pageCache,
+    rData,
+    lData,
     rPage,
     lPage,
     selectedAyah,
@@ -1055,7 +1035,7 @@ export function QuranBook3DPage({
 
     renderer.setSize(width, height, false);
     renderer.setPixelRatio(
-      isSwGl ? 1 : Math.min(window.devicePixelRatio || 1, isSingleModeRef.current ? 1.5 : 2)
+      isSwGl ? 1 : Math.min(window.devicePixelRatio || 1, isSingleModeRef.current ? 1.25 : 2)
     );
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
@@ -1172,22 +1152,22 @@ export function QuranBook3DPage({
 
         void main() {
           vColor = aColor;
-          vTwinkle = 0.72 + 0.28 * sin(uTime * 2.1 + aPhase);
+          vTwinkle = 0.78 + 0.22 * sin(uTime * 2.4 + aPhase);
           float localT = uParticleTime - aDelay;
           float active = step(0.001, localT) * step(0.005, uEmitFactor);
-          float life = fract(max(0.0, localT) * aSpeed * 0.35);
-          float fadeEnv = smoothstep(0.0, 0.14, life) * (1.0 - smoothstep(0.72, 1.0, life));
-          vAlpha = active * uEmitFactor * fadeEnv * (0.68 + 0.32 * vTwinkle);
+          float life = fract(max(0.0, localT) * aSpeed * 0.52);
+          float fadeEnv = smoothstep(0.0, 0.07, life) * (1.0 - smoothstep(0.76, 1.0, life));
+          vAlpha = active * uEmitFactor * fadeEnv * (0.78 + 0.22 * vTwinkle);
 
           vec3 p = position;
-          p.y += life * uMaxRise;
-          p.x += sin(uTime * 0.55 + aPhase) * 0.13 * (0.25 + life);
-          p.z += cos(uTime * 0.48 + aPhase * 1.3) * 0.13 * (0.25 + life);
+          p.y += 0.14 + life * uMaxRise;
+          p.x += sin(uTime * 0.65 + aPhase) * 0.14 * (0.25 + life);
+          p.z += cos(uTime * 0.55 + aPhase * 1.3) * 0.14 * (0.25 + life);
 
           vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
-          float distScale = 4.4 / max(1.6, -mvPosition.z);
+          float distScale = 5.4 / max(1.6, -mvPosition.z);
           float ptSize = max(
-            2.4 * uPixelRatio,
+            3.6 * uPixelRatio,
             min(
               uMaxSize * uPixelRatio,
               uBaseSize * aScale * uPixelRatio * distScale * (0.85 + 0.15 * vTwinkle)
@@ -1208,17 +1188,21 @@ export function QuranBook3DPage({
           if (vAlpha < 0.005) discard;
           vec4 tex = texture2D(uMap, gl_PointCoord);
           if (tex.a < 0.01) discard;
-          vec3 glowColor = mix(vColor, vec3(1.0, 0.98, 0.88), tex.a * 0.45);
-          float alpha = tex.a * vAlpha;
-          gl_FragColor = vec4(glowColor * (0.95 + uGlowStrength * 0.55) * vTwinkle, alpha);
+          vec3 glowColor = mix(vColor, vec3(1.0, 0.99, 0.9), tex.a * 0.52);
+          float alpha = min(1.0, tex.a * vAlpha * 1.15);
+          gl_FragColor = vec4(glowColor * (1.15 + uGlowStrength * 0.65) * vTwinkle, alpha);
         }
       `,
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
+    const initSingleOffsetX = isSingleModeRef.current ? _SINGLE_CENTER_X : 0;
     const dustPoints = new THREE.Points(dustGeo, dustMat);
     dustPoints.frustumCulled = false;
+    dustPoints.renderOrder = 12;
+    dustPoints.position.x = initSingleOffsetX;
+    dustPoints.scale.x = isSingleModeRef.current ? 0.52 : 1;
     dustPoints.visible = showDustRef.current;
     scene.add(dustPoints);
     dustParticlesRef.current = dustPoints;
@@ -1234,7 +1218,8 @@ export function QuranBook3DPage({
       blending: THREE.AdditiveBlending,
     });
     const auraSprite = new THREE.Sprite(auraMat);
-    auraSprite.position.set(0, 0.12, -0.65);
+    auraSprite.renderOrder = 1;
+    auraSprite.position.set(initSingleOffsetX, 0.12, -0.65);
     auraSprite.scale.set(5.4, 3.6, 1);
     auraSprite.visible = showGlowRef.current;
     scene.add(auraSprite);
@@ -1262,6 +1247,7 @@ export function QuranBook3DPage({
 
     const standGroup = new THREE.Group();
     standGroup.name = "standGroup";
+    standGroup.position.x = initSingleOffsetX;
     standGroup.visible = showStandRef.current;
     standGroupRef.current = standGroup;
 
@@ -1347,6 +1333,7 @@ export function QuranBook3DPage({
     const leftWing = new THREE.Group();
     leftWing.position.set(-initialOpenState.wingOffsetX, wingBaseY, 0);
     leftWing.rotation.z = initialOpenState.leftWingRotZ;
+    leftWing.visible = !isSingleModeRef.current;
     bookGroup.add(leftWing);
     leftWingRef.current = leftWing;
 
@@ -1476,6 +1463,7 @@ export function QuranBook3DPage({
 
     const flipLeftFaceMesh = new THREE.Mesh(flipLeftGeo, flipLeftMat);
     flipLeftFaceMesh.castShadow = !isSwGl;
+    flipLeftFaceMesh.visible = !isSingleModeRef.current;
     flipPivot.add(flipLeftFaceMesh);
     flipLeftFaceMeshRef.current = flipLeftFaceMesh;
 
@@ -1499,10 +1487,12 @@ export function QuranBook3DPage({
     const ribbonMesh = new THREE.Mesh(ribbonGeo, ribbonMat);
     bookGroup.add(ribbonMesh);
 
-    // Pre-compile shaders before first draw to avoid first-frame stutter
-    try {
-      renderer.compile(scene, camera);
-    } catch {}
+    // Pre-compile shaders only on hardware GPU (software GL stalls during eager shader compile)
+    if (!isSwGl) {
+      try {
+        renderer.compile(scene, camera);
+      } catch {}
+    }
 
     // ResizeObserver updates aspect & canvas smoothly
     let resizeObserver;
@@ -1529,11 +1519,12 @@ export function QuranBook3DPage({
     let isDisposed = false;
     let isContextLost = false;
     let shadowDirty = !isSwGl;
+    let wasOpenMoving = false;
     let lastTimeMs = performance.now();
     const scheduler = createPacedRenderScheduler({
       renderer,
       isSoftwareGl: isSwGl,
-      softwareCooldownMs: 16,
+      softwareCooldownMs: 48,
       isHidden: () => typeof document !== "undefined" && Boolean(document.hidden),
     });
 
@@ -1657,15 +1648,33 @@ export function QuranBook3DPage({
           openDiff > 0
             ? Math.min(1, openAnim.progress + step)
             : Math.max(0, openAnim.progress - step);
-        shadowDirty = !isSwGl;
+        wasOpenMoving = true;
       } else {
         openAnim.progress = targetOpen;
+        if (wasOpenMoving) {
+          wasOpenMoving = false;
+          shadowDirty = !isSwGl;
+        }
       }
       const openState = evalBook3DOpenState(openAnim.progress);
       rightWing.position.x = openState.wingOffsetX;
       rightWing.rotation.z = openState.rightWingRotZ;
       leftWing.position.x = -openState.wingOffsetX;
       leftWing.rotation.z = openState.leftWingRotZ;
+
+      const isSingleNow = isSingleModeRef.current;
+      const singleOffsetX = isSingleNow ? _SINGLE_CENTER_X : 0;
+      if (leftWing.visible !== !isSingleNow) {
+        leftWing.visible = !isSingleNow;
+        shadowDirty = !isSwGl;
+      }
+      if (flipLeftFaceMesh.visible !== !isSingleNow) {
+        flipLeftFaceMesh.visible = !isSingleNow;
+      }
+      standGroup.position.x = singleOffsetX;
+      dustPoints.position.x = singleOffsetX;
+      dustPoints.scale.x = isSingleNow ? 0.52 : 1;
+      auraSprite.position.x = singleOffsetX;
 
       // Sync stand, dust & glow halo visibility cleanly (never gated out by software GL)
       if (standGroup.visible !== showStandRef.current) {
@@ -1720,10 +1729,20 @@ export function QuranBook3DPage({
               rightTexRef.current.image = fAnim.nextRightCanvas;
               rightTexRef.current.needsUpdate = true;
             }
-          } else if (fAnim.direction < 0 && fAnim.nextLeftCanvas && leftTexRef.current) {
+          } else if (
+            fAnim.direction < 0 &&
+            !isSingleNow &&
+            fAnim.nextLeftCanvas &&
+            leftTexRef.current
+          ) {
             if (leftTexRef.current.image !== fAnim.nextLeftCanvas) {
               leftTexRef.current.image = fAnim.nextLeftCanvas;
               leftTexRef.current.needsUpdate = true;
+            }
+          } else if (fAnim.direction < 0 && isSingleNow && fAnim.nextRightCanvas && rightTexRef.current) {
+            if (rightTexRef.current.image !== fAnim.nextRightCanvas) {
+              rightTexRef.current.image = fAnim.nextRightCanvas;
+              rightTexRef.current.needsUpdate = true;
             }
           }
           setSpread(fAnim.targetSpread);
@@ -1758,7 +1777,9 @@ export function QuranBook3DPage({
 
     const scheduleFrame = () => {
       if (isDisposed || isContextLost) return;
-      lastTimeMs = performance.now();
+      if (!scheduler.hasPendingWork()) {
+        lastTimeMs = performance.now();
+      }
       scheduler.schedule(renderFrame);
     };
     requestRenderRef.current = scheduleFrame;
@@ -1901,24 +1922,27 @@ export function QuranBook3DPage({
       tier
     );
     const nextLCanvas = isSingleMode
-      ? getOrnamentalEndpaperCanvas(tier)
+      ? null
       : renderPageToCanvas(pageCacheRef.current[nextLPage], nextLPage, tajOpts, null, false, tier).canvas;
 
-    // Outgoing Left side shows current Left canvas (or ornamental on single mode)
-    const outgoingLeft = leftCanvas || getOrnamentalEndpaperCanvas(tier);
-    if (flipLeftTexRef.current && outgoingLeft) {
-      flipLeftTexRef.current.image = outgoingLeft;
-      flipLeftTexRef.current.needsUpdate = true;
+    if (!isSingleMode) {
+      const outgoingLeft = leftCanvas;
+      if (flipLeftTexRef.current && outgoingLeft) {
+        flipLeftTexRef.current.image = outgoingLeft;
+        flipLeftTexRef.current.needsUpdate = true;
+      }
+      if (leftTexRef.current && nextLCanvas) {
+        leftTexRef.current.image = nextLCanvas;
+        leftTexRef.current.needsUpdate = true;
+      }
+    }
+    if (flipLeftFaceMeshRef.current) {
+      flipLeftFaceMeshRef.current.visible = !isSingleMode;
     }
     // Right-facing back of turning sheet reveals incoming next right page
     if (flipRightTexRef.current && nextRCanvas) {
       flipRightTexRef.current.image = nextRCanvas;
       flipRightTexRef.current.needsUpdate = true;
-    }
-    // Reveal incoming Left page underneath on the Left static wing
-    if (leftTexRef.current && nextLCanvas) {
-      leftTexRef.current.image = nextLCanvas;
-      leftTexRef.current.needsUpdate = true;
     }
 
     flipAnimRef.current = {
@@ -1973,7 +1997,7 @@ export function QuranBook3DPage({
       tier
     );
     const prevLCanvas = isSingleMode
-      ? getOrnamentalEndpaperCanvas(tier)
+      ? null
       : renderPageToCanvas(pageCacheRef.current[prevLPage], prevLPage, tajOpts, null, false, tier).canvas;
 
     // Outgoing Right side shows current Right canvas
@@ -1981,10 +2005,15 @@ export function QuranBook3DPage({
       flipRightTexRef.current.image = rightCanvas;
       flipRightTexRef.current.needsUpdate = true;
     }
-    // Left-facing back of turning sheet reveals incoming previous left page
-    if (flipLeftTexRef.current && prevLCanvas) {
-      flipLeftTexRef.current.image = prevLCanvas;
-      flipLeftTexRef.current.needsUpdate = true;
+    if (!isSingleMode) {
+      // Left-facing back of turning sheet reveals incoming previous left page
+      if (flipLeftTexRef.current && prevLCanvas) {
+        flipLeftTexRef.current.image = prevLCanvas;
+        flipLeftTexRef.current.needsUpdate = true;
+      }
+    }
+    if (flipLeftFaceMeshRef.current) {
+      flipLeftFaceMeshRef.current.visible = !isSingleMode;
     }
     // Reveal incoming previous right page underneath on Right static wing
     if (rightTexRef.current && prevRCanvas) {
@@ -2217,16 +2246,18 @@ export function QuranBook3DPage({
     if (!containerRef.current || !cameraRef.current || !sceneRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();
-    const mouse = new THREE.Vector2(
+    _pointerNdc.set(
       ((e.clientX - rect.left) / rect.width) * 2 - 1,
       -((e.clientY - rect.top) / rect.height) * 2 + 1
     );
 
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(mouse, cameraRef.current);
+    _raycaster.setFromCamera(_pointerNdc, cameraRef.current);
 
-    const intersects = raycaster.intersectObjects(
-      [rightPageMeshRef.current, leftPageMeshRef.current].filter(Boolean),
+    const intersects = _raycaster.intersectObjects(
+      [
+        rightPageMeshRef.current,
+        !isSingleModeRef.current ? leftPageMeshRef.current : null,
+      ].filter(Boolean),
       false
     );
 
@@ -2542,7 +2573,7 @@ export function QuranBook3DPage({
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: isSingleMode ? "6px 6px 8px" : "10px 12px 14px",
+        padding: isSingleMode ? "4px" : "10px 12px 14px",
         boxSizing: "border-box",
         position: "relative",
         userSelect: "none",
@@ -2561,11 +2592,11 @@ export function QuranBook3DPage({
           alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
-          gap: isSingleMode ? 5 : 8,
-          padding: isSingleMode ? "6px 8px" : "8px 14px",
+          gap: isSingleMode ? 3 : 8,
+          padding: isSingleMode ? "4px 6px" : "8px 14px",
           background: "rgba(18, 10, 4, 0.95)",
           border: "1px solid rgba(212, 175, 55, 0.35)",
-          borderRadius: isSingleMode ? 10 : 14,
+          borderRadius: isSingleMode ? 8 : 14,
           boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
           boxSizing: "border-box",
           zIndex: 40,
@@ -2922,20 +2953,18 @@ export function QuranBook3DPage({
           maxWidth: 1080,
           minHeight: 0,
           position: "relative",
-          margin: isSingleMode ? "4px 0" : "8px 0",
-          borderRadius: isSingleMode && (viewMode === "2d" || webglFailed) ? 10 : 16,
+          margin: isSingleMode ? "2px 0" : "8px 0",
+          borderRadius: isSingleMode ? 0 : 16,
           overflow: "hidden",
-          boxShadow:
-            isSingleMode && (viewMode === "2d" || webglFailed)
-              ? "none"
-              : "0 25px 70px rgba(0,0,0,0.85), 0 0 0 1px rgba(212,175,55,0.25)",
+          boxShadow: isSingleMode
+            ? "none"
+            : "0 25px 70px rgba(0,0,0,0.85), 0 0 0 1px rgba(212,175,55,0.25)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background:
-            isSingleMode && (viewMode === "2d" || webglFailed)
-              ? "transparent"
-              : "radial-gradient(circle at center, #1b1007 0%, #0d0703 100%)",
+          background: isSingleMode
+            ? "transparent"
+            : "radial-gradient(circle at center, #1b1007 0%, #0d0703 100%)",
         }}
       >
         {/* 3D WebGL Canvas Mode */}
@@ -2968,11 +2997,12 @@ export function QuranBook3DPage({
               width: "100%",
               height: "100%",
               minHeight: 0,
+              containerType: isSingleMode ? "size" : "normal",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: isSingleMode ? 0 : 16,
-              padding: isSingleMode ? "2px 4px" : "16px 12px",
+              padding: isSingleMode ? 0 : "16px 12px",
               boxSizing: "border-box",
               overflow:
                 zoom2dScale > 1 || pan2d.x !== 0 || pan2d.y !== 0 ? "auto" : "hidden",
@@ -3024,14 +3054,13 @@ export function QuranBook3DPage({
                   style={
                     isSingleMode
                       ? {
-                          flex: "0 1 auto",
-                          width: "auto",
-                          height: "100%",
+                          width: "min(100cqw, calc(100cqh * 1024 / 1536))",
+                          height: "auto",
                           maxWidth: "100%",
                           maxHeight: "100%",
-                          aspectRatio: "1024/1536",
-                          boxShadow: "0 12px 32px rgba(0,0,0,0.8)",
-                          borderRadius: 8,
+                          aspectRatio: "1024 / 1536",
+                          boxShadow: "none",
+                          borderRadius: 6,
                           overflow: "hidden",
                           cursor: "pointer",
                           transition: "transform 0.2s ease",
@@ -3051,7 +3080,11 @@ export function QuranBook3DPage({
                   onClick={(e) => handle2DCanvasClick(e, true)}
                   title="Page Droite — Touchez un verset"
                 >
-                  <CanvasMirror canvas={rightCanvas} alt={`Page ${rPage}`} />
+                  <CanvasMirror
+                    canvas={rightCanvas}
+                    alt={`Page ${rPage}`}
+                    fit={isSingleMode ? "fill" : "contain"}
+                  />
                 </div>
               )}
             </div>
@@ -3303,11 +3336,11 @@ export function QuranBook3DPage({
             alignItems: "center",
             justifyContent: "space-between",
             flexWrap: "wrap",
-            gap: isSingleMode ? 6 : 10,
-            padding: isSingleMode ? "6px 8px" : "8px 16px",
+            gap: isSingleMode ? 4 : 10,
+            padding: isSingleMode ? "4px 8px" : "8px 16px",
             background: "rgba(18, 10, 4, 0.95)",
             border: "1px solid rgba(212, 175, 55, 0.35)",
-            borderRadius: isSingleMode ? 10 : 14,
+            borderRadius: isSingleMode ? 8 : 14,
             boxSizing: "border-box",
             zIndex: 40,
           }}

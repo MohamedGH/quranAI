@@ -10,9 +10,12 @@ const { mockRendererState } = vi.hoisted(() => ({
     renderSpy: vi.fn(),
     disposeSpy: vi.fn(),
     setSizeSpy: vi.fn(),
+    rendererName: "NVIDIA GeForce RTX 4070",
     shaderMaterials: [],
     sprites: [],
+    points: [],
     cameras: [],
+    renderers: [],
   },
 }));
 
@@ -24,11 +27,12 @@ vi.mock("three", async (importOriginal) => {
       this.domElement = document.createElement("canvas");
       this.debug = { checkShaderErrors: false };
       this.capabilities = { getMaxAnisotropy: () => 4 };
-      this.shadowMap = { enabled: false, type: actual.PCFSoftShadowMap };
+      this.shadowMap = { enabled: false, autoUpdate: true, needsUpdate: false, type: actual.PCFSoftShadowMap };
       this.toneMapping = actual.ACESFilmicToneMapping;
       this.toneMappingExposure = 1;
       this.outputColorSpace = actual.SRGBColorSpace;
       this._pixelRatio = 1;
+      mockRendererState.renderers.push(this);
     }
     setSize(w, h, updateStyle) {
       mockRendererState.setSizeSpy(w, h, updateStyle);
@@ -43,7 +47,7 @@ vi.mock("three", async (importOriginal) => {
       return {
         RENDERER: 0x1f01,
         getExtension: () => ({ UNMASKED_RENDERER_WEBGL: 0x9246 }),
-        getParameter: () => "NVIDIA GeForce RTX 4070",
+        getParameter: () => mockRendererState.rendererName,
       };
     }
     compile() {}
@@ -74,6 +78,13 @@ vi.mock("three", async (importOriginal) => {
     }
   }
 
+  class TrackedPoints extends actual.Points {
+    constructor(geometry, material) {
+      super(geometry, material);
+      mockRendererState.points.push(this);
+    }
+  }
+
   class TrackedPerspectiveCamera extends actual.PerspectiveCamera {
     constructor(...args) {
       super(...args);
@@ -86,6 +97,7 @@ vi.mock("three", async (importOriginal) => {
     WebGLRenderer: MockWebGLRenderer,
     ShaderMaterial: TrackedShaderMaterial,
     Sprite: TrackedSprite,
+    Points: TrackedPoints,
     PerspectiveCamera: TrackedPerspectiveCamera,
   };
 });
@@ -100,9 +112,12 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
   beforeEach(() => {
     vi.clearAllMocks();
     resetBook3DWebGLCache();
+    mockRendererState.rendererName = "NVIDIA GeForce RTX 4070";
     mockRendererState.shaderMaterials.length = 0;
     mockRendererState.sprites.length = 0;
+    mockRendererState.points.length = 0;
     mockRendererState.cameras.length = 0;
+    mockRendererState.renderers.length = 0;
     store.dispatch(uiActions.resetUiElementsVisibility());
 
     const gradStub = { addColorStop: vi.fn() };
@@ -362,4 +377,142 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
 
     unmount();
   });
+
+  it("keeps particles and golden aura active on software WebGL (SwiftShader) without frustum culling", async () => {
+    mockRendererState.rendererName = "Google SwiftShader";
+    const rafQueue = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    const { unmount } = render(
+      React.createElement(
+        Provider,
+        { store },
+        React.createElement(
+          MemoryRouter,
+          null,
+          React.createElement(QuranBook3DPage, {
+            surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha" }],
+          })
+        )
+      )
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="q3d-webgl-container"]')).toBeTruthy();
+    });
+
+    expect(mockRendererState.points.length).toBe(1);
+    const dustPoints = mockRendererState.points[0];
+    expect(dustPoints.frustumCulled).toBe(false);
+    expect(dustPoints.visible).toBe(true);
+
+    expect(mockRendererState.sprites.length).toBe(1);
+    expect(mockRendererState.sprites[0].visible).toBe(true);
+
+    const dustShader = mockRendererState.shaderMaterials[0];
+    let simNow = performance.now() + 16;
+    for (let i = 0; i < 16; i++) {
+      act(() => {
+        const pending = rafQueue.splice(0, rafQueue.length);
+        for (const fn of pending) {
+          simNow += 50;
+          fn(simNow);
+        }
+      });
+      await new Promise((resolve) => setTimeout(resolve, 22));
+    }
+    expect(dustShader.uniforms.uEmitFactor.value).toBeGreaterThan(0.5);
+
+    unmount();
+  });
+
+  it("sets renderer.shadowMap.autoUpdate = false on hardware WebGL to eliminate idle shadow lag", async () => {
+    const rafQueue = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    const { unmount } = render(
+      React.createElement(
+        Provider,
+        { store },
+        React.createElement(
+          MemoryRouter,
+          null,
+          React.createElement(QuranBook3DPage, {
+            surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha" }],
+          })
+        )
+      )
+    );
+
+    await waitFor(() => {
+      expect(mockRendererState.renderers.length).toBe(1);
+    });
+
+    const renderer = mockRendererState.renderers[0];
+    expect(renderer.shadowMap.enabled).toBe(true);
+    expect(renderer.shadowMap.autoUpdate).toBe(false);
+
+    unmount();
+  });
+
+  it("renders single crisp mobile 2D Mushaf page without nested double frame or minHeight 460 clipping", async () => {
+    const origWidth = window.innerWidth;
+    const origHeight = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", { value: 375, writable: true, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 667, writable: true, configurable: true });
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    try {
+      const { unmount } = render(
+        React.createElement(
+          Provider,
+          { store },
+          React.createElement(
+            MemoryRouter,
+            null,
+            React.createElement(QuranBook3DPage, {
+              surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha" }],
+            })
+          )
+        )
+      );
+
+      await waitFor(() => {
+        expect(document.querySelector('[data-testid="q3d-view-toggle"]')).toBeTruthy();
+      });
+
+      fireEvent.click(document.querySelector('[data-testid="q3d-view-toggle"]'));
+
+      await waitFor(() => {
+        expect(document.querySelector('[data-testid="q3d-2d-right-page"]')).toBeTruthy();
+      });
+
+      const root = document.querySelector('[data-testid="q3d-root"]');
+      const mainStage = document.querySelector('[data-testid="q3d-main-stage"]');
+      const rightPage = document.querySelector('[data-testid="q3d-2d-right-page"]');
+      const leftPage = document.querySelector('[data-testid="q3d-2d-left-page"]');
+
+      expect(root.style.height).toBe("100%");
+      expect(mainStage.style.minHeight).toBe("0px");
+      expect(mainStage.style.boxShadow).toBe("none");
+      expect(leftPage).toBeNull();
+      expect(rightPage.style.height).toBe("100%");
+      expect(rightPage.style.width).toBe("auto");
+
+      unmount();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: origWidth, writable: true, configurable: true });
+      Object.defineProperty(window, "innerHeight", { value: origHeight, writable: true, configurable: true });
+    }
+  });
 });
+

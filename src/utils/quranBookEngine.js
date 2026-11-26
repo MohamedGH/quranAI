@@ -92,18 +92,28 @@ export const BOOK3D_PAN = Object.freeze({
 });
 
 export const BOOK3D_PARTICLES = Object.freeze({
-  hardwareCount: 92,
-  softwareCount: 44,
+  hardwareCount: 150,
+  softwareCount: 84,
   baseSize: 8.0,
   maxSize: 19.5,
   minScale: 0.95,
   maxScale: 1.75,
   defaultGlowStrength: 1.95,
-  auraOpacity: 0.56,
+  auraOpacity: 0.44,
   openDurationSec: 0.95,
   spawnWindowSec: 0.65,
   maxRise: 2.65,
+  minGlowIntensity: 0,
+  maxGlowIntensity: 2.0,
+  defaultGlowIntensity: 1.0,
 });
+
+export const clampGlowIntensity = (val) => {
+  const num = Number(val);
+  if (!Number.isFinite(num)) return BOOK3D_PARTICLES.defaultGlowIntensity;
+  const clamped = Math.max(BOOK3D_PARTICLES.minGlowIntensity, Math.min(BOOK3D_PARTICLES.maxGlowIntensity, num));
+  return Math.round(clamped * 20) / 20;
+};
 
 /**
  * Pure 3D Mushaf open/close wing kinematics and particle emission envelope.

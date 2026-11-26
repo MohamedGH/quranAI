@@ -22,6 +22,7 @@ export function OptionsModal({ onClose, onOpenReminders }) {
   const announceNum           = useSelector(sel.announceNum);
   const fullScreenSelectedAyat= useSelector(sel.fullScreenSelectedAyat);
   const ayatFontSize          = useSelector(sel.ayatFontSize) || 26;
+  const glowIntensity         = useSelector(sel.glowIntensity);
 
   const Row = ({ label, desc, on, onToggle, color = "var(--teal2)" }) => (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -288,6 +289,51 @@ export function OptionsModal({ onClose, onOpenReminders }) {
           <Row label="PARTIES" desc="Afficher les découpes de mémorisation" on={showParts} onToggle={() => dispatch(uiActions.toggleShowParts())} color="var(--gold2)" />
           <Row label="ORTHOGRAPHE" desc="Vérification en révision écrite" on={spellCheck} onToggle={() => dispatch(uiActions.toggleSpellCheck())} color="var(--gold2)" />
           <Row label="NUMÉROS" desc="Annoncer les numéros d'ayat" on={announceNum} onToggle={() => dispatch(uiActions.toggleAnnounceNum())} color="var(--teal2)" />
+
+          <div style={{
+            display: "flex", flexDirection: "column", gap: 8,
+            padding: "10px 0", borderBottom: "1px solid var(--border)"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: 1.5, color: "var(--text)", fontFamily: "'Cinzel',serif" }}>
+                  🌟 INTENSITÉ DU GLOW (CORAN 3D)
+                </div>
+                <div style={{ fontSize: 8, color: "var(--text3)", marginTop: 2, letterSpacing: 0.5 }}>
+                  Ajuster la luminosité du halo sacré et de la lueur dorée ({Math.round((glowIntensity ?? 1) * 100)}%)
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => dispatch(uiActions.resetGlowIntensity())}
+                title="Réinitialiser à 100%"
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border2)",
+                  background: "var(--surface2)",
+                  color: "var(--gold2)",
+                  fontFamily: "'Cinzel',serif",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: "pointer"
+                }}
+              >
+                {Math.round((glowIntensity ?? 1) * 100)}%
+              </button>
+            </div>
+            <input
+              data-testid="options-glow-intensity-slider"
+              type="range"
+              min={0}
+              max={2}
+              step={0.05}
+              value={glowIntensity ?? 1}
+              onChange={e => dispatch(uiActions.setGlowIntensity(Number(e.target.value)))}
+              aria-label="Intensité du glow 3D"
+              style={{ width: "100%", accentColor: "var(--gold)", cursor: "pointer" }}
+            />
+          </div>
 
           <Section title="PERSONNALISATION DES ÉLÉMENTS D'INTERFACE" />
           <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: 10, background: "var(--surface2)", border: "1px solid rgba(201, 168, 76, 0.3)" }}>

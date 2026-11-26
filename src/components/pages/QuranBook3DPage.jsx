@@ -45,6 +45,7 @@ import {
   computeTwoFingerMetrics,
   computeCameraPose,
   computeResponsive3DFov,
+  clampGlowIntensity,
   generateParticleFieldData,
   resolveSpreadPlaybackStep,
   findAyahMetadataOnSpread,
@@ -555,9 +556,9 @@ export function createParticleGlowTexture(size = 64) {
   if (typeof ctx.createRadialGradient === "function") {
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
     grad.addColorStop(0.0, "rgba(255, 255, 255, 1)");
-    grad.addColorStop(0.34, "rgba(255, 246, 196, 0.98)");
-    grad.addColorStop(0.62, "rgba(255, 214, 88, 0.72)");
-    grad.addColorStop(0.86, "rgba(235, 175, 45, 0.28)");
+    grad.addColorStop(0.42, "rgba(255, 248, 205, 0.99)");
+    grad.addColorStop(0.72, "rgba(255, 214, 72, 0.88)");
+    grad.addColorStop(0.90, "rgba(245, 175, 40, 0.42)");
     grad.addColorStop(1.0, "rgba(212, 175, 55, 0)");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, s, s);
@@ -571,9 +572,9 @@ export function createParticleGlowTexture(size = 64) {
   // Crisp luminous 4-point celestial starflare core
   if (typeof ctx.ellipse === "function") {
     ctx.save();
-    ctx.fillStyle = "rgba(255, 254, 238, 0.92)";
-    const armLen = r * 0.72;
-    const armThick = Math.max(1.2, s * 0.045);
+    ctx.fillStyle = "rgba(255, 254, 240, 0.96)";
+    const armLen = r * 0.88;
+    const armThick = Math.max(1.8, s * 0.08);
     ctx.beginPath();
     ctx.ellipse(cx, cy, armLen, armThick, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -679,6 +680,8 @@ export function QuranBook3DPage({
   const uiEditMode = useSelector(sel.uiEditMode);
   const uxMode = useSelector(sel.uxMode);
   const lastAyatBySurah = useSelector(sel.lastAyatBySurah);
+  const reduxGlowIntensity = useSelector(sel.glowIntensity);
+  const glowIntensity = clampGlowIntensity(reduxGlowIntensity);
   const isSimplifiedPriority = isPriority3DProfile(uxMode);
 
   const surahs = propSurahs || reduxSurahs || [];
@@ -769,6 +772,7 @@ export function QuranBook3DPage({
   const showStandRef = useRef(showStand);
   const showDustRef = useRef(showDust);
   const showGlowRef = useRef(showGlow);
+  const glowIntensityRef = useRef(glowIntensity);
   const bookOpenRef = useRef(bookOpen);
   const openAnimRef = useRef({ progress: 0, particleTime: 0 });
   const isSoftwareGlRef = useRef(Boolean(_cachedGlProfile?.isSoftware));
@@ -1137,7 +1141,9 @@ export function QuranBook3DPage({
         uBaseSize: { value: BOOK3D_PARTICLES.baseSize },
         uMaxSize: { value: BOOK3D_PARTICLES.maxSize },
         uGlowStrength: {
-          value: showGlowRef.current ? BOOK3D_PARTICLES.defaultGlowStrength : 0.45,
+          value: showGlowRef.current
+            ? Math.max(0.7, BOOK3D_PARTICLES.defaultGlowStrength * (0.4 + 0.6 * glowIntensityRef.current))
+            : 0.75,
         },
       },
       vertexShader: `
@@ -1163,18 +1169,19 @@ export function QuranBook3DPage({
           float localT = uParticleTime - aDelay;
           float active = step(0.001, localT) * step(0.005, uEmitFactor);
           float life = fract(max(0.0, localT) * aSpeed * 0.85);
-          float fadeEnv = smoothstep(0.0, 0.05, life) * (1.0 - smoothstep(0.72, 1.0, life));
-          vAlpha = active * uEmitFactor * fadeEnv * (0.82 + 0.18 * vTwinkle);
+          float fadeEnv = smoothstep(0.0, 0.04, life) * (1.0 - smoothstep(0.80, 1.0, life));
+          vAlpha = active * uEmitFactor * fadeEnv * (0.86 + 0.14 * vTwinkle);
 
           vec3 p = position;
-          p.y += 0.22 + life * uMaxRise;
-          p.x += sin(uTime * 0.65 + aPhase) * 0.16 * (0.25 + life);
-          p.z += cos(uTime * 0.55 + aPhase * 1.3) * 0.16 * (0.25 + life);
+          float spreadOut = mix(1.05, 1.85, life);
+          p.x = p.x * spreadOut + sin(uTime * 0.8 + aPhase) * 0.26 * (0.35 + life);
+          p.y += 0.30 + life * uMaxRise;
+          p.z += cos(uTime * 0.7 + aPhase * 1.3) * 0.22 * (0.35 + life);
 
           vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
-          float distScale = 5.4 / max(1.6, -mvPosition.z);
+          float distScale = 9.0 / max(1.6, -mvPosition.z);
           float ptSize = max(
-            4.5 * uPixelRatio,
+            8.0 * uPixelRatio,
             min(
               uMaxSize * uPixelRatio,
               uBaseSize * aScale * uPixelRatio * distScale * (0.88 + 0.12 * vTwinkle)
@@ -1195,12 +1202,13 @@ export function QuranBook3DPage({
           if (vAlpha < 0.005) discard;
           vec4 tex = texture2D(uMap, gl_PointCoord);
           if (tex.a < 0.01) discard;
-          vec3 glowColor = mix(vColor, vec3(1.0, 0.99, 0.88), tex.a * 0.5);
-          float alpha = min(1.0, tex.a * vAlpha * 1.35);
-          gl_FragColor = vec4(glowColor * (1.35 + uGlowStrength * 0.85) * vTwinkle, alpha);
+          vec3 glowColor = mix(vColor, vec3(1.0, 0.99, 0.88), tex.a * 0.55);
+          float alpha = min(1.0, tex.a * vAlpha * 1.65);
+          gl_FragColor = vec4(glowColor * (1.45 + uGlowStrength * 0.75) * vTwinkle, alpha);
         }
       `,
       transparent: true,
+      depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
@@ -1219,7 +1227,7 @@ export function QuranBook3DPage({
       map: auraTex,
       color: 0xffd275,
       transparent: true,
-      opacity: BOOK3D_PARTICLES.auraOpacity * initialOpenState.auraFactor,
+      opacity: Math.min(0.95, BOOK3D_PARTICLES.auraOpacity * initialOpenState.auraFactor * glowIntensityRef.current),
       depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -1228,7 +1236,7 @@ export function QuranBook3DPage({
     auraSprite.renderOrder = -1;
     auraSprite.position.set(0, 0.24, -0.55);
     auraSprite.scale.set(6.4, 4.4, 1);
-    auraSprite.visible = showGlowRef.current;
+    auraSprite.visible = showGlowRef.current && glowIntensityRef.current > 0.01;
     scene.add(auraSprite);
     auraSpriteRef.current = auraSprite;
 
@@ -1696,7 +1704,8 @@ export function QuranBook3DPage({
       if (dustPoints.visible !== dustActive) {
         dustPoints.visible = dustActive;
       }
-      const glowActive = showGlowRef.current;
+      const glowLevel = glowIntensityRef.current;
+      const glowActive = showGlowRef.current && glowLevel > 0.01;
       if (auraSprite.visible !== glowActive) {
         auraSprite.visible = glowActive;
       }
@@ -1710,12 +1719,12 @@ export function QuranBook3DPage({
       }
       dustMat.uniforms.uParticleTime.value = openAnim.particleTime;
       dustMat.uniforms.uEmitFactor.value = openState.particleEmissionFactor;
-      dustMat.uniforms.uGlowStrength.value = showGlowRef.current
-        ? BOOK3D_PARTICLES.defaultGlowStrength
-        : 0.45;
+      dustMat.uniforms.uGlowStrength.value = glowActive
+        ? Math.max(0.7, BOOK3D_PARTICLES.defaultGlowStrength * (0.4 + 0.6 * glowLevel))
+        : 0.75;
 
       if (glowActive) {
-        auraMat.opacity = BOOK3D_PARTICLES.auraOpacity * openState.auraFactor;
+        auraMat.opacity = Math.min(0.95, BOOK3D_PARTICLES.auraOpacity * openState.auraFactor * glowLevel);
         const pulse = 1 + Math.sin(dustMat.uniforms.uTime.value * 1.1) * 0.04;
         auraSprite.scale.set(6.4 * pulse, 4.4 * pulse, 1);
       }
@@ -1889,11 +1898,12 @@ export function QuranBook3DPage({
 
   useEffect(() => {
     showGlowRef.current = showGlow;
+    glowIntensityRef.current = glowIntensity;
     if (auraSpriteRef.current) {
-      auraSpriteRef.current.visible = showGlow;
+      auraSpriteRef.current.visible = showGlow && glowIntensity > 0.01;
     }
     requestRenderRef.current();
-  }, [showGlow]);
+  }, [showGlow, glowIntensity]);
 
   useEffect(() => {
     bookOpenRef.current = bookOpen;
@@ -3939,6 +3949,57 @@ export function QuranBook3DPage({
                   onChange={(e) => setShowGlow(e.target.checked)}
                 />
               </label>
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  padding: "12px 14px",
+                  background: "rgba(255,255,255,0.05)",
+                  borderRadius: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ color: "#ebd8b0", fontSize: 13 }}>🔆 Intensité du Glow</span>
+                  <button
+                    type="button"
+                    data-testid="q3d-glow-intensity-reset"
+                    onClick={() => {
+                      dispatch(uiActions.resetGlowIntensity());
+                      if (!showGlow) setShowGlow(true);
+                    }}
+                    title="Réinitialiser l'intensité à 100%"
+                    style={{
+                      background: "rgba(212,175,55,0.18)",
+                      border: "1px solid rgba(212,175,55,0.45)",
+                      color: "#ffd700",
+                      borderRadius: 6,
+                      padding: "2px 8px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {Math.round(glowIntensity * 100)}%
+                  </button>
+                </div>
+                <input
+                  data-testid="q3d-glow-intensity-slider"
+                  type="range"
+                  min={BOOK3D_PARTICLES.minGlowIntensity}
+                  max={BOOK3D_PARTICLES.maxGlowIntensity}
+                  step={0.05}
+                  value={glowIntensity}
+                  aria-label="Intensité du Glow"
+                  onChange={(e) => {
+                    const nextVal = clampGlowIntensity(Number(e.target.value));
+                    dispatch(uiActions.setGlowIntensity(nextVal));
+                    if (nextVal > 0 && !showGlow) setShowGlow(true);
+                  }}
+                  style={{ width: "100%", accentColor: "#d4af37", cursor: "pointer" }}
+                />
+              </div>
 
               <label
                 style={{

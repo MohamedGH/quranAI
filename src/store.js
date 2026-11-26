@@ -99,6 +99,10 @@ const uiSlice = createSlice({
     showUiVisibilityModal: false,
     uiEditMode:          false,
     quranReadingTier:    initQuranReadingTier,
+    glowIntensity:       (() => {
+      const v = Number(load("quran_glowIntensity", 1.0));
+      return Number.isFinite(v) ? Math.max(0, Math.min(2, Math.round(v * 20) / 20)) : 1.0;
+    })(),
   },
   reducers: {
     setActivePage:    (s, a) => { s.activePage    = a.payload; },
@@ -601,6 +605,16 @@ const uiSlice = createSlice({
         s.fullScreenSelectedAyat = true;
         save("quran_fullScreenSelectedAyat", true);
       }
+    },
+    setGlowIntensity: (s, a) => {
+      const raw = Number(a.payload);
+      const next = Number.isFinite(raw) ? Math.max(0, Math.min(2, Math.round(raw * 20) / 20)) : 1.0;
+      s.glowIntensity = next;
+      save("quran_glowIntensity", next);
+    },
+    resetGlowIntensity: (s) => {
+      s.glowIntensity = 1.0;
+      save("quran_glowIntensity", 1.0);
     },
   },
   extraReducers: (builder) => {
@@ -1392,6 +1406,7 @@ const rawSel = {
   showUiVisibilityModal:(s) => Boolean(s.ui.showUiVisibilityModal),
   uiEditMode:          (s) => Boolean(s.ui.uiEditMode),
   quranReadingTier:    (s) => s.ui.quranReadingTier || QURAN_READING_TIERS.LIST,
+  glowIntensity:       (s) => s.ui?.glowIntensity ?? 1.0,
   // quran
   surahs:          (s) => s.quran.surahs,
   selectedSurah:   (s) => s.quran.selectedSurah,

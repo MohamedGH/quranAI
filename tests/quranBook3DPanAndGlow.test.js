@@ -112,10 +112,11 @@ vi.mock("three", async (importOriginal) => {
 });
 
 import * as THREE from "three";
-import { store, uiActions } from "../src/store.js";
+import { store, uiActions, sel } from "../src/store.js";
 import * as reciterAudio from "../src/utils/reciterAudio.js";
 import { BOOK3D_ZOOM, BOOK3D_PARTICLES, computeResponsive3DFov } from "../src/utils/quranBookEngine.js";
 import { QuranBook3DPage, resetBook3DWebGLCache } from "../src/components/pages/QuranBook3DPage.jsx";
+import { OptionsModal } from "../src/components/sync/OptionsModal.jsx";
 
 describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric Aura", () => {
   beforeEach(() => {
@@ -129,6 +130,7 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     mockRendererState.renderers.length = 0;
     mockRendererState.meshes.length = 0;
     store.dispatch(uiActions.resetUiElementsVisibility());
+    store.dispatch(uiActions.resetGlowIntensity());
 
     const gradStub = { addColorStop: vi.fn() };
     const ctxStub = {
@@ -583,6 +585,8 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
       const dustPoints = mockRendererState.points[0];
       expect(dustPoints.position.x).toBe(0);
       expect(dustPoints.scale.x).toBe(1);
+      expect(dustPoints.renderOrder).toBe(12);
+      expect(dustPoints.material.depthTest).toBe(false);
 
       const mainStage = document.querySelector('[data-testid="q3d-main-stage"]');
       expect(mainStage.style.boxShadow).toBe("none");
@@ -592,6 +596,94 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
       Object.defineProperty(window, "innerWidth", { value: origWidth, writable: true, configurable: true });
       Object.defineProperty(window, "innerHeight", { value: origHeight, writable: true, configurable: true });
     }
+  });
+
+  it("adjusts glow intensity in 3D Options & global OptionsModal and updates aura opacity + shader strength live", async () => {
+    const rafQueue = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+
+    const { unmount } = render(
+      React.createElement(
+        Provider,
+        { store },
+        React.createElement(
+          MemoryRouter,
+          null,
+          React.createElement(QuranBook3DPage, {
+            surahs: [{ number: 1, name: "الفاتحة", englishName: "Al-Fatiha" }],
+          })
+        )
+      )
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="q3d-webgl-container"]')).toBeTruthy();
+    });
+
+    const dustShader = mockRendererState.shaderMaterials[0];
+    const auraSprite = mockRendererState.sprites[0];
+    expect(dustShader.depthTest).toBe(false);
+
+    // Advance past opening animation so auraFactor reaches 1
+    let simNow = performance.now() + 16;
+    act(() => {
+      for (let i = 0; i < 24 && rafQueue.length > 0; i++) {
+        simNow += 50;
+        const fn = rafQueue.shift();
+        fn(simNow);
+      }
+    });
+
+    const settingsBtn = Array.from(document.querySelectorAll("button")).find((b) =>
+      b.textContent.includes("⚙️ 3D")
+    );
+    fireEvent.click(settingsBtn);
+
+    const slider3d = document.querySelector('[data-testid="q3d-glow-intensity-slider"]');
+    expect(slider3d).toBeTruthy();
+    expect(Number(slider3d.value)).toBe(1);
+
+    // Increase glow intensity to 1.8 (180%)
+    fireEvent.change(slider3d, { target: { value: "1.8" } });
+    expect(sel.glowIntensity(store.getState())).toBe(1.8);
+
+    act(() => {
+      const pending = rafQueue.splice(0, rafQueue.length);
+      for (const fn of pending) {
+        simNow += 32;
+        fn(simNow);
+      }
+    });
+    expect(auraSprite.visible).toBe(true);
+    expect(auraSprite.material.opacity).toBeCloseTo(BOOK3D_PARTICLES.auraOpacity * 1.8, 2);
+    expect(dustShader.uniforms.uGlowStrength.value).toBeGreaterThan(BOOK3D_PARTICLES.defaultGlowStrength);
+
+    // Slide glow intensity to 0 -> aura hides while dust particles stay visible
+    fireEvent.change(slider3d, { target: { value: "0" } });
+    expect(sel.glowIntensity(store.getState())).toBe(0);
+    expect(auraSprite.visible).toBe(false);
+    expect(mockRendererState.points[0].visible).toBe(true);
+
+    unmount();
+
+    // Global OptionsModal -> RÉGLAGES D'AFFICHAGE exposes the same synced glow slider
+    const { unmount: unmountOpts } = render(
+      React.createElement(
+        Provider,
+        { store },
+        React.createElement(OptionsModal, { onClose: () => {} })
+      )
+    );
+    fireEvent.click(document.getElementById("options-tab-settings"));
+    const optSlider = document.querySelector('[data-testid="options-glow-intensity-slider"]');
+    expect(optSlider).toBeTruthy();
+    fireEvent.change(optSlider, { target: { value: "1.45" } });
+    expect(sel.glowIntensity(store.getState())).toBe(1.45);
+    unmountOpts();
   });
 });
 

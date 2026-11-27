@@ -4,10 +4,13 @@ import { useSelector } from "react-redux";
 import { sel } from "../../store.js";
 import { PlayingArabicHighlighted } from "../common/ArabicHighlighted.jsx";
 import { VoiceRecorder } from "../audio/VoiceRecorder.jsx";
-import { safePlayAudio, safePauseAudio } from "../../utils/safeAudioPlayer.js";
+import { safePlayAudio, safePauseAudio, applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
+import { PlaybackSpeedControl } from "../audio/PlaybackSpeedControl.jsx";
 
 export function LectureMode({ ayat, surahNum, audioUrl, isMainPlaying, timestamps, onLoadTimestamps, onUpdateTimestamps, onLocalPlay }) {
   const audioRef  = useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(audioRef);
   const rafRef    = useRef(null);
   const [lectureTab, setLectureTab]         = useState("listen"); // "listen" | "record"
   const [currentMs, setCurrentMs]   = useState(0);
@@ -173,11 +176,25 @@ export function LectureMode({ ayat, surahNum, audioUrl, isMainPlaying, timestamp
             padding:"12px 14px", display:"flex", flexDirection:"column", gap:10,
           }}>
             {/* Hidden native audio */}
-            <audio ref={audioRef} src={audioUrl}
-              onPlay={onPlay2} onPause={handlePause2} onEnded={handleEnded2}
-              onLoadedMetadata={() => setLocalDuration((audioRef.current?.duration||0)*1000)}
-              onTimeUpdate={() => setLocalCurrentMs((audioRef.current?.currentTime||0)*1000)}
-              style={{ display:"none" }} />
+            <audio
+              ref={(el) => {
+                audioRef.current = el;
+                if (el) applyAudioPlaybackRate(el, playbackRate);
+              }}
+              src={audioUrl}
+              onPlay={(e) => {
+                applyAudioPlaybackRate(e.currentTarget, playbackRate);
+                onPlay2();
+              }}
+              onPause={handlePause2}
+              onEnded={handleEnded2}
+              onLoadedMetadata={(e) => {
+                applyAudioPlaybackRate(e.currentTarget, playbackRate);
+                setLocalDuration((audioRef.current?.duration || 0) * 1000);
+              }}
+              onTimeUpdate={() => setLocalCurrentMs((audioRef.current?.currentTime || 0) * 1000)}
+              style={{ display: "none" }}
+            />
 
             {/* Progress bar */}
             <div onClick={seek} style={{
@@ -210,6 +227,12 @@ export function LectureMode({ ayat, surahNum, audioUrl, isMainPlaying, timestamp
 
               {/* Spacer */}
               <div style={{ flex:1 }}/>
+
+              <PlaybackSpeedControl
+                variant="select"
+                compact={true}
+                testId="lecture-playback-rate-select"
+              />
 
               {/* TS load if none */}
               {!timestamps && (

@@ -14,6 +14,11 @@ import {
   resolveStepDownQuranTier,
 } from "./utils/uxProfileManager.js";
 import { resolveAyatStudyInfo } from "./utils/studyRecency.js";
+import {
+  DEFAULT_PLAYBACK_RATE,
+  clampPlaybackRate,
+  getNextPlaybackRate,
+} from "./utils/safeAudioPlayer.js";
 
 // ─── Helpers localStorage ────────────────────────────────────────────────────
 const load = (key, fallback) => safeGetItem(key, fallback);
@@ -732,6 +737,8 @@ const playerSlice = createSlice({
       ghunnah: true,
       madd: true
     }),
+    // Audio playback speed (0.5x – 2.0x)
+    playbackRate: clampPlaybackRate(load("quran_playbackRate", DEFAULT_PLAYBACK_RATE)),
   },
   reducers: {
     setIsMainPlaying:  (s, a) => { s.isMainPlaying  = a.payload; },
@@ -825,6 +832,20 @@ const playerSlice = createSlice({
         [ruleKey]: !current
       };
       save("quran_tajweedCoachRulesEnabled", s.tajweedCoachRulesEnabled);
+    },
+    setPlaybackRate: (s, a) => {
+      const next = clampPlaybackRate(a.payload);
+      s.playbackRate = next;
+      save("quran_playbackRate", next);
+    },
+    cyclePlaybackRate: (s) => {
+      const next = getNextPlaybackRate(s.playbackRate);
+      s.playbackRate = next;
+      save("quran_playbackRate", next);
+    },
+    resetPlaybackRate: (s) => {
+      s.playbackRate = DEFAULT_PLAYBACK_RATE;
+      save("quran_playbackRate", DEFAULT_PLAYBACK_RATE);
     },
   },
 });
@@ -1457,6 +1478,7 @@ const rawSel = {
     ghunnah: true,
     madd: true
   },
+  playbackRate: (s) => s.player?.playbackRate ?? DEFAULT_PLAYBACK_RATE,
   // learn
   learnData:       (s) => s.learn.data,
   partSelectAyat:  (s) => s.learn.partSelectAyat,

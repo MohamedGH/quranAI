@@ -89,7 +89,9 @@ import { normalizeArabic, diffRecitation } from "./utils/recitationDiff.js";
 import { splitArabicWords, splitArabicChars, splitArabicClusters, stripDiacritics, stripBasmalaFromAyah, wordTranslit, calcDifficulty, calcPhase, arabicRoot, ARABIC_ROOTS, SURAH_INFO } from "./utils/arabicUtils.js";
 import { segmentAyatTranslation } from "./utils/translationUtils.js";
 import { ERROR_CODES, withErrorRecovery } from "./utils/errorManager.js";
-import { safePlayAudio, safePauseAudio, safeLoadAudio, playWhenAudioReady, isAudioAbortError } from "./utils/safeAudioPlayer.js";
+import { safePlayAudio, safePauseAudio, safeLoadAudio, playWhenAudioReady, isAudioAbortError, applyAudioPlaybackRate } from "./utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "./hooks/useSyncedAudioPlaybackRate.js";
+import { PlaybackSpeedControl } from "./components/audio/PlaybackSpeedControl.jsx";
 import { parseQuranRoute, buildQuranRoute } from "./utils/routeManager.js";
 import {
   resolveMenuSurahSelection,
@@ -722,6 +724,8 @@ function AppInner({ currentUser, onSignOut }) {
   const swipeHudTimerRef = useRef(null);
   const [swipeHud, setSwipeHud] = useState(null);
   const mainAudioRef = useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(mainAudioRef);
+  useSyncedAudioPlaybackRate(partAudioRef);
   const tsLoadGenRef = useRef(0); // incremented on each surah change to cancel stale ts loads
 
   // Re-run timestamp auto-load when the reciter changes (without redoing the whole
@@ -1935,6 +1939,7 @@ function AppInner({ currentUser, onSignOut }) {
             mainAudioRef.current.src = resolvedUrl;
           }
           safeLoadAudio(audioEl); // new ayat → safely reload its audio source from start
+          applyAudioPlaybackRate(audioEl, playbackRate);
           if (announceNumRef.current && num) {
             safePauseAudio(audioEl);
             speakAyatNum(num).then(() => { if (isMainPlaying) playWhenAudioReady(mainAudioRef.current); });
@@ -1943,15 +1948,17 @@ function AppInner({ currentUser, onSignOut }) {
           }
         }).catch(() => {
           safeLoadAudio(audioEl);
+          applyAudioPlaybackRate(audioEl, playbackRate);
           playWhenAudioReady(audioEl);
         });
       } else {
+        applyAudioPlaybackRate(audioEl, playbackRate);
         safePlayAudio(audioEl); // resume: same ayat, same audio element → keeps its currentTime
       }
     } else {
       safePauseAudio(audioEl); // pausing never touches currentTime, so resuming continues from here
     }
-  }, [mainAyatIdx, isMainPlaying]);
+  }, [mainAyatIdx, isMainPlaying, playbackRate]);
 
   // Auto-follow playing ayat when in fullscreen focus mode (only when playingAyatNum advances)
   useEffect(() => {
@@ -2717,6 +2724,7 @@ function AppInner({ currentUser, onSignOut }) {
     }
     audio.src = url;
     audio.currentTime = startMs / 1000;
+    applyAudioPlaybackRate(audio, playbackRate);
     audio.play().catch(() => {});
     setPlayingPart({ ayatNum: targetAyat.numberInSurah, partId: part.id, loop });
     startPartRaf();
@@ -4490,8 +4498,11 @@ function AppInner({ currentUser, onSignOut }) {
                     ref={el => {
                       partAudioRef.current = el;
                       window.__quranPartAudio = el;
+                      if (el) applyAudioPlaybackRate(el, playbackRate);
                     }}
                     style={{ display: "none" }}
+                    onLoadedMetadata={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
+                    onPlay={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
                     onEnded={() => { setTimeout(() => { setPlayingPart(null); setPartCurrentMs(0); stopPartRaf(); }, 250); }}
                   />
                   {loadingAyats
@@ -6025,10 +6036,14 @@ function AppInner({ currentUser, onSignOut }) {
           ref={el => {
             mainAudioRef.current = el;
             window.__quranMainAudio = el;
-            if (el) el._ayatNum = currentMainAyat?.numberInSurah;
+            if (el) {
+              el._ayatNum = currentMainAyat?.numberInSurah;
+              applyAudioPlaybackRate(el, playbackRate);
+            }
           }}
           src={audioUrl(currentMainAyat)}
           onEnded={handleMainEnded}
+          onLoadedMetadata={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
           onTimeUpdate={() => {
             const a = mainAudioRef.current;
             if (a) {
@@ -6037,7 +6052,8 @@ function AppInner({ currentUser, onSignOut }) {
               window.__quranMainMs = ms;
             }
           }}
-          onPlay={() => {
+          onPlay={(e) => {
+            applyAudioPlaybackRate(e.currentTarget, playbackRate);
             setIsMainPlaying(true);
             startRaf();
           }}
@@ -6136,6 +6152,12 @@ function AppInner({ currentUser, onSignOut }) {
                         playMainAyat(i); if (isMainPlaying) playWhenReady();
                       }}
                     >{playerConfig.nextBtnText()}</button>
+                    <PlaybackSpeedControl
+                      variant="select"
+                      compact={true}
+                      className="player-speed-select"
+                      testId="main-player-speed-select"
+                    />
                   </>
                 </EditableUiSlot>
                 <EditableUiSlot

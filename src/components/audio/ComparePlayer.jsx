@@ -1,9 +1,12 @@
 import { MiniAudioPlayer } from "./MiniAudioPlayer.jsx";
 import React, { useState, useRef, useEffect } from "react";
+import { applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
 
 export function ComparePlayer({ userSrc, refSrc }) {
   const userRef = useRef(null);
   const refRef  = useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(refRef);
   const [playing, setPlaying]   = useState(false);
   const [userT,   setUserT]     = useState(0);
   const [refT,    setRefT]      = useState(0);
@@ -61,7 +64,19 @@ export function ComparePlayer({ userSrc, refSrc }) {
     <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10,background:"var(--surface2)",borderRadius:8,border:"1px solid var(--border)"}}>
       {/* Hidden audio elements */}
       <audio ref={userRef} src={userSrc} onLoadedMetadata={()=>setUserDur(userRef.current?.duration||0)} onEnded={handleEnded} />
-      <audio ref={refRef}  src={refSrc}  onLoadedMetadata={()=>setRefDur(refRef.current?.duration||0)}   onEnded={handleEnded} />
+      <audio
+        ref={(el) => {
+          refRef.current = el;
+          if (el) applyAudioPlaybackRate(el, playbackRate);
+        }}
+        src={refSrc}
+        onLoadedMetadata={(e) => {
+          applyAudioPlaybackRate(e.currentTarget, playbackRate);
+          setRefDur(refRef.current?.duration || 0);
+        }}
+        onPlay={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
+        onEnded={handleEnded}
+      />
 
       {/* Sync play controls */}
       <div style={{display:"flex",alignItems:"center",gap:10}}>

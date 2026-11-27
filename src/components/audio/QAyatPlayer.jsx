@@ -9,6 +9,8 @@ import {
   findActiveSilenceInterval,
   calculateNextPlaybackTime,
 } from "../../utils/audioSilenceManager.js";
+import { applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
 
 export function QAyatPlayer({ ayatText, timestamps, parts, audioUrl, learnData }) {
   const [currentMs,  setCurrentMs]  = React.useState(0);
@@ -16,6 +18,7 @@ export function QAyatPlayer({ ayatText, timestamps, parts, audioUrl, learnData }
   const [rangeEnd,   setRangeEnd]   = React.useState(null);  // ms — null = play to end
   const [rangeStart, setRangeStart] = React.useState(null);
   const audioRef = React.useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(audioRef);
   const rafRef   = React.useRef(null);
   const containerRef = React.useRef(null);
 
@@ -113,6 +116,7 @@ export function QAyatPlayer({ ayatText, timestamps, parts, audioUrl, learnData }
     const a = audioRef.current;
     if (!a || !audioUrl) return;
     if (a.src !== audioUrl) a.src = audioUrl;
+    applyAudioPlaybackRate(a, playbackRate);
     a.currentTime = startMs / 1000;
     setRangeEnd(endMs);
     setRangeStart(startMs);
@@ -161,7 +165,14 @@ export function QAyatPlayer({ ayatText, timestamps, parts, audioUrl, learnData }
 
   return (
     <div style={{ width:'100%', display:'flex', flexDirection:'column', gap:10 }}>
-      <audio ref={audioRef} style={{ display:'none' }}
+      <audio
+        ref={(el) => {
+          audioRef.current = el;
+          if (el) applyAudioPlaybackRate(el, playbackRate);
+        }}
+        style={{ display:'none' }}
+        onLoadedMetadata={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
+        onPlay={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
         onEnded={() => { setIsPlaying(false); setRangeEnd(null); setRangeStart(null); stopRaf(); clearHighlight(); }}
         onPause={() => { if (!audioRef.current?.ended) { setIsPlaying(false); stopRaf(); } }}
       />

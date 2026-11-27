@@ -14,6 +14,7 @@ import { isSimplifiedUxMode, getUxProfile } from "../../utils/uxProfileManager.j
 import { calculateTouchDistance, detectPinchGesture, detectSheetDismissGesture } from "../../utils/swipeNavigation.js";
 import { getQuarterHizbForSurahAyah, getQuarterFractionMeta } from "../../utils/quarterHizbUtils.js";
 import { getStudyRecencyInfo } from "../../utils/studyRecency.js";
+import { PlaybackSpeedControl } from "../audio/PlaybackSpeedControl.jsx";
 
 // Helper for Arabic Eastern digits: e.g. 108 -> ۱۰۸
 function toArabicDigits(num) {
@@ -3131,6 +3132,17 @@ export function AyatFullScreenModal({
           >
             {isChild ? (isPlaying ? "⏸ PAUSE" : "▶ ÉCOUTER") : isBeginner ? (isPlaying ? "⏸ Pause" : "▶ Écouter") : (isPlaying ? "❚❚" : "▶")}
           </button>
+
+          <PlaybackSpeedControl
+            variant="select"
+            compact={true}
+            testId="fs-playback-rate-select"
+            style={{
+              height: isMobile ? 36 : 34,
+              borderRadius: 16,
+              padding: isMobile ? "0 8px" : "0 10px",
+            }}
+          />
         </div>
 
         {/* Right: Next Ayat button + Exit */}

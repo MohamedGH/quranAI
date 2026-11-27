@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { sel, act, uiActions } from "../../store.js";
 import { RECITATORS, TRANS_EDITIONS, TRANS_LABELS, setGlobalRecitator, getGlobalRecitator } from "../../utils/reciterAudio.js";
 import { UX_MODES, getAvailableUxProfiles, getUxProfile } from "../../utils/uxProfileManager.js";
+import { PlaybackSpeedControl } from "../audio/PlaybackSpeedControl.jsx";
 
 export function OptionsModal({ onClose, onOpenReminders }) {
   const [activeTab, setActiveTab] = useState("ux"); // "ux" | "settings"
@@ -332,6 +333,15 @@ export function OptionsModal({ onClose, onOpenReminders }) {
               onChange={e => dispatch(uiActions.setGlowIntensity(Number(e.target.value)))}
               aria-label="Intensité du glow 3D"
               style={{ width: "100%", accentColor: "var(--gold)", cursor: "pointer" }}
+            />
+          </div>
+
+          <Section title="LECTURE AUDIO" />
+          <div style={{ padding: "8px 0 12px", borderBottom: "1px solid var(--border)" }}>
+            <PlaybackSpeedControl
+              variant="panel"
+              testId="options-playback-rate-panel"
+              sliderTestId="options-playback-rate-slider"
             />
           </div>
 

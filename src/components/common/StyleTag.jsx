@@ -1755,6 +1755,8 @@ export const CSS = `
   .ctrl-btn.active-silence{border-color:#ff7eb3 !important;color:#ff7eb3 !important;background:rgba(255,126,179,.18) !important;box-shadow:0 0 8px rgba(255,126,179,.3) !important;}
   .silence-trigger-btn{border-radius:50% !important;flex-shrink:0 !important;touch-action:manipulation;}
   .reciter-trigger{gap:5px;padding:0 10px;width:auto;min-width:44px;font-family:'Cinzel',serif;font-size:10px;}
+  .player-speed-select{height:32px;min-height:32px;max-height:32px;padding:0 6px !important;border-radius:16px !important;font-size:10.5px !important;letter-spacing:.4px;outline:none;transition:all var(--transition);}
+  .player-speed-select:hover,.player-speed-select:focus{border-color:var(--gold) !important;}
   .reciter-trigger-label{max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .reciter-sheet-backdrop{position:fixed;inset:0;z-index:350;background:rgba(0,0,0,.5);backdrop-filter:blur(2px);}
   .reciter-sheet{position:fixed;z-index:351;right:16px;bottom:76px;width:min(420px,calc(100vw - 32px));max-height:min(640px,calc(100dvh - 100px));display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border2);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.55);overflow:hidden;}
@@ -2442,6 +2444,7 @@ export const CSS = `
     .player-ayah{ font-size:8px !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .ctrl-btn{ width:30px !important; height:30px !important; min-height:30px !important; max-height:30px !important; font-size:11px !important; }
     .ctrl-btn.play-btn{ width:36px !important; height:36px !important; min-height:36px !important; max-height:36px !important; font-size:13px !important; }
+    .player-speed-select{ height:30px !important; min-height:30px !important; max-height:30px !important; padding:0 4px !important; font-size:10px !important; }
     .player-tajweed-modal-trigger{ width:30px !important; height:30px !important; min-height:30px !important; max-height:30px !important; padding:0 !important; border-radius:50% !important; font-size:13px !important; }
     .reciter-trigger{position:fixed;right:12px;bottom:calc(var(--player-h) + env(safe-area-inset-bottom, 0px) + 10px);z-index:201;min-height:42px;padding:0 12px;border-radius:22px;background:var(--surface2);box-shadow:0 6px 20px rgba(0,0,0,.35);}
     .reciter-trigger-label{display:inline;max-width:110px;}

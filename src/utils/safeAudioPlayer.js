@@ -119,16 +119,87 @@ export const safePauseAudio = (audioEl) => {
   }
 };
 
+export const MIN_PLAYBACK_RATE = 0.5;
+export const MAX_PLAYBACK_RATE = 2.0;
+export const DEFAULT_PLAYBACK_RATE = 1.0;
+export const AUDIO_PLAYBACK_RATES = Object.freeze([0.5, 0.75, 0.85, 1.0, 1.25, 1.5, 1.75, 2.0]);
+export const CYCLE_PLAYBACK_RATES = Object.freeze([0.5, 0.75, 1.0, 1.25, 1.5, 2.0]);
+
 /**
- * Safely triggers load() on an audio element, catching any state exceptions.
+ * Clamps and normalizes an audio playback speed into [0.5, 2.0] rounded to 0.05 steps.
+ *
+ * @param {any} rate
+ * @returns {number}
+ */
+export const clampPlaybackRate = (rate) => {
+  const num = Number(rate);
+  if (!Number.isFinite(num) || num <= 0) return DEFAULT_PLAYBACK_RATE;
+  const clamped = Math.max(MIN_PLAYBACK_RATE, Math.min(MAX_PLAYBACK_RATE, num));
+  return Math.round(clamped * 20) / 20;
+};
+
+/**
+ * Formats a playback rate as a concise user-facing label (e.g. "1×", "0.75×", "1.25×").
+ *
+ * @param {number} rate
+ * @returns {string}
+ */
+export const formatPlaybackRate = (rate) => {
+  const normalized = clampPlaybackRate(rate);
+  const str = Number.isInteger(normalized)
+    ? String(normalized)
+    : String(Number(normalized.toFixed(2)));
+  return `${str}×`;
+};
+
+/**
+ * Cycles to the next standard playback rate preset.
+ *
+ * @param {number} currentRate
+ * @returns {number}
+ */
+export const getNextPlaybackRate = (currentRate) => {
+  const cur = clampPlaybackRate(currentRate);
+  const idx = CYCLE_PLAYBACK_RATES.findIndex((r) => r > cur + 0.01);
+  return idx === -1 ? CYCLE_PLAYBACK_RATES[0] : CYCLE_PLAYBACK_RATES[idx];
+};
+
+/**
+ * Applies playbackRate and defaultPlaybackRate safely onto an HTMLAudioElement.
+ *
+ * @param {HTMLAudioElement|null|undefined} audioEl
+ * @param {number} rate
+ * @returns {number} Applied clamped rate
+ */
+export const applyAudioPlaybackRate = (audioEl, rate) => {
+  const target = clampPlaybackRate(rate);
+  if (!audioEl) return target;
+  try {
+    if ("defaultPlaybackRate" in audioEl) {
+      audioEl.defaultPlaybackRate = target;
+    }
+    audioEl.playbackRate = target;
+  } catch {}
+  return target;
+};
+
+/**
+ * Safely triggers load() on an audio element, catching any state exceptions
+ * and preserving the configured playback speed across browser load() resets.
  *
  * @param {HTMLAudioElement|null|undefined} audioEl
  * @returns {boolean} True if load succeeded
  */
 export const safeLoadAudio = (audioEl) => {
   if (!audioEl || typeof audioEl.load !== "function") return false;
+  const prevRate = clampPlaybackRate(
+    audioEl.playbackRate && audioEl.playbackRate !== 1
+      ? audioEl.playbackRate
+      : (audioEl.defaultPlaybackRate ?? audioEl.playbackRate ?? DEFAULT_PLAYBACK_RATE)
+  );
   try {
     audioEl.load();
+    applyAudioPlaybackRate(audioEl, prevRate);
     return true;
   } catch (err) {
     if (!isAudioAbortError(err)) {

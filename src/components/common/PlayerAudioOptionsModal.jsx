@@ -4,6 +4,7 @@ import { sel, playerActions } from "../../store.js";
 import { TajweedAudioCoachControl } from "../audio/TajweedAudioCoachControl.jsx";
 import { SilenceReviseControl } from "../audio/SilenceReviseControl.jsx";
 import { detectSheetDismissGesture, detectTabSwipeGesture } from "../../utils/swipeNavigation.js";
+import { PlaybackSpeedControl } from "../audio/PlaybackSpeedControl.jsx";
 
 export function PlayerAudioOptionsModal({
   isOpen,
@@ -262,6 +263,12 @@ export function PlayerAudioOptionsModal({
 
         {/* ── Modal Body Content ────────────────────────────────────────── */}
         <div style={{ padding: "16px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
+          <PlaybackSpeedControl
+            variant="panel"
+            compact={true}
+            testId="player-modal-playback-rate-panel"
+            sliderTestId="player-modal-playback-rate-slider"
+          />
           {/* TAB 1: COACH TAJWEED */}
           {activeTab === "tajweed" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

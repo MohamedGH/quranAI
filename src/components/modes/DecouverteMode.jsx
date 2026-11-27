@@ -13,6 +13,8 @@ import {
   stopTajweedSpeech
 } from "../../utils/tajweedAudioCoach.js";
 import { getReviseTimeColor, getWordReviseDate } from "../../utils/reviseColorGradient.js";
+import { applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
 
 export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timestamps }) {
   const words = ayat.text ? ayat.text.split(' ').filter(Boolean) : [];
@@ -22,6 +24,7 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
   const [playingWord, setPlayingWord]   = React.useState(null);  // index currently playing
   const [showQuiz, setShowQuiz]         = React.useState(false); // inline first contact quiz
   const audioRef = React.useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(audioRef);
   const seqTokenRef = React.useRef(0); // cancels a stale sequential playback when superseded
 
   // Extract all Tajweed rules present in this ayat
@@ -68,6 +71,7 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
       const startMs = chars[0].start;
       const endMs   = chars[chars.length - 1].end;
       if (a.src !== audioUrl) a.src = audioUrl;
+      applyAudioPlaybackRate(a, playbackRate);
       a.currentTime = startMs / 1000;
       setPlayingWord(i);
       a.play().then(() => {
@@ -178,7 +182,14 @@ export function DecouverteMode({ ayat, surahNum, ld, setLData, audioUrl, timesta
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 16px' }}>
-      <audio ref={audioRef} style={{ display: 'none' }}
+      <audio
+        ref={(el) => {
+          audioRef.current = el;
+          if (el) applyAudioPlaybackRate(el, playbackRate);
+        }}
+        style={{ display: 'none' }}
+        onLoadedMetadata={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
+        onPlay={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
         onEnded={() => setPlayingWord(null)}
         onPause={() => setPlayingWord(p => audioRef.current?.ended ? null : p)}
       />

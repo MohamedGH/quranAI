@@ -54,6 +54,9 @@ import { withErrorRecovery, ERROR_CODES } from "../../utils/errorManager.js";
 import { EditableUiSlot } from "../common/EditableUiSlot.jsx";
 import { isPriority3DProfile } from "../../utils/uxProfileManager.js";
 import { resolveBook3DStepDownNavigation } from "../../utils/fullScreenNavigation.js";
+import { applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
+import { PlaybackSpeedControl } from "../audio/PlaybackSpeedControl.jsx";
 
 const _MUSHAF_PAGES = MUSHAF_TOTAL_PAGES;
 
@@ -733,7 +736,6 @@ export function QuranBook3DPage({
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [reciterKey, setReciterKey] = useState("alafasy");
-  const [audioSpeed] = useState(1.0);
   const [currentAudioAyah, setCurrentAudioAyah] = useState(null);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoom2dScale, setZoom2dScale] = useState(BOOK3D_ZOOM.default2DScale);
@@ -744,6 +746,7 @@ export function QuranBook3DPage({
     setZoomPercent(nextPct);
   }, []);
   const audioRef = useRef(null);
+  const audioSpeed = useSyncedAudioPlaybackRate(audioRef);
   const translationReqIdRef = useRef(0);
   const pendingAutoPlayRef = useRef(null);
   const isSingleModeRef = useRef(false);
@@ -2410,7 +2413,7 @@ export function QuranBook3DPage({
 
       if (audioRef.current) {
         audioRef.current.src = audioUrl;
-        audioRef.current.playbackRate = audioSpeed;
+        applyAudioPlaybackRate(audioRef.current, audioSpeed);
         audioRef.current.play().catch(() => {});
         setIsPlaying(true);
         setCurrentAudioAyah({ surahNum, ayahNum });
@@ -2606,7 +2609,16 @@ export function QuranBook3DPage({
         overflow: "hidden",
       }}
     >
-      <audio data-testid="q3d-audio-el" ref={audioRef} onEnded={handleAudioEnded} />
+      <audio
+        data-testid="q3d-audio-el"
+        ref={(el) => {
+          audioRef.current = el;
+          if (el) applyAudioPlaybackRate(el, audioSpeed);
+        }}
+        onLoadedMetadata={(e) => applyAudioPlaybackRate(e.currentTarget, audioSpeed)}
+        onPlay={(e) => applyAudioPlaybackRate(e.currentTarget, audioSpeed)}
+        onEnded={handleAudioEnded}
+      />
 
       {/* ── Top Header Navigation Bar ───────────────────────────────── */}
       <header
@@ -3360,7 +3372,7 @@ export function QuranBook3DPage({
             zIndex: 40,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: isMobileViewport ? 6 : 10 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: isMobileViewport ? 5 : 10, maxWidth: "100%" }}>
             <button
               data-testid="q3d-play-btn"
               onClick={togglePlayCurrentPage}
@@ -3378,6 +3390,7 @@ export function QuranBook3DPage({
                 justifyContent: "center",
                 fontWeight: "bold",
                 boxShadow: "0 4px 14px rgba(212,175,55,0.45)",
+                flexShrink: 0,
               }}
               title={isPlaying ? "Mettre en pause" : "Écouter la page"}
             >
@@ -3394,7 +3407,7 @@ export function QuranBook3DPage({
                 color: "#ebd8b0",
                 padding: isMobileViewport ? "4px 6px" : "6px 8px",
                 fontSize: isMobileViewport ? 11 : 12,
-                maxWidth: isMobileViewport ? 130 : undefined,
+                maxWidth: isMobileViewport ? 112 : undefined,
                 fontFamily: "inherit",
                 cursor: "pointer",
               }}
@@ -3405,10 +3418,22 @@ export function QuranBook3DPage({
                 </option>
               ))}
             </select>
+
+            <PlaybackSpeedControl
+              variant="select"
+              compact={isMobileViewport}
+              testId="q3d-playback-rate-select"
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                borderRadius: 8,
+                padding: isMobileViewport ? "4px 6px" : "6px 8px",
+                fontSize: isMobileViewport ? 11 : 12,
+              }}
+            />
           </div>
 
           {/* Page Scrubber */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: isMobileViewport ? 90 : 220, maxWidth: 420 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 80px", minWidth: isMobileViewport ? 72 : 220, maxWidth: 420 }}>
             <span style={{ fontSize: 10, color: "#a89060" }}>1</span>
             <input
               type="range"
@@ -3418,6 +3443,8 @@ export function QuranBook3DPage({
               onChange={(e) => jumpToPage(e.target.value)}
               style={{
                 flex: 1,
+                minWidth: 0,
+                width: "100%",
                 accentColor: "#d4af37",
                 cursor: "pointer",
               }}

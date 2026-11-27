@@ -5,6 +5,8 @@ import { useSelector } from "react-redux";
 import { sel } from "../../store.js";
 import { isQalqala, getMaddType, isIzhar, isIdgham } from "../../utils/tajweedRules.js";
 import { getAudioBase } from "../../utils/reciterAudio.js";
+import { applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
 
 export function CollectionAyatRow({ entry, collId, learnData, setLData, onToggleAyat, onOpenCollModal, ayatInCollectionsFn, collections, showQalqala, showMadd, showIzhar, showIdgham }) {
   const [isOpen, setIsOpen]           = useState(false);
@@ -18,6 +20,7 @@ export function CollectionAyatRow({ entry, collId, learnData, setLData, onToggle
   const [partCurrentMs, setPartCurrentMs]     = useState(0);
   const audioRef    = useRef(null);
   const partAudioRef= useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(partAudioRef);
   const partRafRef  = useRef(null);
 
   const audioUrl = `${getAudioBase()}/${entry.number}.mp3`;
@@ -54,6 +57,7 @@ export function CollectionAyatRow({ entry, collId, learnData, setLData, onToggle
     audio.src = url;
     const startMs = 0; const endMs = 999999; // no timestamps in collection view
     audio.currentTime = 0;
+    applyAudioPlaybackRate(audio, playbackRate);
     audio.play().catch(() => {});
     setPlayingPart({ partId: part.id });
     startPartRaf();
@@ -175,8 +179,16 @@ export function CollectionAyatRow({ entry, collId, learnData, setLData, onToggle
       className={`ayat-row${ld.learned ? " learned" : ""}${isSelecting ? " selecting" : ""}`}
       style={isSelecting ? { borderLeft: "2px solid var(--gold)", background: "rgba(201,168,76,0.04)" } : {}}
     >
-      <audio ref={partAudioRef} style={{ display: "none" }}
-        onEnded={() => { setTimeout(() => { setPlayingPart(null); setPartCurrentMs(0); stopPartRaf(); }, 250); }} />
+      <audio
+        ref={(el) => {
+          partAudioRef.current = el;
+          if (el) applyAudioPlaybackRate(el, playbackRate);
+        }}
+        style={{ display: "none" }}
+        onLoadedMetadata={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
+        onPlay={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
+        onEnded={() => { setTimeout(() => { setPlayingPart(null); setPartCurrentMs(0); stopPartRaf(); }, 250); }}
+      />
 
       {/* Selection hint */}
       {isSelecting && (

@@ -16,6 +16,8 @@ import {
 import { fetchAyahMeta, getAudioBase } from "../../utils/reciterAudio.js";
 import { normalizeArabic } from "../../utils/recitationDiff.js";
 import { MasteryBar, masteryColor } from "../common/Mastery.jsx";
+import { applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
 
 export function AyatMemorisationWorkflow({
   ayat,
@@ -50,6 +52,7 @@ export function AyatMemorisationWorkflow({
   // Audio playing
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const audioRef = useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(audioRef);
 
   const verseWords = useMemo(() => {
     return getCleanVerseWords(ayat?.text || "");
@@ -310,11 +313,18 @@ export function AyatMemorisationWorkflow({
           {directAudio && (
             <>
               <audio
-                ref={audioRef}
+                ref={(el) => {
+                  audioRef.current = el;
+                  if (el) applyAudioPlaybackRate(el, playbackRate);
+                }}
                 src={directAudio}
+                onLoadedMetadata={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
                 onEnded={() => setIsPlayingAudio(false)}
                 onPause={() => setIsPlayingAudio(false)}
-                onPlay={() => setIsPlayingAudio(true)}
+                onPlay={(e) => {
+                  applyAudioPlaybackRate(e.currentTarget, playbackRate);
+                  setIsPlayingAudio(true);
+                }}
               />
               <button
                 onClick={toggleAudio}

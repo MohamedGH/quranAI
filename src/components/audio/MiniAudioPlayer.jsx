@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
-import { safePlayAudio, safePauseAudio } from "../../utils/safeAudioPlayer.js";
+import { safePlayAudio, safePauseAudio, applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
 
 export function MiniAudioPlayer({ src, color = "var(--gold2)", label = null }) {
   const ref  = useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(ref);
   const [playing, setPlaying] = useState(false);
   const [cur,     setCur]     = useState(0);
   const [dur,     setDur]     = useState(0);
@@ -41,10 +43,20 @@ export function MiniAudioPlayer({ src, color = "var(--gold2)", label = null }) {
   return (
     <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
       background:"var(--surface3)", borderRadius:8, border:"1px solid var(--border2)" }}>
-      <audio ref={ref} src={src}
-        onLoadedMetadata={() => setDur(ref.current?.duration || 0)}
+      <audio
+        ref={(el) => {
+          ref.current = el;
+          if (el) applyAudioPlaybackRate(el, playbackRate);
+        }}
+        src={src}
+        onLoadedMetadata={(e) => {
+          applyAudioPlaybackRate(e.currentTarget, playbackRate);
+          setDur(ref.current?.duration || 0);
+        }}
+        onPlay={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
         onEnded={() => { setPlaying(false); cancelAnimationFrame(rafRef.current); setCur(0); }}
-        style={{ display:"none" }} />
+        style={{ display:"none" }}
+      />
       <button onClick={toggle} style={{
         width:30, height:30, borderRadius:"50%", border:`1px solid ${color}`,
         background: playing ? `${color}22` : "transparent",

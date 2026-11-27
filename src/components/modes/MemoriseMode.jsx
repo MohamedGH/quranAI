@@ -9,6 +9,8 @@ import { ArabicHighlighted } from "../common/ArabicHighlighted.jsx";
 import { MasteryBar, MasteryBadge, MasteryDebug, computeMastery } from "../common/Mastery.jsx";
 import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
 import { AyatMemorisationWorkflow } from "../memorisation/AyatMemorisationWorkflow.jsx";
+import { applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
 
 export function MemoriseMode({ surahs, learnData, setLData, initialSurahNum, initialRangeFrom, initialRangeTo }) {
   // ── Persistence helpers ──
@@ -33,6 +35,8 @@ export function MemoriseMode({ surahs, learnData, setLData, initialSurahNum, ini
   const [ayatTexts,   setAyatTexts]   = React.useState({});
   const [showVerset,  setShowVerset]  = React.useState(false);
   const [showMemo,    setShowMemo]    = React.useState(false);
+  const versetAudioRef = React.useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(versetAudioRef);
   const [showInfos,   setShowInfos]   = React.useState(false);
   const [showScore,   setShowScore]   = React.useState(false);
   const [showWorkflow, setShowWorkflow] = React.useState(false);
@@ -622,7 +626,13 @@ export function MemoriseMode({ surahs, learnData, setLData, initialSurahNum, ini
               <div style={{ direction:"ltr", marginTop:10, display:"flex", alignItems:"center", gap:8 }}>
                 <audio
                   key={ayatGlobalNum}
+                  ref={(el) => {
+                    versetAudioRef.current = el;
+                    if (el) applyAudioPlaybackRate(el, playbackRate);
+                  }}
                   src={`${getAudioBase()}/${ayatGlobalNum}.mp3`}
+                  onLoadedMetadata={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
+                  onPlay={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
                   controls
                   style={{ flex:1, height:32, minWidth:0, accentColor:"var(--gold)", colorScheme:"dark" }}
                 />

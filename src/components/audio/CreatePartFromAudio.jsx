@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import { applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
 
 export function CreatePartFromAudio({ ayat, timestamps, audioUrl, existingWordIndices, initialSeekMs, onCreatePart }) {
   const audioRef    = useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(audioRef);
   const rafRef      = useRef(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying]     = useState(false);
@@ -91,9 +94,20 @@ export function CreatePartFromAudio({ ayat, timestamps, audioUrl, existingWordIn
 
       {/* Lecteur audio */}
       <audio
-        ref={audioRef} controls src={audioUrl}
+        ref={(el) => {
+          audioRef.current = el;
+          if (el) applyAudioPlaybackRate(el, playbackRate);
+        }}
+        controls
+        src={audioUrl}
         style={{ width:"100%", marginBottom:2 }}
-        onPlay={onPlay} onPause={onPause} onEnded={onEnded}
+        onLoadedMetadata={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
+        onPlay={(e) => {
+          applyAudioPlaybackRate(e.currentTarget, playbackRate);
+          onPlay();
+        }}
+        onPause={onPause}
+        onEnded={onEnded}
       />
 
       {/* Marqueurs début / fin */}

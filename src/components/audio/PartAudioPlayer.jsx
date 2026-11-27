@@ -1,6 +1,8 @@
 import { fixChars } from "../../utils/reciterAudio.js";
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { safeGetItem, safeSetItem } from "../../utils/safeStorage.js";
+import { applyAudioPlaybackRate } from "../../utils/safeAudioPlayer.js";
+import { useSyncedAudioPlaybackRate } from "../../hooks/useSyncedAudioPlaybackRate.js";
 
 export function PartAudioPlayer({
   part,
@@ -15,6 +17,7 @@ export function PartAudioPlayer({
   onSetChainMode,
 }) {
   const audioRef = useRef(null);
+  const playbackRate = useSyncedAudioPlaybackRate(audioRef);
   const rafRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [looping, setLooping] = useState(true);
@@ -48,11 +51,12 @@ export function PartAudioPlayer({
 
   // Update audio duration when metadata loads
   const handleLoadedMetadata = useCallback((e) => {
+    applyAudioPlaybackRate(e.currentTarget, playbackRate);
     const dur = e.currentTarget.duration;
     if (dur && !isNaN(dur) && dur > 0) {
       setAudioDurationMs(Math.round(dur * 1000));
     }
-  }, []);
+  }, [playbackRate]);
 
   // Compute word indices for this part
   const partWordIndices = useMemo(() => {
@@ -256,6 +260,7 @@ export function PartAudioPlayer({
 
     audio.currentTime = Math.max(0, startAtMs / 1000);
     audio.volume = 1.0;
+    applyAudioPlaybackRate(audio, playbackRate);
     audio.play().catch(() => {});
     setPlaying(true);
     stopRaf();
@@ -410,11 +415,15 @@ export function PartAudioPlayer({
   return (
     <div>
       <audio
-        ref={audioRef}
+        ref={(el) => {
+          audioRef.current = el;
+          if (el) applyAudioPlaybackRate(el, playbackRate);
+        }}
         src={audioUrl}
         preload="metadata"
         style={{ display: "none" }}
         onLoadedMetadata={handleLoadedMetadata}
+        onPlay={(e) => applyAudioPlaybackRate(e.currentTarget, playbackRate)}
         onEnded={() => { if (!looping) stop(); }}
       />
 

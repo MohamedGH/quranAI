@@ -215,6 +215,8 @@ describe("3D Quran Mode: Camera Translation, Particle Glow Texture & Volumetric 
     expect(dustShader.transparent).toBe(true);
     expect(dustShader.uniforms.uMap.value).toBeInstanceOf(THREE.CanvasTexture);
     expect(dustShader.uniforms.uMap.value.colorSpace).toBe(THREE.SRGBColorSpace);
+    expect(mockRendererState.renderers[0].debug.checkShaderErrors).toBe(true);
+    expect(dustShader.vertexShader).not.toMatch(/\b(?:float|int|bool|vec[234])\s+active\b/);
     expect(dustShader.uniforms.uBaseSize.value).toBe(BOOK3D_PARTICLES.baseSize);
     expect(dustShader.uniforms.uBaseSize.value).toBeLessThanOrEqual(8);
     expect(dustShader.uniforms.uEmitFactor.value).toBe(0);

@@ -555,10 +555,10 @@ export function createParticleGlowTexture(size = 64) {
 
   if (typeof ctx.createRadialGradient === "function") {
     const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    grad.addColorStop(0.0, "rgba(255, 255, 255, 1)");
-    grad.addColorStop(0.42, "rgba(255, 248, 205, 0.99)");
-    grad.addColorStop(0.72, "rgba(255, 214, 72, 0.88)");
-    grad.addColorStop(0.90, "rgba(245, 175, 40, 0.42)");
+    grad.addColorStop(0.0, "rgba(255, 250, 225, 1)");
+    grad.addColorStop(0.18, "rgba(255, 226, 128, 0.85)");
+    grad.addColorStop(0.45, "rgba(245, 182, 54, 0.36)");
+    grad.addColorStop(0.76, "rgba(218, 148, 30, 0.1)");
     grad.addColorStop(1.0, "rgba(212, 175, 55, 0)");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, s, s);
@@ -572,9 +572,9 @@ export function createParticleGlowTexture(size = 64) {
   // Crisp luminous 4-point celestial starflare core
   if (typeof ctx.ellipse === "function") {
     ctx.save();
-    ctx.fillStyle = "rgba(255, 254, 240, 0.96)";
-    const armLen = r * 0.88;
-    const armThick = Math.max(1.8, s * 0.08);
+    ctx.fillStyle = "rgba(255, 250, 220, 0.78)";
+    const armLen = r * 0.82;
+    const armThick = Math.max(1.1, s * 0.036);
     ctx.beginPath();
     ctx.ellipse(cx, cy, armLen, armThick, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -1025,7 +1025,7 @@ export function QuranBook3DPage({
               powerPreference: isSoftwareGlRef.current ? "default" : "high-performance",
             };
       renderer = new THREE.WebGLRenderer(rendererOpts);
-      renderer.debug.checkShaderErrors = false;
+      if (renderer.debug) renderer.debug.checkShaderErrors = true;
     } catch (err) {
       console.warn("WebGL initialization failed, falling back to 2D view:", err);
       _cachedGlProfile = { supported: false, isSoftware: true, reason: err?.message || "init error" };
@@ -1167,10 +1167,10 @@ export function QuranBook3DPage({
           vColor = aColor;
           vTwinkle = 0.78 + 0.22 * sin(uTime * 2.4 + aPhase);
           float localT = uParticleTime - aDelay;
-          float active = step(0.001, localT) * step(0.005, uEmitFactor);
+          float isEmitting = step(0.001, localT) * step(0.005, uEmitFactor);
           float life = fract(max(0.0, localT) * aSpeed * 0.85);
           float fadeEnv = smoothstep(0.0, 0.04, life) * (1.0 - smoothstep(0.80, 1.0, life));
-          vAlpha = active * uEmitFactor * fadeEnv * (0.86 + 0.14 * vTwinkle);
+          vAlpha = isEmitting * uEmitFactor * fadeEnv * (0.86 + 0.14 * vTwinkle);
 
           vec3 p = position;
           float spreadOut = mix(1.05, 1.85, life);
@@ -1179,9 +1179,9 @@ export function QuranBook3DPage({
           p.z += cos(uTime * 0.7 + aPhase * 1.3) * 0.22 * (0.35 + life);
 
           vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
-          float distScale = 9.0 / max(1.6, -mvPosition.z);
+          float distScale = 5.4 / max(1.6, -mvPosition.z);
           float ptSize = max(
-            8.0 * uPixelRatio,
+            5.0 * uPixelRatio,
             min(
               uMaxSize * uPixelRatio,
               uBaseSize * aScale * uPixelRatio * distScale * (0.88 + 0.12 * vTwinkle)
@@ -1202,9 +1202,9 @@ export function QuranBook3DPage({
           if (vAlpha < 0.005) discard;
           vec4 tex = texture2D(uMap, gl_PointCoord);
           if (tex.a < 0.01) discard;
-          vec3 glowColor = mix(vColor, vec3(1.0, 0.99, 0.88), tex.a * 0.55);
-          float alpha = min(1.0, tex.a * vAlpha * 1.65);
-          gl_FragColor = vec4(glowColor * (1.45 + uGlowStrength * 0.75) * vTwinkle, alpha);
+          vec3 glowColor = mix(vColor, vec3(1.0, 0.96, 0.78), tex.a * 0.32);
+          float alpha = min(1.0, tex.a * vAlpha * 0.92);
+          gl_FragColor = vec4(glowColor * (0.95 + uGlowStrength * 0.45) * vTwinkle, alpha);
         }
       `,
       transparent: true,
